@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>10-deferred-tools · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：延迟工具按需加载</h1>
+<p class="sub">10-deferred-tools · 组成模块与调用关系</p>
+<p class="lead">60 个内置工具加上全部 MCP 工具，若每次请求都全量携带会撑爆上下文。这个组件的解法：请求里只带核心工具，其余全部「延迟」——模型需要时先用搜索工具发现名字、再经执行代理转交，而「谁被发现过」就记在对话历史里。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 790" width="1040" height="790" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 主干 1：请求构建 -->
+<rect x="100" y="40" width="460" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="330" y="68" class="n-title">请求构建与延迟剔除</text>
+<text x="330" y="90" class="n-sub">claude.ts · 请求侧（组件 05 交接）</text>
+<text x="330" y="112" class="n-body">每轮发给模型的工具清单：核心工具全量带上</text>
+<text x="330" y="134" class="n-body">延迟工具一律剔除，只保留搜索入口，清单稳定护缓存</text>
+
+<!-- 右 1：延迟名单 -->
+<rect x="660" y="46" width="320" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="820" y="74" class="n-title">延迟名单</text>
+<text x="820" y="96" class="n-sub">constants/tools.ts</text>
+<text x="820" y="118" class="n-body">29 个核心工具永不延迟，其余一律延迟</text>
+
+<!-- 主干 2：搜索发现工具 -->
+<rect x="100" y="200" width="460" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="330" y="228" class="n-title">搜索发现工具</text>
+<text x="330" y="250" class="n-sub">SearchExtraToolsTool · 模型直接调用</text>
+<text x="330" y="272" class="n-body">精确点名 / 关键词模糊找 / 只看说明不加载</text>
+<text x="330" y="294" class="n-body">回一句「找到了哪几个延迟工具」</text>
+
+<!-- 外部：工具执行引擎 -->
+<rect x="740" y="212" width="240" height="50" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="860" y="234" class="n-body">工具执行引擎</text>
+<text x="860" y="252" class="n-sub">组件 08 · 驱动两个入口工具</text>
+
+<!-- 主干 3：发现集 -->
+<rect x="100" y="360" width="460" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="330" y="388" class="n-title">发现集：记在对话里</text>
+<text x="330" y="410" class="n-sub">searchExtraTools.ts · 消息历史（唯一持久载体）</text>
+<text x="330" y="432" class="n-body">搜索结果落进对话；执行前从历史文本重建「已发现名单」</text>
+
+<!-- 右 3：语义索引 -->
+<rect x="660" y="340" width="320" height="86" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="820" y="368" class="n-title">语义索引</text>
+<text x="820" y="390" class="n-sub">toolIndex.ts · 复用技能搜索算法</text>
+<text x="820" y="412" class="n-body">给延迟工具的名称/提示/说明建索引，加权排序</text>
+
+<!-- 主干 4：执行代理 -->
+<rect x="100" y="500" width="460" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="330" y="528" class="n-title">执行代理</text>
+<text x="330" y="550" class="n-sub">ExecuteTool · 模型直接调用</text>
+<text x="330" y="572" class="n-body">守卫：没发现过的延迟工具，拒绝执行并给引导</text>
+<text x="330" y="594" class="n-body">预检参数与权限 → 转交真正的工具执行</text>
+
+<!-- 右 4：会话预取（旁路，紫色） -->
+<rect x="660" y="480" width="320" height="86" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="820" y="508" class="n-title">会话预取（旁路）</text>
+<text x="820" y="530" class="n-sub">prefetch.ts</text>
+<text x="820" y="552" class="n-body">会话开始时从消息预判搜索，提前备好候选</text>
+
+<!-- 外部：MCP 工具桥接 -->
+<rect x="680" y="612" width="260" height="50" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="810" y="634" class="n-body">MCP 工具桥接</text>
+<text x="810" y="652" class="n-sub">组件 16 · 全部 MCP 工具默认延迟</text>
+
+<!-- 底座 -->
+<rect x="60" y="700" width="920" height="70" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="722" class="n-title">工具池与 60 个内置工具实现（底座）</text>
+<text x="520" y="742" class="n-sub">tools.ts 工具池 · builtin-tools 包 · Tool 契约 · 被上方所有模块依赖</text>
+<text x="520" y="760" class="n-body">搜索与执行两个入口工具、被委托的目标工具，都住在这里</text>
+
+<!-- 连线 -->
+<path class="edge" d="M330,140 L330,196" marker-end="url(#ah)"/>
+<path class="edge" d="M330,300 L330,356" marker-end="url(#ah)"/>
+<path class="edge" d="M330,440 L330,496" marker-end="url(#ah)"/>
+<path class="edge" d="M330,600 L330,696" marker-end="url(#ah)"/>
+<path class="edge" d="M560,84 L656,84" marker-end="url(#ah)"/>
+<path class="edge" d="M560,250 L630,250 L630,383 L656,383" marker-end="url(#ah)"/>
+<path class="edge" d="M820,476 L820,430" marker-end="url(#ah)"/>
+<path class="edash" d="M740,237 L564,237" marker-end="url(#ahd)"/>
+<path class="edash" d="M810,662 L810,696" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/数据流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>旁路机制（不等模型先搜）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>延迟判定：packages/builtin-tools/src/tools/SearchExtraToolsTool/prompt.ts:69-78（isDeferredTool：不在核心名单且未标 alwaysLoad 即延迟）；src/constants/tools.ts:137-179（CORE_TOOLS 核心名单，实测 29 项：Bash/PowerShell 2 个 + 27 个独立工具名）。</li>
+<li>请求侧剔除：src/services/api/claude.ts:1151-1204（filteredTools 永不包含延迟工具，仅保留 SearchExtraTools 入口；源码注释明示保持工具数组稳定以护 prompt cache；无延迟工具且无 MCP 在连时整体关闭该机制）。</li>
+<li>搜索实现：SearchExtraToolsTool.ts:350-530（select: 精确/逗号多选、discover: 只看说明、关键词、+词必含四种问法；:479 关键词得分×0.4 + TF-IDF×0.6 加权合并，权重可用环境变量覆盖；:542-601 委托目标执行与渲染）。</li>
+<li>语义索引：src/services/searchExtraTools/toolIndex.ts:80-149（对延迟工具的名称/搜索提示/描述三字段分别加权建 TF-IDF 向量，复用技能搜索 localSearch.ts 的分词与相似度函数）；索引按工具名集合缓存失效。</li>
+<li>会话预取：src/services/searchExtraTools/prefetch.ts:10-24（复用技能预取的取词函数；维护独立的 discoveredToolsThisSession 集合，上限 500 截到 400；结果供 UI 订阅）。</li>
+<li>发现集：src/utils/searchExtraTools.ts:458（「Found N deferred tool(s)」文本模式是发现集的唯一持久载体）、:489-498（extractDiscoveredToolNames 从消息历史重建，压缩边界携带续传）、:513/610-670（deferred_tools_delta 增量附件路径）。</li>
+<li>执行代理：packages/builtin-tools/src/tools/ExecuteTool/ExecuteTool.ts:66-219（找不到工具/未发现守卫/当前不可用/目标 schema safeParse 预校验/validateInput/权限 deny 检查/委托 targetTool.call 并透传进度，结果包装为 {result, tool_name}）。</li>
+<li>考据注记：CLAUDE.md 称核心名单 38 个，实测 29 个（判断为文档漂移；同目录测试注释「7+19」亦为陈旧值）。名单告知有两条路径：默认请求前注入静态名单块；灰度中改用增量附件（随消息持久化、压缩边界续传），图中并入「请求构建」未单独画。预取的「会话发现集合」与执行守卫用的「对话历史发现集」是两个独立状态：预取结果不解除执行守卫（守卫只扫消息历史）。Tool.shouldDefer 字段（Tool.ts:450-453）疑似上游遗留：判定实际只看核心名单与 alwaysLoad，未发现该字段的运行时消费者。三个工具发现类工具（SearchExtraTools/ExecuteExtraTool/StructuredOutput）本身在核心名单内、永不延迟。完整的工具执行生命周期（zod 校验、hook、权限级联、并发分区）属组件 08/09，本图只画到「转交目标工具」为止；模块层面省略了搜索提示文案生成（prompt.ts）与描述缓存，已并入对应模块。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

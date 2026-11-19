@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>23-session-restore · 会话恢复 resume 全链路</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>会话恢复 resume 全链路</h1>
+<p class="sub">组件 23-session-restore · 状态与会话持久化</p>
+<p class="lead">从「敲下恢复命令」到「旧对话原样回到屏幕上」的完整过程：定位会话文件 → 逐行读 JSONL → 回溯重建对话链 → 净化反序列化 → 原子换脑切换会话身份 → 认领原文件 → REPL 带旧消息挂载，之后的续写直接追加进同一个文件。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1860" width="1040" height="1860" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- S0 开始 -->
+<rect x="270" y="26" width="260" height="54" rx="27" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="52" class="n-title">触发会话恢复</text>
+<text x="400" y="72" class="n-sub">claude -c/-r 或会话内 /resume</text>
+
+<!-- D1 指定会话判定 -->
+<polygon points="400,112 520,154 400,196 280,154" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="151" class="n-title">指定了会话？</text>
+<text x="400" y="171" class="n-sub">无参数则进选择器</text>
+
+<!-- N1 清缓存并定位 -->
+<rect x="250" y="228" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="256" class="n-title">清缓存并定位会话</text>
+<text x="400" y="278" class="n-sub">无 id 取最近 / 按 UUID / 读路径</text>
+<text x="400" y="295" class="n-sub">conversationRecovery.ts:485</text>
+
+<!-- D2 找到会话判定 -->
+<polygon points="400,338 520,380 400,422 280,380" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="377" class="n-title">找到会话了吗？</text>
+<text x="400" y="397" class="n-sub">找不到则报错退出</text>
+
+<!-- N2 读取全量日志 -->
+<rect x="250" y="454" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="482" class="n-title">读取全量日志</text>
+<text x="400" y="504" class="n-sub">loadTranscriptFile 逐行解析</text>
+<text x="400" y="521" class="n-sub">sessionStorage.ts:3566</text>
+
+<!-- N3 回溯重建对话链 -->
+<rect x="250" y="564" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="592" class="n-title">回溯重建对话链</text>
+<text x="400" y="614" class="n-sub">从最新叶子沿 parentUuid 走回根</text>
+<text x="400" y="631" class="n-sub">sessionStorage.ts:2106</text>
+
+<!-- N4 拷贝副产物 -->
+<rect x="250" y="674" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="702" class="n-title">拷贝恢复副产物</text>
+<text x="400" y="724" class="n-sub">计划与文件历史备份硬链接到新目录</text>
+<text x="400" y="741" class="n-sub">fileHistory.ts:924 · 后台执行</text>
+
+<!-- N5 净化式反序列化 -->
+<rect x="250" y="784" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="812" class="n-title">净化式反序列化</text>
+<text x="400" y="834" class="n-sub">丢弃未配对 tool_use 与空白回复</text>
+<text x="400" y="851" class="n-sub">conversationRecovery.ts:167</text>
+
+<!-- D3 中断判定 -->
+<polygon points="400,894 520,936 400,978 280,936" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="933" class="n-title">上次中断退出？</text>
+<text x="400" y="953" class="n-sub">半轮对话悬在尾部</text>
+
+<!-- N6 注入钩子 -->
+<rect x="250" y="1010" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1038" class="n-title">注入恢复钩子消息</text>
+<text x="400" y="1060" class="n-sub">SessionStart hooks 追加进对话</text>
+<text x="400" y="1077" class="n-sub">processSessionStartHooks('resume')</text>
+
+<!-- D4 fork 判定 -->
+<polygon points="400,1120 520,1162 400,1204 280,1162" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1159" class="n-title">fork 分叉恢复？</text>
+<text x="400" y="1179" class="n-sub">--fork-session 时</text>
+
+<!-- N7 原子换脑 -->
+<rect x="250" y="1236" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1264" class="n-title">原子换脑切会话</text>
+<text x="400" y="1286" class="n-sub">switchSession 同换 ID 与项目目录</text>
+<text x="400" y="1303" class="n-sub">sessionRestore.ts:410 · 恢复成本</text>
+
+<!-- N8 认领原文件 -->
+<rect x="250" y="1346" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1374" class="n-title">认领原会话文件</text>
+<text x="400" y="1396" class="n-sub">sessionFile 直指旧 JSONL，续写不新建</text>
+<text x="400" y="1413" class="n-sub">sessionStorage.ts:1567</text>
+
+<!-- N9 恢复 agent 与模式 -->
+<rect x="250" y="1456" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1484" class="n-title">恢复 agent 与模式</text>
+<text x="400" y="1506" class="n-sub">agent 定义、名色、coordinator 模式</text>
+<text x="400" y="1523" class="n-sub">sessionRestore.ts:519</text>
+
+<!-- N10 组装初始状态 -->
+<rect x="250" y="1566" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1594" class="n-title">组装渲染前状态</text>
+<text x="400" y="1616" class="n-sub">initialState：归因/agent 定义表</text>
+<text x="400" y="1633" class="n-sub">sessionRestore.ts:547-563</text>
+
+<!-- N11 挂载 REPL -->
+<rect x="250" y="1676" width="300" height="78" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1704" class="n-title">挂载 REPL 界面</text>
+<text x="400" y="1726" class="n-sub">launchRepl 带 initialMessages 进 Ink</text>
+<text x="400" y="1743" class="n-sub">main.tsx:4371 · REPL.tsx:2326</text>
+
+<!-- S_end 结束 -->
+<rect x="270" y="1786" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1811" class="n-title">会话恢复完成，继续对话</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 交互式选择器 -->
+<rect x="640" y="118" width="360" height="78" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="820" y="148" class="n-title">弹出交互式选择器</text>
+<text x="820" y="170" class="n-body">ResumeConversation / LogSelector 列历史会话</text>
+<text x="820" y="188" class="n-body">选中即得完整日志（含 worktree）</text>
+
+<!-- E1 报错退出 -->
+<rect x="675" y="361" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="386" class="n-title">报错退出，无会话可续</text>
+
+<!-- R2 补合成续接消息 -->
+<rect x="640" y="898" width="360" height="78" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="820" y="928" class="n-title">补合成续接消息</text>
+<text x="820" y="950" class="n-body">追加 "Continue from where you left off."</text>
+<text x="820" y="968" class="n-body">并补哨兵回复，保证 API 配对合法</text>
+
+<!-- R3 fork 分支 -->
+<rect x="640" y="1124" width="360" height="78" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="820" y="1154" class="n-title">fork：另起新会话</text>
+<text x="820" y="1176" class="n-body">保留启动时的新 sessionId，不认领旧文件</text>
+<text x="820" y="1194" class="n-body">消息由落盘钩子重写进新 JSONL 并补替换种子</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="228" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="256" class="n-title">跨项目恢复受限</text>
+<text x="130" y="278" class="n-body">选择器里选中他项目会话</text>
+<text x="130" y="296" class="n-body">只复制恢复命令到剪贴板</text>
+<text x="130" y="314" class="n-body">（resume.tsx:132）</text>
+
+<rect x="30" y="460" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="488" class="n-title">读回的不止消息</text>
+<text x="130" y="510" class="n-body">标题、标签、agent 名色</text>
+<text x="130" y="528" class="n-body">快照与替换记录同批带出</text>
+<text x="130" y="546" class="n-body">（LogOption 载荷）</text>
+
+<rect x="30" y="664" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="692" class="n-title">副产物尽力而为</text>
+<text x="130" y="714" class="n-body">备份缺失的快照被跳过</text>
+<text x="130" y="732" class="n-body">硬链接失败回退整份拷贝</text>
+<text x="130" y="750" class="n-body">（fileHistory.ts）</text>
+
+<rect x="30" y="1236" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1264" class="n-title">成本按 ID 匹配</text>
+<text x="130" y="1286" class="n-body">会话账目存在项目配置里</text>
+<text x="130" y="1304" class="n-body">lastSessionId 对不上</text>
+<text x="130" y="1322" class="n-body">则从零重新计费</text>
+
+<rect x="30" y="1672" width="200" height="98" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1700" class="n-title">消息数组在本地</text>
+<text x="130" y="1722" class="n-body">消息是 REPL 的 useState</text>
+<text x="130" y="1740" class="n-body">setMessages 整体替换</text>
+<text x="130" y="1758" class="n-body">（REPL.tsx:1486）</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,80 L400,108" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,154 L636,157" marker-end="url(#ah)"/>
+<text x="560" y="146" class="elab">否</text>
+
+<path class="edge" d="M400,196 L400,226" marker-end="url(#ah)"/>
+<text x="415" y="216" class="elab">是</text>
+
+<path class="edge" d="M400,306 L400,336" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,380 L671,380" marker-end="url(#ah)"/>
+<text x="560" y="372" class="elab">否</text>
+
+<path class="edge" d="M400,422 L400,452" marker-end="url(#ah)"/>
+<text x="415" y="440" class="elab">是</text>
+
+<path class="edge" d="M400,532 L400,562" marker-end="url(#ah)"/>
+<path class="edge" d="M400,642 L400,672" marker-end="url(#ah)"/>
+
+<!-- R1 汇合点（选择器结果并入主干，绕开报错胶囊） -->
+<circle cx="400" cy="768" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,752 L400,782" marker-end="url(#ah)"/>
+<path class="edge" d="M990,196 L990,768 L408,768" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,862 L400,892" marker-end="url(#ah)"/>
+
+<!-- D3 分支 -->
+<path class="edge" d="M520,936 L636,936" marker-end="url(#ah)"/>
+<text x="560" y="928" class="elab">是</text>
+
+<!-- R2 汇合点 -->
+<circle cx="400" cy="992" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,978 L400,1008" marker-end="url(#ah)"/>
+<text x="415" y="996" class="elab">否</text>
+<path class="edge" d="M820,976 L820,992 L408,992" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1088 L400,1118" marker-end="url(#ah)"/>
+
+<!-- D4 分支 -->
+<path class="edge" d="M520,1162 L636,1162" marker-end="url(#ah)"/>
+<text x="560" y="1154" class="elab">是</text>
+
+<path class="edge" d="M400,1204 L400,1234" marker-end="url(#ah)"/>
+<text x="415" y="1222" class="elab">否</text>
+
+<path class="edge" d="M400,1314 L400,1344" marker-end="url(#ah)"/>
+
+<!-- R3 汇合点（fork 跳过换脑与认领，在恢复 agent 前并回） -->
+<circle cx="400" cy="1440" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,1424 L400,1454" marker-end="url(#ah)"/>
+<path class="edge" d="M820,1202 L820,1440 L408,1440" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1534 L400,1564" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1644 L400,1674" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1754 L400,1784" marker-end="url(#ah)"/>
+
+<!-- 左侧旁注虚线 -->
+<path class="edash" d="M230,277 L246,277" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,509 L246,509" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,713 L246,713" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1285 L246,1285" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1721 L246,1721" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 终止</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码锚点（file:line）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/main.tsx:3669-3736（--continue 分支）、src/main.tsx:4292-4336 与 4392-4398（--resume 按 UUID / 无参数弹选择器）、src/utils/conversationRecovery.ts:485-630 与 :167-243（定位与净化反序列化）、src/utils/sessionStorage.ts:3566-3590（loadTranscriptFile）、:2106-2131（buildConversationChain）、:1567-1571（adoptResumedSessionFile）、src/utils/sessionRestore.ts:410-564（processResumedConversation 换脑编排）、src/utils/fileHistory.ts:924-1048（copyFileHistoryForResume）、src/cost-tracker.ts:131-176（成本恢复）、src/screens/REPL.tsx:2123-2348 与 :1486/:2326（会话内 /resume 换脑回调与消息数组）、src/commands/resume/resume.tsx:121-164（LogSelector 选择）。</li>
+<li>读日志一步实为「读尾部轻量元数据 → 需要时再读全量」两级：--resume 选择器列表只读每个 JSONL 的尾部 64KB（lite 日志），选中后才 loadFullLog；图中合并为一个节点。</li>
+<li>反序列化是净化式部分生效：filterUnresolvedToolUses 丢弃未配对 tool_use、filterOrphanedThinkingOnlyMessages 丢弃孤 thinking、filterWhitespaceOnlyAssistantMessages 丢弃纯空白 assistant（conversationRecovery.ts:190-205）；被检出的中断被改写成合成的 "Continue from where you left off." 续接消息 + 哨兵 assistant，保证下一次 API 请求配对合法。</li>
+<li>换脑是原子同变：switchSession 一次同时改 STATE.sessionId 与 STATE.sessionProjectDir（bootstrap/state.ts:462-473），onSessionSwitch 信号联动 ~/.claude/sessions/&lt;pid&gt;.json PID 文件（concurrentSessions.ts:98-108）。</li>
+<li>fork（--fork-session / /branch）刻意跳过 switchSession 与 adoptResumedSessionFile：保留启动时的新 sessionId，靠 useLogMessages 挂载时把消息重写进新 JSONL，并补种子 content-replacement 条目（sessionRestore.ts:453-464），旧会话文件原样保留仍可独立恢复。</li>
+<li>会话内 /resume 与 CLI 路径的差异：REPL 回调先对旧会话跑 SessionEnd hooks、保存旧会话成本再换脑（REPL.tsx:2162-2230），且元数据恢复前必须先 clearSessionMetadata 清缓存（set-if-truthy 语义，:2241-2247）；CLI 冷启动路径无旧会话可收尾。</li>
+<li>恢复完成后流程汇入「会话消息落盘生命周期」的持续循环：新消息由 useLogMessages 增量转交 recordTranscript，追加进被 adopt 的原 JSONL；进程退出时 reAppendSessionMetadata 把标题/标签等元数据重追加到文件尾部 64KB 窗口内。</li>
+<li>失败面：loadConversationForResume 返回 null → exitWithError('No conversation found')（main.tsx:3684/4306）；catch → logError + process.exit(1)（main.tsx:3728-3736）；跨项目 resume 只给剪贴板命令不直接换（resume.tsx:132-159）；快照拷贝部分失败时整快照不落 JSONL（fileHistory.ts:1020-1044）；成本恢复按 lastSessionId 匹配、不匹配则从零（cost-tracker.ts:93-97）。</li>
+<li>考据注记（来自子系统考据 uncertainties）：远程持久化（persistToRemote/hydrateFromCCRv2）的门控与注册入口未接通核验；cli/print.ts 的 headless resume 完整调用链未走读到行号；两者对本图主干无影响，仅记录。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

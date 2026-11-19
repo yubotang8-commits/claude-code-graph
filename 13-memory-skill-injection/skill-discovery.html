@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13-memory-skill-injection · 技能发现注入播放器</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px;max-width:1420px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12px;padding:6px 8px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p2.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p3.on{background:#f4f4f2;border-color:var(--sec)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p2.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p3.done{background:#f4f4f2;border-color:var(--sec)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:150px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subtitle{flex-basis:100%;font-size:14px;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:9px;padding:8px 12px;min-height:38px}
+#subtitle b{color:var(--blue)}
+#subtitle.end b{color:var(--good)}
+
+#stage{display:grid;grid-template-columns:305px 355px 330px minmax(280px,1fr);gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:652px}
+#stage .lane{transition:box-shadow .35s ease,filter .35s ease,opacity .35s ease}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:7px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--sec)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-loop .h{border-bottom:2px solid var(--blue)}
+#lane-pf .h{border-bottom:2px solid var(--orange)}
+#lane-idx .h{border-bottom:2px solid var(--purple)}
+#lane-ctx .h{border-bottom:2px solid var(--green)}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage #lane-loop.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.22)}
+#stage #lane-pf.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage #lane-idx.hot{box-shadow:0 0 0 2px var(--purple),0 10px 30px rgba(98,80,214,.22)}
+#stage #lane-ctx.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.22)}
+
+.bubble{max-width:94%;font-size:12.5px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-all}
+.bubble.q{align-self:flex-end;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
+.bubble.a{align-self:flex-start;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-bottom-left-radius:4px}
+.bubble.a.fin{border-style:solid;font-weight:600}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.45;word-break:break-all}
+.chip.gate{background:#f4f4f2;border-color:var(--line);border-style:dashed}
+.chip.mech{background:var(--panel);border-color:var(--hair);color:var(--sec)}
+.chip.act{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.pf{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.idx{background:var(--purple-f);border-color:var(--purple);color:#3d2f9e}
+.chip.ok{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.fin{background:var(--good);border-color:var(--good);color:#fff;font-weight:700}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.ip,.dp,.cv{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 11px;max-height:190px;overflow-y:auto;transition:border-color .3s ease,box-shadow .3s ease}
+.ip .ph,.dp .ph,.cv .ph{font-size:12px;font-weight:700;margin-bottom:5px}
+.ip .ph{color:#3d2f9e}
+.dp .ph{color:var(--orange)}
+.cv .ph{color:var(--sec)}
+.ip .pb,.dp .pb,.cv .pb{font-family:var(--mono);font-size:10.8px;color:var(--sec);line-height:1.55;white-space:pre-wrap}
+.cv .pb{color:var(--ink)}
+.ip.on{border-top-color:var(--purple)}
+.dp.on{border-top-color:var(--orange)}
+.cv.on{border-top-color:var(--green)}
+.ip.glow,.dp.glow,.cv.glow{box-shadow:inset 0 0 0 2px rgba(98,80,214,.25);border-top-color:var(--purple)}
+.dp.glow{box-shadow:inset 0 0 0 2px rgba(235,104,52,.25);border-top-color:var(--orange)}
+.cv.glow{box-shadow:inset 0 0 0 2px rgba(27,175,122,.28);border-top-color:var(--green)}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
+.flight.ev{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.mv{background:var(--purple-f);border:1.5px solid var(--purple);color:#3d2f9e}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:150px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.act .ev{color:var(--blue)}
+#lines .ln.pf .ev{color:var(--orange)}
+#lines .ln.idx .ev{color:var(--purple)}
+#lines .ln.ctx .ev{color:var(--green)}
+#lines .ln.mech{color:var(--sec);font-style:italic}
+#lines .ln.mech .ev{color:#6250d6}
+#lines .ln.gate .ev{color:var(--mut)}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost{color:#b3b2ad}
+#lines .ln.lost .ev{color:#b3b2ad}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:190px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:330px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#failpanel{margin-top:12px;border:1.5px solid var(--line);border-radius:14px;background:var(--white);padding:12px 16px}
+#failpanel .ft{font-weight:700;font-size:14px;color:var(--ink)}
+#failpanel .ft small{font-weight:400;color:var(--mut);font-size:11.5px;margin-left:8px}
+#failpanel .rows{display:grid;grid-template-columns:1fr 1fr;gap:7px 24px;margin-top:9px}
+.frow{display:flex;gap:8px;align-items:baseline;font-size:12.5px;color:var(--sec);line-height:1.5}
+.frow b{color:var(--ink)}
+.frow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px);background:var(--orange)}
+
+.legend{margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:14px;font-size:11px;color:var(--mut);line-height:1.6}
+#selftest-result{margin-top:12px;font-family:var(--mono);font-size:11.5px;background:var(--white);border:1px solid var(--hair);border-radius:10px;padding:10px 13px;white-space:pre-wrap;color:var(--sec);max-height:220px;overflow-y:auto}
+#selftest-result:empty{display:none}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>技能发现注入播放器：本地 TF-IDF 搜索 → 高分技能自动加载 → system-reminder 注入</h1>
+  <div class="sub">用户提问 → <b>turn-0 阻塞发现</b>（两道门：构建期 feature + 运行时 env）→ <b>本地索引</b> TF-IDF 搜索（纯本地、不走 API）→ <b>会话去重</b>（有界 1000/750 FIFO）→ 前 2 名且分数 ≥0.30 读 <b>SKILL.md 全文</b>（≤12000 字符）→ 登记 invokedSkills → 包 <b>&lt;system-reminder&gt;</b> 并入下一轮请求 —— inter-turn 路径每迭代<b>并行预取</b>，生产中 97% 空手而归</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 用户轮 · turn-0 阻塞发现（门 → 查询 → 索引 → 搜索）</span>
+  <span class="p1" data-ph="1">富化与注入（SKILL.md 全文 → system-reminder → 下一轮请求）</span>
+  <span class="p2" data-ph="2">循环第 2 迭代 · inter-turn 并行预取（去重 → 空）</span>
+  <span class="p3" data-ph="3">回合终止 · 退出</span>
+</div>
+
+<div id="transport">
+  <div class="btns">
+    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+    <button id="b-brk" class="danger" title="故障演示 (B)">⚡ 故障演示</button>
+    <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+  </div>
+  <div id="bar"></div>
+  <div id="speed">
+    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+  </div>
+  <div id="readout">就绪</div>
+  <div id="subtitle"><b>现在：</b>就绪 · 点击 ▶ 播放，或用 ← → 单步</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-loop">
+    <div class="h" id="h-loop">🔄 回合循环 <span class="tag">query.ts</span><small>processUserInput · queryLoop · 收集点</small></div>
+    <div class="feed" id="feed-loop"></div>
+    <div class="lane-foot"><b>这一格管什么</b>：query() 循环与 processUserInput 入口。turn-0 发现在这里<b>同步阻塞</b>（注释原话：这是唯一没有前序工作可藏身的信号）；inter-turn 预取每迭代<b>并行发起</b>、工具执行后 await 收集。<br><b>循环语义</b>：while(true) 每迭代 = 一次 API 流 + 一轮工具 + 一次并行预取。</div>
+  </div>
+  <div class="lane" id="lane-pf">
+    <div class="h" id="h-pf">🔍 技能预取 <span class="tag">skillSearch/prefetch.ts</span><small>门 · 去重 · 富化 · 附件</small></div>
+    <div class="feed" id="feed-pf"></div>
+    <div class="dp" id="dp-panel">
+      <div class="ph">♻️ 会话去重 &amp; auto-load 名额（模块级 · 进程存活）</div>
+      <div class="pb" id="dp-body">（空 —— 本会话尚未发现任何技能）</div>
+    </div>
+    <div class="lane-foot"><b>这一格管什么</b>：门检查 → 查询提取 → 搜索调度 → 会话去重 → 高分技能读 SKILL.md 富化 → 附件成型。失败永远是「降级为仅名单」，<b>不抛错、不碰主轮</b>。</div>
+  </div>
+  <div class="lane" id="lane-idx">
+    <div class="h" id="h-idx">🧲 本地索引 <span class="tag">skillSearch/localSearch.ts</span><small>getCommands → TF-IDF</small></div>
+    <div class="feed" id="feed-idx"></div>
+    <div class="ip" id="idx-panel">
+      <div class="ph">🧲 技能索引（按 cwd 模块级缓存）</div>
+      <div class="pb" id="idx-body">（未建 —— 首次搜索触发构建）</div>
+    </div>
+    <div class="lane-foot"><b>这一格管什么</b>：本地 TF-IDF 索引，原料 = 命令注册表里 type=prompt 的技能（含用户级/项目级/插件技能）。纯本地计算<b>不走 API</b>；同一 cwd 只建一次。</div>
+  </div>
+  <div class="lane" id="lane-ctx">
+    <div class="h" id="h-ctx">📥 渲染注入 <span class="tag">messages.ts → toolResults</span><small>system-reminder · 下一轮</small></div>
+    <div class="feed" id="feed-ctx"></div>
+    <div class="cv" id="cv-panel">
+      <div class="ph">🧬 模型视角：下一轮请求里真实存在的消息</div>
+      <div class="pb" id="cv-body">（尚未注入 —— 附件未渲染）</div>
+    </div>
+    <div class="lane-foot"><b>落效在哪</b>：附件 → 一条 <b>isMeta</b> user 消息（auto-loaded 全文 + 推荐名单 + 指令文案）→ 随消息历史进入下一轮 API 请求。模型被告知：已加载的<b>不要再调 Skill 工具</b>。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ SKILL.md 读取失败<small>第 2 个技能的正文文件缺失 / 无权限 —— enrich 循环中途断开</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>feature-audit</b><span>读取成功 → 全文照常注入（完整档）</span></div>
+    <div class="brow"><span class="d" style="background:var(--orange)"></span><b>code-review</b><span>读取失败 → 原子性 = 单个技能降级：退回「仅名称 + 描述」的推荐行（部分档）</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>code-review 正文</b><span>本轮不进上下文；名字已登记 discoveredThisSession，本会话不再自动重试（缺失档）</span></div>
+    <div class="brow" style="margin-top:4px"><span class="d" style="background:var(--red)"></span><b>另一种「断」</b><span>门未开（feature / SKILL_SEARCH_ENABLED）→ 整条流静默不存在，连名单都没有</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">怎么恢复 / 回退</div>
+    <ul>
+      <li><b>模型侧</b>：仍可显式调用 Skill("code-review") 工具加载全文</li>
+      <li><b>会话侧</b>：FIFO 逐出（1000 → 750）后同名技能可重新自动发现</li>
+      <li><b>主轮</b>：模型流式与工具执行全程不受影响（预取失败永远返回空）</li>
+    </ul>
+  </div>
+</div>
+
+<div id="failpanel">
+  <div class="ft">故障面（代码里的真实分支）<small>对应源码 failure_modes —— 全是「降级 / 静默跳过」，没有一条会让主轮报错</small></div>
+  <div class="rows">
+    <div class="frow"><span class="d"></span><b>构建期 / 运行时门任一关闭</b>：流不存在 —— feature DCE 把代码连同字符串字面量一起剥掉；SKILL_SEARCH_ENABLED 未设则 return []</div>
+    <div class="frow"><span class="d"></span><b>SKILL.md 读取失败</b>：退化为仅名称+描述（原子性 = 单个技能的降级，其余技能不受影响）</div>
+    <div class="frow"><span class="d"></span><b>auto-load 超 2 个或 score&lt;0.30</b>：只列名不注内容；gap 记录 best-effort 失败静默</div>
+    <div class="frow"><span class="d"></span><b>skipSkillDiscovery 门</b>：技能展开内容不当查询信号 —— 110KB SKILL.md 曾引发 ~3.3s 分块查询（session 13a9afae）</div>
+    <div class="frow"><span class="d"></span><b>与工具预取共用 TF-IDF 算法但去重集合独立</b>（discoveredThisSession ≠ discoveredToolsThisSession，互不影响）</div>
+    <div class="frow"><span class="d"></span><b>turn 结束后预取句柄弃用</b>；discoveredThisSession 进程级存活，防同技能重复注入直到 FIFO 逐出</div>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤日志<span class="lg">每步一行 · 斜体紫 = 机制注记（人看懂流程用，不是流动的单元）</span></div>
+  <div id="lines"></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>回合循环动作</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>技能预取事件</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>本地索引 / 机制注记</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>注入与落效</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--line)"></span>门检查（灰虚线）</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 故障演示</div>
+<footer>
+依据 claude-code 源码实读：src/utils/processUserInput/processUserInput.ts:510-528（turn-0 阻塞入口 getAttachmentMessages(input)）、src/utils/attachments.ts:816-846（userInputAttachments · skipSkillDiscovery / suppressNextDiscovery 门）、src/services/skillSearch/prefetch.ts:28-52（有界会话集合 1000/750 FIFO）、:54-92（extractQueryFromMessages · 各 500 字符）、:94-201（enrichResultsForAutoLoad / SKILL.md 12000 截断 / markAutoLoadedSkill）、:203-247（gap 学习 best-effort）、:249-306（inter-turn 预取与 collect）、:308-356（turn-0 getTurnZeroSkillDiscovery）、src/services/skillSearch/localSearch.ts:205-210（字段权重）、:270-281（0.10 门槛 / 0.75 名字保底 / limit 5）、:287-296（按 cwd 缓存）、:383-443（searchSkills）、src/services/skillSearch/featureCheck.ts:11-30（构建期 / 运行时两道门）、src/services/skillSearch/intentNormalize.ts:1-45（CJK 意图归一化 · 可选）、src/query.ts:476-498（每迭代并行发起 · 97% 注释）、:1930-1941（工具后收集点 · await 即终止边界）、src/utils/messages.ts:3893-3934（渲染与照录文案）、src/bootstrap/state.ts:1485-1508（invokedSkills 登记 · 跨 compact 保留）、src/constants/xml.ts:2（COMMAND_NAME_TAG = command-name）。<br>
+考据注记：演示数值（索引 42 条、三条分数 0.68/0.34/0.21、路径）为示意；所有阈值照录源码默认值（AUTO_LOAD_MIN_SCORE 0.30 · AUTO_LOAD_LIMIT 2 · AUTO_LOAD_MAX_CHARS 12000 · 会话集合 1000/750 · 显示门槛 0.10 · limit 5 · inter-turn 消息文本各截 500（input 原文不截，且 turn-0 不走 extractQueryFromMessages）· signal.queryText 截 200）。运行时门 SKILL_SEARCH_ENABLED 需 /skill-search start 设置（featureCheck.ts 注释），本 fork 构建默认启用 EXPERIMENTAL_SKILL_SEARCH（CLAUDE.md），但运行时门仍须手动开——两道门都画出。意图归一化（SKILL_SEARCH_INTENT_ENABLED）与 gap 学习（SKILL_LEARNING）默认关闭，页面标为「可选」。turn-0 不做 discoveredThisSession 前置过滤（登记在 enrich 之后），newResults 过滤是 inter-turn 专属（prefetch.ts:267-271）。第 2 轮去重结果（3 条全部已发现 → 返回空）为该路径的典型形态（query.ts 注释称生产 97% 空手而归），未做运行时验证。
+</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.addEventListener('error',function(e){window.__errors.push(((e&&e.message)||e)||'unknown')});
+
+var $=function(id){return document.getElementById(id)};
+var feeds={loop:$('feed-loop'),pf:$('feed-pf'),idx:$('feed-idx'),ctx:$('feed-ctx')};
+var lanes={loop:$('lane-loop'),pf:$('lane-pf'),idx:$('lane-idx'),ctx:$('lane-ctx')};
+var heads={loop:$('h-loop'),pf:$('h-pf'),idx:$('h-idx'),ctx:$('h-ctx')};
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout'), subtitleEl=$('subtitle');
+var activeAnims=[]; var breakMode=false; var glowT=null; var focusMode=true;
+var qBubble=null,aBubble=null;
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function bubble(kind,text){var d=el('bubble '+kind,feeds.loop,text);feeds.loop.scrollTop=feeds.loop.scrollHeight;return d}
+function addLog(kind,text){
+  var d=document.createElement('div'); d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('·');
+    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
+    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur'); for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight; return d;
+}
+function fly(fromLane,toLane,label,cls,dur){
+  var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(toLane);
+}
+
+function setSub(htmlStart,txt){
+  subtitleEl.innerHTML=htmlStart;
+  subtitleEl.appendChild(document.createTextNode(txt));
+}
+
+// ---------- panel writers（确定性：每步写全文，重建幂等） ----------
+function idxWrite(full){
+  var b=$('idx-body');
+  b.textContent='索引：42 条 prompt 型技能（getCommands 收集 · disableModelInvocation 除外）\n样例：feature-audit · code-review · docs-style · …\n字段权重：name×3.0 · whenToUse×2.0 · description×1.0 · allowedTools×0.3\n缓存：'+(full?'第 2 轮缓存命中 —— 免重建':'已按 cwd 定型（下次直接复用）');
+  $('idx-panel').classList.add('on');
+}
+function dpWrite(quota,invoked){
+  var b=$('dp-body');
+  b.textContent='discoveredThisSession：3/1000（满 1000 修到 750 · FIFO 逐出）\n· feature-audit\n· code-review\n· docs-style\nauto-load 名额：'+quota+(invoked?'\ninvokedSkills 登记：feature-audit · code-review（跨 compact 保留）':'');
+  $('dp-panel').classList.add('on');
+}
+var CV1='[isMeta user 消息 · user 侧 · 渲染中]\n\nThe following skills are auto-loaded for this task. Apply their\ninstructions now; do not call Skill("<name>") again for these\nloaded skills.\n\n<command-name>feature-audit</command-name>\n<loaded-skill name="feature-audit" path=".../feature-audit/SKILL.md">\n（SKILL.md 正文 · frontmatter 已剥 · ≤12000 字符）\n</loaded-skill>\n\n<command-name>code-review</command-name>\n<loaded-skill name="code-review" path=".../code-review/SKILL.md">\n（SKILL.md 正文 · 同上）\n</loaded-skill>';
+var CV2=CV1+'\n\nAdditional relevant skills were found but not auto-loaded:\n\n- docs-style: Keep documentation formatting consistent.\n\nInvoke via Skill("<name>") only if you need their complete instructions.';
+var CV3='<system-reminder>\n'+CV2+'\n</system-reminder>';
+function cvWrite(v){$('cv-body').textContent=v;$('cv-panel').classList.add('on')}
+
+// ---------- step script ----------
+var steps=[].concat(
+ // ── Phase 0：turn-0 阻塞发现 ──
+ {id:'u-in',ph:0,dur:900,focus:'loop',lab:'用户提交提问（第 1 用户轮）',log:null,state:function(){
+   qBubble=bubble('q','帮我审计一下这些 feature flag 哪些只是 stub');
+ },live:null},
+ {id:'u-pui',ph:0,dur:950,focus:'loop',lab:'turn-0 发现点：processUserInput 同步跑附件装配',log:'turn-0 阻塞 · processUserInput.ts:517 → getAttachmentMessages(input) —— 唯一同步等待的发现路径',logKind:'mech',state:function(){
+   chip('loop','act','processUserInput → getAttachmentMessages(input)');
+ },live:function(){fly('loop','pf','输入文本 → 查询信号','req',700)}},
+ {id:'gate-a',ph:0,dur:850,focus:'pf',lab:'构建期门：feature(EXPERIMENTAL_SKILL_SEARCH)',log:'构建期 DCE · 未启用该 feature 的构建里，这段代码（含 skill_discovery 字符串字面量）根本不存在',logKind:'gate',state:function(){
+   chip('pf','gate',"feature('EXPERIMENTAL_SKILL_SEARCH') ✓ 编译进构建");
+ },live:null},
+ {id:'gate-b',ph:0,dur:850,focus:'pf',lab:'运行时门：SKILL_SEARCH_ENABLED=1',log:'运行时门 · featureCheck.ts:28 只查环境变量 —— /skill-search start 设置；未设则 return [] 整条流静默不存在',logKind:'gate',state:function(){
+   chip('pf','gate','process.env.SKILL_SEARCH_ENABLED === "1" ✓');
+ },live:null},
+ {id:'q-ext',ph:0,dur:900,focus:'pf',lab:'turn-0 查询信号 = input 原文（直接用，不截断）',log:'getTurnZeroSkillDiscovery · turn-0 直接拿 input 当查询文本（prefetch.ts:321-327），不经 extractQueryFromMessages、不截 500 —— 「倒序找最近 user 话语」那套只在 inter-turn 路径（input=null）',logKind:'pf',state:function(){
+   chip('pf','pf','查询：帮我审计一下这些 feature flag 哪些只是 stub');
+ },live:null},
+ {id:'q-norm',ph:0,dur:900,focus:'pf',lab:'（可选）意图归一化：中文查询 → 英文关键词',log:'可选路径 · intentNormalize.ts —— CJK 查询过 Haiku 提炼 3-6 个英文关键词（SKILL_SEARCH_INTENT_ENABLED 门控 · 失败回退原文 · 仅 turn-0 阻塞路径）',logKind:'mech',state:function(){
+   chip('pf','mech','Haiku 归一化 → audit feature flags stub classify');
+ },live:null},
+ {id:'idx-miss',ph:0,dur:900,focus:'pf',lab:'索引请求在途：getSkillIndex(cwd)',log:null,state:function(){
+   chip('pf','pf','getSkillIndex(cwd) —— 首次调用');
+ },live:function(){fly('pf','idx','searchQuery + 索引请求','mv',700)}},
+ {id:'idx-cmd',ph:0,dur:950,focus:'idx',lab:'索引原料：getCommands 的 prompt 型技能',log:'getSkillIndex · getCommands 收集 type=prompt 的技能（技能 = 命令注册表里的条目 · disableModelInvocation 除外）',logKind:'idx',state:function(){
+   chip('idx','idx','42 个 prompt 型技能入索引');
+ },live:null},
+ {id:'idx-tf',ph:0,dur:950,focus:'idx',lab:'建 TF-IDF 索引：字段加权 TF × IDF',log:'字段权重 · localSearch.ts:205-210 —— name 3.0 / whenToUse 2.0 / description 1.0 / allowedTools 0.3',logKind:'idx',state:function(){
+   idxWrite(false);
+   chip('idx','idx','TF×(name 3.0 · whenToUse 2.0 · desc 1.0 · tools 0.3)×IDF');
+ },live:null},
+ {id:'src-a',ph:0,dur:900,focus:'pf',lab:'发起本地搜索（TF-IDF 余弦）',log:null,state:function(){
+   chip('pf','pf','searchSkills —— 分词+词干（CJK 二元组）→ 余弦相似度');
+ },live:function(){fly('pf','idx','searchSkills(查询, 索引)','ev',700)}},
+ {id:'src-b',ph:0,dur:950,focus:'idx',lab:'打分与门槛：0.10 入榜 · 名字保底 0.75 · 前 5',log:'searchSkills · DISPLAY_MIN_SCORE 0.10 · 技能名含于查询 → max(score, 0.75) · limit 5（localSearch.ts:383-443）',logKind:'idx',state:function(){
+   chip('idx','idx','3 条过门槛：0.68 / 0.34 / 0.21');
+ },live:null},
+ {id:'res-c',ph:0,dur:850,focus:'idx',lab:'结果在途：3 条命中飞回预取器',log:null,state:function(){
+   chip('idx','idx','SearchResult[3] → {name, description, score, skillRoot}');
+ },live:function(){fly('idx','pf','feature-audit 0.68 · code-review 0.34 · docs-style 0.21','back',720)}},
+ {id:'res-d',ph:0,dur:950,focus:'pf',lab:'落效：结果进入富化队列',log:'搜索结果（照录字段）· feature-audit 0.68 · code-review 0.34 · docs-style 0.21（演示分数）',logKind:'pf',state:function(){
+   chip('pf','pf','命中 3：feature-audit 0.68 · code-review 0.34 · docs-style 0.21');
+ },live:null},
+
+ // ── Phase 1：富化与注入 ──
+ {id:'dedup',ph:1,dur:900,focus:'pf',lab:'会话登记：turn-0 不过滤、enrich 后统一登记',log:'去重语义 · turn-0 不做前置过滤（prefetch.ts:333-336，enrich+gap 之后才登记，Set 幂等）；真正的 newResults 过滤发生在 inter-turn 路径。集合有界：满 1000 修到 750（FIFO）—— 宁可重发一次提醒，绝不静默漏掉真实命中',logKind:'mech',state:function(){
+   dpWrite('0/2',false);
+   chip('pf','pf','discoveredThisSession 登记 3 个名字（3/1000）');
+ },live:null},
+ {id:'quota',ph:1,dur:950,focus:'pf',lab:'auto-load 判定：名额 2 · 阈值 0.30',log:'enrichResultsForAutoLoad · loadedCount<2 且 score≥0.30 才读正文（SKILL_SEARCH_AUTOLOAD_* 环境变量可调）',logKind:'pf',state:function(){
+   chip('pf','pf','feature-audit 0.68 ✓ · code-review 0.34 ✓ · docs-style 0.21 ✗');
+ },live:null},
+ {id:'md1',ph:1,dur:1000,focus:'pf',lab:'读 feature-audit 的 SKILL.md 全文',log:'loadSkillContent · SKILL.md / skill.md 两候选 · parseFrontmatter 剥头 · AUTO_LOAD_MAX_CHARS=12000 截断',logKind:'pf',state:function(){
+   chip('pf','pf','skillRoot/SKILL.md → 剥 frontmatter → ≤12000 字符');
+ },live:null},
+ {id:'md2',ph:1,dur:1000,focus:'pf',lab:'读 code-review 的 SKILL.md（名额 2/2 用完）',log:null,state:function(){
+   dpWrite('2/2',false);
+   chip('pf','pf','第 2 个名额用完 → 后续技能一律只列名');
+ },live:null},
+ {id:'mark',ph:1,dur:950,focus:'pf',lab:'登记 invokedSkills（跨 compact 保留）',log:'addInvokedSkill · bootstrap/state.ts:1494 —— key=agentId:技能名；compact 后 createSkillAttachmentIfNeeded 重新带回',logKind:'pf',state:function(){
+   dpWrite('2/2',true);
+   chip('pf','ok','addInvokedSkill(feature-audit) + (code-review)');
+ },live:null},
+ {id:'reco',ph:1,dur:850,focus:'pf',lab:'docs-style 只进推荐名单（不带正文）',log:null,state:function(){
+   chip('pf','pf','docs-style → 仅 name + description');
+ },live:null},
+ {id:'gap',ph:1,dur:850,focus:'pf',lab:'gap 判定：已有 auto-load → 不记学习信号',log:'gap 学习 · maybeRecordSkillGap 仅在无 auto-load 时记录（trigger=user_input 专属 · SKILL_LEARNING 默认禁用 · best-effort 失败静默）',logKind:'mech',state:function(){
+   chip('pf','mech','maybeRecordSkillGap：跳过');
+ },live:null},
+ {id:'att',ph:1,dur:950,focus:'pf',lab:'附件成型：skill_discovery',log:'附件结构 · {type:skill_discovery, skills[3], signal:{trigger:user_input, queryText≤200, durationMs, indexSize:42, method:tfidf}, source:native}',logKind:'pf',state:function(){
+   chip('pf','pf','Attachment{type:skill_discovery, skills[3], signal}');
+ },live:null},
+ {id:'att-fly',ph:1,dur:900,focus:'pf',lab:'附件在途：交给渲染层',log:null,state:function(){
+   chip('pf','pf','createAttachmentMessage(attachment)');
+ },live:function(){fly('pf','ctx','skill_discovery 附件','ev',720)}},
+ {id:'att-land',ph:1,dur:950,focus:'ctx',lab:'渲染 auto-loaded 段：loaded-skill 全文',log:'渲染 · messages.ts:3899-3904 —— command-name + loaded-skill(name, path) 包 SKILL.md 全文',logKind:'ctx',state:function(){
+   cvWrite(CV1);
+   chip('ctx','ctx','auto-loaded 段：command-name + loaded-skill 正文');
+ },live:null},
+ {id:'render-b',ph:1,dur:950,focus:'ctx',lab:'渲染推荐段与指令文案（照录）',log:'照录文案 · "Apply their instructions now; do not call Skill(<name>) again for these loaded skills." + "Invoke via Skill(<name>) only if you need their complete instructions."',logKind:'ctx',state:function(){
+   cvWrite(CV2);
+   chip('ctx','ctx','推荐段：- docs-style: … + Skill() 调用指引');
+ },live:null},
+ {id:'wrap',ph:1,dur:900,focus:'ctx',lab:'整体包 system-reminder · isMeta user 消息定型',log:null,state:function(){
+   cvWrite(CV3);
+   chip('ctx','ok','<system-reminder> isMeta 消息 ✓');
+ },live:null},
+ {id:'land',ph:1,dur:1000,focus:'loop',lab:'落效：并入消息历史 → 第一次 API 请求带上',log:'落效 · 附件消息并入 attachmentMessages → 随用户输入进 query() 消息历史 —— 下一轮请求 user 侧真实存在这条消息',logKind:'ctx',state:function(){
+   chip('loop','ok','模型直接看到技能全文（无需再调 Skill 工具）');
+ },live:function(){fly('ctx','loop','isMeta user 消息 → messages','back',760)}},
+
+ // ── Phase 2：inter-turn 并行预取（第二轮，简短） ──
+ {id:'it-a',ph:2,dur:1000,focus:'loop',lab:'循环第 2 迭代：预取并行发起（藏进模型流式时间）',log:'inter-turn · query.ts:484 每迭代 startSkillDiscoveryPrefetch(null, messages) —— 与模型流式/工具执行并行，不再阻塞',logKind:'mech',state:function(){
+   chip('loop','act','startSkillDiscoveryPrefetch(null, messages) ∥ 模型流式');
+ },live:function(){fly('loop','pf','预取发起（并行）','ev',700)}},
+ {id:'it-b',ph:2,dur:900,focus:'pf',lab:'查询提取：无 input → 倒序找最近 user 文本',log:null,state:function(){
+   chip('pf','pf','查询提取（无 input）· 倒序找最近 user 话语 · 文本各截 500 · 跳过 tool_result 块');
+ },live:null},
+ {id:'it-c',ph:2,dur:900,focus:'idx',lab:'索引缓存命中 · 同样 3 条命中',log:'缓存 · getSkillIndex 按 cwd 缓存命中 —— 免重建，直接复用上次索引',logKind:'idx',state:function(){
+   idxWrite(true);
+   chip('idx','idx','缓存命中（免重建）· 3 条结果');
+ },live:null},
+ {id:'it-d',ph:2,dur:950,focus:'pf',lab:'去重生效：全部已发现 → 返回空数组',log:'去重命中 · 同一技能本会话只提醒一次 —— 生产中 97% 的调用就是这个形态（query.ts:480 注释）',logKind:'pf',state:function(){
+   chip('pf','pf','newResults = [] → return []');
+ },live:null},
+ {id:'it-e',ph:2,dur:950,focus:'loop',lab:'收集点：await collect（每迭代的终止边界）',log:'收集点 · query.ts:1933-1941 collectSkillDiscoveryPrefetch —— await 点即终止边界；句柄随迭代弃用',logKind:'mech',state:function(){
+   chip('loop','act','collectSkillDiscoveryPrefetch → 无附件注入');
+ },live:null},
+
+ // ── Phase 3：终止与退出 ──
+ {id:'term',ph:3,dur:950,focus:'loop',lab:'回合终止：模型输出无 tool_use → Terminal completed',log:'终止 · discoveredThisSession 进程级存活（防重复注入直到 FIFO 逐出）；预取句柄随 turn 结束弃用',logKind:'mech',state:function(){
+   chip('loop','act','Terminal completed · 预取句柄弃用');
+ },live:null},
+ {id:'end',ph:3,dur:1100,focus:'loop',lab:'流程结束 —— 同一技能本会话只完整注入一次 · compact 后自然复位',log:'流程结束 · compact 会把附件消息压掉 = 自然复位；同名技能在 FIFO 逐出后可重新自动发现',logKind:'sys',state:function(){
+   aBubble=bubble('a fin','✅ 模型按 feature-audit 的指引干活（技能已生效）');
+   chip('loop','fin','技能注入闭环完成');
+ },live:null}
+);
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='md2')return i}return 16})();
+
+// ---------- rebuild / engine ----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.loop.innerHTML='';feeds.pf.innerHTML='';feeds.idx.innerHTML='';feeds.ctx.innerHTML='';
+  linesEl.innerHTML='';
+  qBubble=null;aBubble=null;
+  $('idx-body').textContent='（未建 —— 首次搜索触发构建）';
+  $('dp-body').textContent='（空 —— 本会话尚未发现任何技能）';
+  $('cv-body').textContent='（尚未注入 —— 附件未渲染）';
+  $('idx-panel').classList.remove('on','glow');
+  $('dp-panel').classList.remove('on','glow');
+  $('cv-panel').classList.remove('on','glow');
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){subtitleEl.classList.remove('end');setSub('<b>现在：</b>','就绪 · 点击 ▶ 播放，或用 ← → 单步');readout.textContent='就绪'}
+  else if(idx>=n-1){subtitleEl.classList.add('end');setSub('<b>✓ 流程结束</b> —— ',steps[idx].lab);readout.innerHTML='<span class="fin">✓ 播放完毕</span> · '+(idx+1)+'/'+n}
+  else{subtitleEl.classList.remove('end');setSub('<b>现在：</b>',steps[idx].lab);readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b>'}
+}
+function setFocus(s){
+  ['loop','pf','idx','ctx'].forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  $('idx-panel').classList.remove('glow');$('dp-panel').classList.remove('glow');$('cv-panel').classList.remove('glow');
+  clearTimeout(glowT);
+  if(!focusMode||!s||!s.focus){$('stage').classList.remove('spot');return}
+  $('stage').classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  ['loop','pf','idx','ctx'].forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+  if(s.mem){
+    var p=$(s.mem);
+    if(p){p.classList.add('glow');glowT=setTimeout(function(){p.classList.remove('glow')},900)}
+  }
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true; $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- break demo（契约：故障注入） ----------
+function breakDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ 第 2 个技能的 SKILL.md 读取失败 —— 后续单元未到达 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 故障现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意位置恢复';
+}
+function exitBreak(){
+  breakMode=false; $('break-panel').classList.remove('on'); renderTo(idx);
+}
+
+// ---------- transport wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest (?selftest=1) ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  var pass=0,fail=0;
+  function line(s){var d=document.createElement('div');d.textContent=s;pre.appendChild(d)}
+  function T(name,fn){
+    try{
+      var r=fn();
+      if(r===false)throw new Error('断言返回 false');
+      pass++;line('PASS '+name);
+    }catch(e){
+      fail++;line('FAIL '+name+' — '+((e&&e.message)||e));
+    }
+  }
+  line('== selftest start ==');
+  T('步数 > 0（实际 '+steps.length+' 步）',function(){return steps.length>0});
+  var bad=[];
+  for(var i=0;i<steps.length;i++){
+    try{window.__goto(i)}catch(e){bad.push(i+':'+((e&&e.message)||e))}
+  }
+  T('__goto(i) 逐步 0..'+(steps.length-1)+' 全部无异常',function(){
+    if(bad.length)throw new Error(bad.join(' ; '));
+    return true;
+  });
+  var texts=[];
+  for(var j=0;j<steps.length;j++){
+    try{
+      window.__goto(j);
+      texts.push(subtitleEl.textContent);
+    }catch(e){
+      texts.push('ERROR@'+j+':'+((e&&e.message)||e));
+    }
+  }
+  var uniq={};for(var k=0;k<texts.length;k++)uniq[texts[k]]=1;
+  var uniqN=0;for(var key in uniq)uniqN++;
+  T('字幕文本随步变化（'+uniqN+' 种不同字幕）',function(){return uniqN>=10});
+  window.__goto(window.__idxOf('res-c'));
+  T('在途反向断言：结果飞行中尚未写入预取泳道',function(){
+    return feeds.pf.textContent.indexOf('命中 3')<0;
+  });
+  window.__goto(window.__idxOf('res-d'));
+  T('落效断言：到达后结果写入预取泳道',function(){
+    return feeds.pf.textContent.indexOf('命中 3')>=0;
+  });
+  window.__goto(steps.length-1);
+  T('末步字幕明确「流程结束」',function(){return /流程结束/.test(subtitleEl.textContent)});
+  var r0=$('b-play').getBoundingClientRect();
+  window.__goto(8);var r1=$('b-play').getBoundingClientRect();
+  window.__goto(steps.length-1);var r2=$('b-play').getBoundingClientRect();
+  window.__goto(-1);var r3=$('b-play').getBoundingClientRect();
+  T('控制按钮坐标恒定（布局零位移）',function(){
+    return r0.top===r1.top&&r1.top===r2.top&&r2.top===r3.top;
+  });
+  T('__goto(-1) 重置回空态（泳道清空 / 面板复位 / 字幕回就绪）',function(){
+    var emptyFeeds=feeds.loop.children.length===0&&feeds.pf.children.length===0&&feeds.idx.children.length===0&&feeds.ctx.children.length===0;
+    var panelsReset=$('idx-body').textContent.indexOf('未建')>=0&&$('dp-body').textContent.indexOf('空')>=0&&$('cv-body').textContent.indexOf('尚未注入')>=0;
+    var subReset=subtitleEl.textContent.indexOf('就绪')>=0;
+    return emptyFeeds&&panelsReset&&subReset;
+  });
+  T('window.onerror 无运行时错误（'+window.__errors.length+' 条）',function(){return window.__errors.length===0});
+  line('== selftest done: '+pass+' pass / '+fail+' fail ==');
+  window.__selftest={pass:pass,fail:fail};
+}
+if(/selftest=1/.test(location.search)){
+  setTimeout(runSelfTest,0);
+}
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

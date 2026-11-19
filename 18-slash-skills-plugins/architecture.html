@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>18-slash-skills-plugins · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：斜杠命令、技能与插件</h1>
+<p class="sub">18-slash-skills-plugins · 组成模块与调用关系</p>
+<p class="lead">「用户敲下 / 命令后会发生什么、命令与技能从哪里来」由这些模块协作完成：输入分发 → 命令目录总装配 ← 技能 / 插件 / MCP 三路供给 → 技能附带钩子汇入执行引擎；语义搜索默认关闭，作旁路待命。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 880" width="1040" height="880" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部组件：REPL 界面 -->
+<rect x="60" y="46" width="230" height="62" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="175" y="72" class="n-body">REPL 交互界面</text>
+<text x="175" y="94" class="n-sub">组件 14 · 用户输入与面板渲染</text>
+
+<!-- 入口：斜杠分发器 -->
+<rect x="380" y="40" width="540" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="650" y="70" class="n-title">斜杠命令分发器</text>
+<text x="650" y="92" class="n-sub">processUserInput · processSlashCommand</text>
+<text x="650" y="114" class="n-body">识别 / 前缀输入，在命令目录中匹配命令</text>
+<text x="650" y="134" class="n-body">四路执行：界面面板 · 本地执行 · 提示词展开 · 子代理</text>
+
+<!-- 行1：命令目录总装配 + 外部 02 / 17 -->
+<rect x="60" y="196" width="230" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="175" y="222" class="n-body">核心回合循环</text>
+<text x="175" y="244" class="n-sub">组件 02 · 触发搜索并接回消息</text>
+
+<rect x="330" y="190" width="440" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="550" y="222" class="n-title">命令目录总装配</text>
+<text x="550" y="244" class="n-sub">commands.ts · 启动时四源合并</text>
+<text x="550" y="266" class="n-body">内置命令 + 技能 + 插件 + 工作流命令合并去重</text>
+<text x="550" y="288" class="n-body">可用性过滤 · 嵌套缓存 · 供查找也供建索引</text>
+
+<rect x="810" y="196" width="210" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="915" y="222" class="n-body">钩子执行引擎</text>
+<text x="915" y="244" class="n-sub">组件 17 · 技能与插件钩子汇入</text>
+
+<!-- 行2：三路供给 -->
+<rect x="60" y="340" width="280" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="372" class="n-title">本地技能加载器</text>
+<text x="200" y="394" class="n-sub">loadSkillsDir · bundledSkills</text>
+<text x="200" y="416" class="n-body">五源目录发现技能文件并解析说明头</text>
+<text x="200" y="438" class="n-body">真实路径去重 · 条件技能按文件命中激活</text>
+
+<rect x="390" y="340" width="280" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="530" y="372" class="n-title">MCP 命令与技能桥</text>
+<text x="530" y="394" class="n-sub">mcpSkills · mcpSkillBuilders</text>
+<text x="530" y="416" class="n-body">远端服务器的提示词与技能资源</text>
+<text x="530" y="438" class="n-body">包装成本地斜杠命令与技能</text>
+
+<rect x="720" y="340" width="280" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="860" y="372" class="n-title">技能附带钩子注册</text>
+<text x="860" y="394" class="n-sub">registerSkillHooks · sessionHooks</text>
+<text x="860" y="416" class="n-body">技能被调用时，把说明头声明的钩子</text>
+<text x="860" y="438" class="n-body">注册为本会话钩子（一次成功即自删）</text>
+
+<!-- 行3：外部 16 + 插件加载 -->
+<rect x="390" y="496" width="280" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="530" y="522" class="n-body">MCP 连接生命周期</text>
+<text x="530" y="544" class="n-sub">组件 16 · 推送提示词与技能资源</text>
+
+<rect x="720" y="490" width="280" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="860" y="522" class="n-title">插件加载与资产注入</text>
+<text x="860" y="544" class="n-sub">pluginLoader · refresh</text>
+<text x="860" y="566" class="n-body">读插件清单建缓存，资产分流注入</text>
+<text x="860" y="588" class="n-body">命令入目录 · 钩子入17 · 服务器入16</text>
+
+<!-- 行4：技能搜索（默认关闭） + 插件安装管理 -->
+<rect x="60" y="640" width="380" height="110" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="250" y="672" class="n-title">技能语义搜索与预取</text>
+<text x="250" y="694" class="n-sub">skillSearch · 默认关闭（双重开关）</text>
+<text x="250" y="716" class="n-body">回合循环在开局与每轮触发检索</text>
+<text x="250" y="738" class="n-body">按相似度排序，自动装载最相关技能注入对话</text>
+
+<rect x="720" y="640" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="860" y="672" class="n-title">插件安装与市场管理</text>
+<text x="860" y="694" class="n-sub">installedPluginsManager · /plugin</text>
+<text x="860" y="716" class="n-body">安装落盘 · 启用禁用持久化</text>
+<text x="860" y="736" class="n-body">市场浏览与设置界面 · 命令行入口</text>
+
+<!-- 底座 -->
+<rect x="60" y="790" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="816" class="n-title">会话状态与装配缓存底座（被上方所有模块读写）</text>
+<text x="530" y="838" class="n-sub">命令装配缓存 · 已调用技能标记 · 会话与插件钩子注册表</text>
+
+<!-- 连线 -->
+<path class="edash" d="M290,77 L376,77" marker-end="url(#ahd)"/>
+<path class="edge" d="M380,120 L175,120 L175,192" marker-end="url(#ah)"/>
+<path class="edge" d="M560,144 L560,186" marker-end="url(#ah)"/>
+<path class="edge" d="M790,144 L790,336" marker-end="url(#ah)"/>
+<path class="edge" d="M330,270 L200,270 L200,336" marker-end="url(#ah)"/>
+<path class="edge" d="M695,300 L695,480 L860,480 L860,486" marker-end="url(#ah)"/>
+<path class="edge" d="M530,340 L530,306" marker-end="url(#ah)"/>
+<path class="edge" d="M716,530 L676,530" marker-end="url(#ah)"/>
+<path class="edge" d="M790,636 L790,606" marker-end="url(#ah)"/>
+<path class="edge" d="M900,336 L900,264" marker-end="url(#ah)"/>
+<path class="edash" d="M530,492 L530,456" marker-end="url(#ahd)"/>
+<path class="edash" d="M56,228 L45,228 L45,606 L240,606 L240,636" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（默认关闭，虚线箭头 = 外部触发）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（仓库 claude-code-best）：src/utils/processUserInput/processUserInput.ts:548-567（'/' 前缀进入分发）、processSlashCommand.tsx:427-518（命令匹配，未知命令回「Unknown skill」）、:691-1013（local-jsx / local / prompt 三路分发）、:1084-1212（prompt 路径展开与消息组装）、:1138（调用技能钩子注册）；src/commands.ts:540-608（loadAllCommands 四源装配：技能 + 插件 + 工作流 + 内置；嵌套缓存注释 :616-622）、:654-672（技能搜索的索引来源）；src/skills/loadSkillsDir.ts:638（五源目录加载与 realpath 去重）；src/skills/mcpSkills.ts:30-117 与 mcpSkillBuilders.ts（skill:// 资源转技能）；src/utils/hooks/registerSkillHooks.ts:20-64（frontmatter 钩子→会话钩子，once 自删）；src/utils/plugins/pluginLoader.ts:3099（loadAllPlugins）、loadPluginCommands.ts、loadPluginHooks.ts:28、mcpPluginIntegration.ts、refresh.ts:72,136（/reload-plugins 清缓存并驱动 MCP 重连）；installedPluginsManager.ts:406,452（安装/移除落盘）；src/services/skillSearch/localSearch.ts:383（相似度检索）、prefetch.ts:249,308（开局/轮内两种触发）、featureCheck.ts:12,28（构建旗标 + 运行时开关双重门控）；调用方：src/query.ts:484、src/utils/attachments.ts:838；界面与命令行入口：src/main.tsx:4922（plugin 命令）、src/commands/plugin/ 下 19 个界面文件。</li>
+<li>考据注记：本子系统完整清单共 13 个组件，其中 MCP 连接侧（配置合并/连接编排/鉴权等 7 个）与 hook 执行侧（2 个）分属组件 16、17，本图只保留与命令/技能/插件直接相关的 8 个模块。合并/省略：markdownConfigLoader（说明头解析并入技能加载器）；bundledSkills 并入五源之一；skillSearch 的意图归一化、远端技能加载与遥测未画；插件市场的下载与解包管线细节未画。MCP prompts 的拉取动作发生在组件 16，本图 MCP 桥只画「包装与汇入」。</li>
+<li>调用关系简化：MCP 命令实际经状态合并钩子（useMergedCommands，uniqBy 内置优先）并入选项命令，图中画为直接汇入总装配；分发器提示词路径实为返回消息列表、由界面侧发起模型回合（画为虚线交给组件 02）；技能搜索读命令目录建索引（getSkillToolCommands）的箭头省略，以盒子内文字说明；插件钩子汇入组件 17 的箭头省略（插件加载盒子内文字标注），插件 MCP 服务器汇入组件 16 的箭头保留。</li>
+<li>协议级词汇说明：prompts/list、skill:// resources、mcp__server__tool 前缀、SKILL.md frontmatter 等协议词收在本栏，不上图面；「双重开关」指构建旗标 EXPERIMENTAL_SKILL_SEARCH 与运行时开关 SKILL_SEARCH_ENABLED，两者都开搜索才生效。</li>
+<li>关联图：MCP 连接建立与工具注入见「16-mcp-lifecycle」；hook 事件的匹配与执行见「17-hooks-pipeline」；展开后的消息如何驱动模型回合见「02-query-turn-loop」；输入界面与面板渲染见「14-repl-screen」。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

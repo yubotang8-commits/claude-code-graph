@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>21-daemon-bg · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：守护进程与后台会话</h1>
+<p class="sub">21-daemon-bg · 组成模块与调用关系</p>
+<p class="lead">「让 Claude 在你关掉终端后继续干活」由两条互不调用的线组成：daemon 主线把远程控制 worker 长驻看护（崩了退避重启、连崩就停手）；bg 支线把会话丢进后台去跑。两条线靠磁盘上的状态小文件互相发现。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 880" width="1040" height="880" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 入口 -->
+<rect x="300" y="40" width="440" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="70" class="n-title">入口与子命令分发</text>
+<text x="520" y="92" class="n-sub">cli.tsx · daemon / --bg / ps/logs 家族直达</text>
+<text x="520" y="114" class="n-body">识别这些子命令后直接分发，不加载完整 CLI</text>
+
+<!-- 左列：daemon 主线 -->
+<rect x="60" y="180" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="210" class="n-title">守护进程主管</text>
+<text x="260" y="232" class="n-sub">daemon/main.ts · 子命令路由 + 看护循环</text>
+<text x="260" y="254" class="n-body">拉起远程控制 worker 子进程并长期看护</text>
+<text x="260" y="276" class="n-body">崩溃后指数退避重启；十秒内连崩五次则停手</text>
+
+<rect x="60" y="350" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="380" class="n-title">worker 子进程装配</text>
+<text x="260" y="402" class="n-sub">daemon/workerRegistry.ts</text>
+<text x="260" y="424" class="n-body">按 worker 类型分派，目前只有远程控制一种</text>
+<text x="260" y="446" class="n-body">把主管注入的环境变量翻译成无头配置</text>
+
+<rect x="60" y="520" width="400" height="108" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="260" y="550" class="n-title">无头桥接循环</text>
+<text x="260" y="572" class="n-sub">bridge/bridgeMain.ts · 复用组件 19 的循环</text>
+<text x="260" y="594" class="n-body">注册环境、轮询领工、拉起会话子进程</text>
+<text x="260" y="616" class="n-body">与独立远程控制共用同一套循环，无界面无键盘</text>
+
+<!-- 外部：RCS -->
+<rect x="130" y="690" width="260" height="46" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="260" y="712" class="n-body">远程控制服务器（RCS）</text>
+<text x="260" y="730" class="n-sub">组件 19-remote-control</text>
+
+<!-- 右列：bg 支线 -->
+<rect x="580" y="180" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="780" y="210" class="n-title">后台会话管理</text>
+<text x="780" y="232" class="n-sub">cli/bg.ts · 启动 / 查询 / 附加 / 终止</text>
+<text x="780" y="254" class="n-body">启动后台会话；查询/附加/终止按注册表定位</text>
+<text x="780" y="276" class="n-body">旧命令 ps/logs/attach/kill 已并入 daemon 家族</text>
+
+<rect x="580" y="350" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="780" y="380" class="n-title">会话引擎（两种）</text>
+<text x="780" y="402" class="n-sub">cli/bg/engine.ts · tmux 与 detached</text>
+<text x="780" y="424" class="n-body">tmux：提供虚拟终端，事后可 attach 回去</text>
+<text x="780" y="446" class="n-body">detached：无终端，必须 -p 管道喂提示词</text>
+
+<!-- 外部：被拉起的子进程 -->
+<rect x="580" y="530" width="400" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="780" y="556" class="n-body">被拉起的无头子进程（完整 CLI 进程）</text>
+<text x="780" y="578" class="n-sub">组件 01-cli-entry · 走 -p 无头路径</text>
+
+<rect x="580" y="660" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="780" y="690" class="n-title">会话自注册</text>
+<text x="780" y="712" class="n-sub">utils/concurrentSessions.ts</text>
+<text x="780" y="734" class="n-body">子进程启动时自写 &lt;pid&gt;.json 登记条目</text>
+<text x="780" y="756" class="n-body">退出时自行清理；查询命令扫描并探活</text>
+
+<!-- 底座 -->
+<rect x="60" y="790" width="920" height="64" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="818" class="n-title">跨进程磁盘状态底座（各进程靠文件互相发现）</text>
+<text x="520" y="842" class="n-sub">daemon/state.ts 状态文件（主管 PID·工作目录）＋ sessions 注册表（&lt;pid&gt;.json，子进程自写）</text>
+
+<!-- 连线 -->
+<path class="edge" d="M410,122 L410,150 L260,150 L260,176" marker-end="url(#ah)"/>
+<path class="edge" d="M630,122 L630,150 L780,150 L780,176" marker-end="url(#ah)"/>
+<path class="edge" d="M260,288 L260,346" marker-end="url(#ah)"/>
+<path class="edge" d="M260,458 L260,516" marker-end="url(#ah)"/>
+<path class="edash" d="M260,628 L260,686" marker-end="url(#ahd)"/>
+<path class="edge" d="M780,288 L780,346" marker-end="url(#ah)"/>
+<path class="edash" d="M780,458 L780,526" marker-end="url(#ahd)"/>
+<path class="edge" d="M780,590 L780,656" marker-end="url(#ah)"/>
+<path class="edge" d="M460,234 L576,234" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>跨组件复用（循环代码属于组件 19）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件 / 被拉起的子进程（虚线箭头 = 跨进程）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座（磁盘状态文件，跨进程直读）</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（只读抽查，file:line）：src/entrypoints/cli.tsx:159-176（--daemon-worker 子进程入口，不加载完整 CLI）、:231-242（daemon 子命令直达）、:266-274（--bg 剥离后进启动处理器）、:277-294（ps/logs/attach/kill 映射进 daemon 路由，ps 重映射为 status 并打印 [deprecated]）；src/daemon/main.ts:52-101（daemonMain 路由，bg/attach/logs/kill 委托 cli/bg.ts）、:230-325（runSupervisor：写状态文件、SIGTERM 优雅停机、30 秒宽限后 SIGKILL）、:330-428（spawnWorker 以 --daemon-worker 拉起子进程并注入 DAEMON_WORKER_* 环境变量）、:20-23 与 :385-403（退避 2 秒起、×2 翻倍、上限 2 分钟；退出码 78 或 10 秒内连崩 5 次则停手）；src/daemon/workerRegistry.ts:26-41、:57-113（按类型分派；永久错误退出码 78、暂时错误 1）；src/bridge/bridgeMain.ts:2810（无头入口：无 readline 对话框、无 TUI、配置全部来自调用方）；src/daemon/state.ts:22-24、:85-101、:109-157（状态文件位置、跨进程查询探活、停机流程）；src/cli/bg.ts:279-338（选引擎、detached 强制 -p、会话命名与日志路径）；src/cli/bg/engine.ts:9-49、engines/tmux.ts:12-13、engines/detached.ts:18-52（引擎接口与两种实现、会话身份环境变量注入）；src/main.tsx:3078 与 src/utils/concurrentSessions.ts:59-109（子进程启动自写 &lt;pid&gt;.json、退出清理、agent 进程跳过）。</li>
+<li>考据注记：该子系统完整清单共 10 个组成（含独立桥接主体、RCS 服务端、Web 面板、ACP 代理等），本图只画「21 守护进程与后台会话」这一片；桥接循环与 RCS 以「组件 19」外部引用出现，ACP（组件 20）与本片无直接调用关系，未画。主管拉起的 worker 子进程实际以 --daemon-worker 参数重新经过入口分发（cli.tsx:164），图中并入「主管 → worker 装配」一条箭头，未单独画回环。</li>
+<li>合并与省略：daemon 状态文件管理（state.ts）并入底部灰条；统一状态视图（status 同时展示主管与会话）并入主管的子命令路由；tmux 引擎的 attach 细节（如何接回终端）未展开；workerRegistry 目前仅 remoteControl 一种 worker 类型，图中如实标注「目前只有一种」。</li>
+<li>如实说明：会话注册表 &lt;pid&gt;.json 不只服务后台会话——普通交互会话启动时同样自注册（kind 缺省为 interactive，concurrentSessions.ts:63），ps 家族扫描的是同一张表；无 tmux 的环境（含 Windows）总是落到 detached 引擎。停掉 daemon 走「SIGTERM → 10 秒轮询探活 → SIGKILL 兜底」（state.ts:109-157，stopDaemonByPid）。daemon 状态文件与 sessions 注册表是两套独立文件（~/.claude/daemon/remote-control.json 与 ~/.claude/sessions/&lt;pid&gt;.json），后台会话日志另存 sessions/logs/ 下。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

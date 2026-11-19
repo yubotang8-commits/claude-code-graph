@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>18-slash-skills-plugins · 插件安装与运行时注入全链路</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>插件安装与运行时注入全链路</h1>
+<p class="sub">组件 18-slash-skills-plugins · 斜杠命令 / 技能 / 插件</p>
+<p class="lead">从「安装 / 启用一个插件」到「运行中的会话真正获得它的命令、hook、agent 与 MCP 工具」：清单落盘 → 缓存全清 → 重新加载 → 四路注入 → MCP 重连；未触发自动刷新时由用户手动执行 /reload-plugins 沿回边重新进入刷新链。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1310" width="1040" height="1310" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">安装 / 启用插件</text>
+
+<!-- B1 用户操作 -->
+<rect x="250" y="100" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="129" class="n-title">安装 / 启用 / 停用</text>
+<text x="400" y="153" class="n-sub">main.tsx:4922 · /plugin 界面或 plugin CLI</text>
+
+<!-- B2 下载落位 -->
+<rect x="250" y="200" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="229" class="n-title">下载并落位插件资产</text>
+<text x="400" y="253" class="n-sub">marketplaceManager · git / npm / mcpb 解包</text>
+
+<!-- B3 安装清单落盘 -->
+<rect x="250" y="300" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="329" class="n-title">安装与启用状态落盘</text>
+<text x="400" y="353" class="n-sub">installed_plugins.json + settings.json</text>
+
+<!-- D1 刷新判定 -->
+<polygon points="400,400 530,442 400,484 270,442" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="439" class="n-title">触发自动刷新？</text>
+<text x="400" y="457" class="n-sub">后台装完 / SYNC 模式</text>
+
+<!-- B4 清缓存 -->
+<rect x="250" y="514" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="543" class="n-title">清空全部插件缓存</text>
+<text x="400" y="567" class="n-sub">clearAllCaches · 多级 memoize 全清</text>
+
+<!-- B5 全量重载 -->
+<rect x="250" y="614" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="643" class="n-title">重载全部插件</text>
+<text x="400" y="667" class="n-sub">pluginLoader.ts · 清单解析、缓存/zip 载入</text>
+
+<!-- D2 错误判定 -->
+<polygon points="400,714 530,756 400,798 270,756" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="753" class="n-title">有加载错误？</text>
+<text x="400" y="771" class="n-sub">清单 / 依赖 / 下载失败</text>
+
+<!-- B6 资产拆分 -->
+<rect x="250" y="828" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="857" class="n-title">插件资产四路拆分</text>
+<text x="400" y="881" class="n-sub">commands / agents / hooks / MCP servers</text>
+
+<!-- B7 写运行时状态 -->
+<rect x="250" y="928" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="957" class="n-title">写运行时状态</text>
+<text x="400" y="981" class="n-sub">AppState.plugins · reconnectKey + 1</text>
+
+<!-- B8 重注册 hook -->
+<rect x="250" y="1028" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1057" class="n-title">重注册插件 hook</text>
+<text x="400" y="1081" class="n-sub">loadPluginHooks · 清后注册换血</text>
+
+<!-- B9 MCP 重连 -->
+<rect x="250" y="1128" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1157" class="n-title">MCP 连接刷新</text>
+<text x="400" y="1181" class="n-sub">useManageMCPConnections · 断开陈旧服务</text>
+
+<!-- 结束 -->
+<rect x="270" y="1228" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1253" class="n-title">插件全面生效</text>
+<text x="400" y="1290" class="elab">命令进表 · hook 待事件 · MCP 连接入池</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 等待手动刷新 -->
+<rect x="640" y="404" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="432" class="n-title">等待手动刷新</text>
+<text x="825" y="454" class="n-body">磁盘已变，运行时仍是旧状态</text>
+<text x="825" y="472" class="n-body">界面仅提示需要刷新</text>
+
+<!-- R2 错误隔离 -->
+<rect x="640" y="714" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="742" class="n-title">加载错误记录</text>
+<text x="825" y="764" class="n-body">进 AppState.plugins.errors（去重）</text>
+<text x="825" y="782" class="n-body">不阻断其他插件加载</text>
+
+<!-- R3 四路注入点 -->
+<rect x="640" y="828" width="370" height="118" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="856" class="n-title">四类资产·四个落点</text>
+<text x="825" y="878" class="n-body">命令/技能 → 斜杠命令表</text>
+<text x="825" y="896" class="n-body">agents → AppState.agentDefinitions</text>
+<text x="825" y="914" class="n-body">hooks → bootstrap 状态注册表</text>
+<text x="825" y="932" class="n-body">MCP 服务 → 配置合并（plugin:名:服务）</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="290" width="200" height="122" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="320" class="n-title">磁盘态（两处文件）</text>
+<text x="130" y="344" class="n-body">installed_plugins.json</text>
+<text x="130" y="362" class="n-body">安装清单（原子单文件写）</text>
+<text x="130" y="380" class="n-body">启用/停用 → settings.json</text>
+<text x="130" y="398" class="n-body">后台写不改启动快照</text>
+
+<rect x="30" y="505" width="200" height="96" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="535" class="n-title">缓存级联陷阱</text>
+<text x="130" y="557" class="n-body">多枚 memoize 各自独立</text>
+<text x="130" y="575" class="n-body">漏清一个则新旧混用</text>
+<text x="130" y="593" class="n-body">commands.ts:616 有注释</text>
+
+<rect x="30" y="1010" width="200" height="80" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1040" class="n-title">hook 热重载</text>
+<text x="130" y="1062" class="n-body">远程策略设置变化</text>
+<text x="130" y="1080" class="n-body">快照比对后自动重载</text>
+
+<rect x="30" y="1118" width="200" height="96" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1148" class="n-title">MCP 去重规则</text>
+<text x="130" y="1170" class="n-body">与手配同内容则抑制</text>
+<text x="130" y="1188" class="n-body">插件重复则先载者胜</text>
+<text x="130" y="1206" class="n-body">陈旧断开防幽灵工具</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,96" marker-end="url(#ah)"/>
+<path class="edge" d="M400,170 L400,196" marker-end="url(#ah)"/>
+<path class="edge" d="M400,270 L400,296" marker-end="url(#ah)"/>
+<path class="edge" d="M400,370 L400,396" marker-end="url(#ah)"/>
+
+<!-- D1 分支 -->
+<path class="edge" d="M400,484 L400,510" marker-end="url(#ah)"/>
+<text x="412" y="501" class="elab">是</text>
+<path class="edge" d="M530,442 L634,442" marker-end="url(#ah)"/>
+<text x="575" y="433" class="elab">否</text>
+
+<!-- R1 回边：用户执行 /reload-plugins 重新进入清缓存 -->
+<path class="edge" d="M825,484 L825,549 L556,549" marker-end="url(#ah)"/>
+<text x="695" y="541" class="elab">用户执行 /reload-plugins</text>
+
+<path class="edge" d="M400,584 L400,610" marker-end="url(#ah)"/>
+<path class="edge" d="M400,684 L400,710" marker-end="url(#ah)"/>
+
+<!-- D2 分支 -->
+<circle cx="400" cy="813" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,798 L400,824" marker-end="url(#ah)"/>
+<text x="412" y="812" class="elab">否</text>
+<path class="edge" d="M530,756 L634,756" marker-end="url(#ah)"/>
+<text x="575" y="747" class="elab">是</text>
+<path class="edge" d="M825,794 L825,813 L408,813" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,898 L400,924" marker-end="url(#ah)"/>
+<path class="edge" d="M550,863 L634,863" marker-end="url(#ah)"/>
+<path class="edge" d="M400,998 L400,1024" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1098 L400,1124" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1198 L400,1224" marker-end="url(#ah)"/>
+
+<path class="edash" d="M230,338 L246,338" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,553 L246,553" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1050 L246,1050" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1166 L246,1166" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 旁路</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/plugins/refresh.ts（refreshActivePlugins:72、pluginReconnectKey:136）、pluginLoader.ts（loadAllPlugins:3099 / loadAllPluginsCacheOnly:3140 / clearPluginCache:3228）、installedPluginsManager.ts（addPluginInstallation:406 / removePluginInstallation:452）、loadPluginCommands.ts、loadPluginHooks.ts、mcpPluginIntegration.ts（addPluginScopeToServers、resolvePluginMcpEnvironment）、cacheUtils.ts（clearAllCaches）、marketplaceManager.ts；src/services/mcp/config.ts（1114-1154 插件 scope 合并、dedupPluginMcpServers:223）、useManageMCPConnections.ts（149-153 reconnectKey 依赖、776-784 excludeStalePluginClients）；src/commands/reload-plugins/reload-plugins.ts:37；src/commands.ts:540-560、616-627；src/services/plugins/PluginInstallationManager.ts:135-164；src/cli/print.ts:1786-1801；src/main.tsx:4922；src/screens/REPL.tsx:1096-1098。</li>
+<li>节点映射：清单 7 站点展开为 13 个主干节点——「资产分流」站点拆成主干「四路拆分」+ 右侧「四个落点」；refreshActivePlugins 内部实际顺序为 clearAllCaches → loadAllPlugins → 命令/agent 并行 → MCP/LSP 缓存槽预热 → 写 AppState（reconnectKey+1）→ LSP 重初始化 → loadPluginHooks，图中 B7-B9 画成线性，实际 hook 注册与 MCP effect 在状态写入后并发进行。</li>
+<li>刷新触发三路：/reload-plugins 命令（reload-plugins.ts:37）；后台 marketplace 安装完成后自动刷新——仅限「新装」（result.installed.length>0 才调 refreshActivePlugins，PluginInstallationManager.ts:135-146，失败则退回 needsRefresh 通知；纯更新 updated>0 只置 needsRefresh 不自动刷新，:166-179）；headless 下 CLAUDE_CODE_SYNC_PLUGIN_INSTALL=1 在首次查询前自动刷新（print.ts:1786-1797，pluginLoader.ts:3142 处委托全量加载器）。/plugin 菜单安装/启停只写盘并置 needsRefresh 提示，不自动刷新（refresh.ts 头注释 PR 5b/5c，installPluginFromMarketplace 返回消息即提示 Run /reload-plugins to activate）——即右侧「等待手动刷新」支路与回边。</li>
+<li>落盘双文件：安装/卸载写 installed_plugins.json（addPluginInstallation:406 / removePluginInstallation:452，saveInstalledPluginsV2 单文件原子写，installedPluginsManager.ts:370-394）；启用/停用写 settings.json 的 enabledPlugins（PluginSettings.tsx:310-321）。loadAllPlugins 把两者合并后才决定每个插件的 enabled 状态。</li>
+<li>终止语义：安装/启停操作以 UI 的 onDone 或 CLI 输出终止；运行时注入以 refreshActivePlugins 完成为定型点，此后各下游在下一次读取/事件时看到新状态：命令表由 REPL 经 useMergedCommands 并入 AppState.plugins.commands（REPL.tsx:1097-1098，响应式生效）；hook 由 hooks-core 在下次事件匹配时从注册表读到（getMatchingHooks）；MCP 工具在连接建立后进 AppState.mcp.tools 再入工具池。无长驻循环。</li>
+<li>故障面：安装落盘是单文件原子写；refresh 的缓存清理是多步级联——loadAllPlugins / loadAllPluginsCacheOnly / loadPluginCommands / loadPluginHooks / agent 定义等多个独立 memoize 必须全清，漏清一个会出现新旧混用（commands.ts:616-622 注释明确指出嵌套 memoize 失效陷阱，loadPluginHooks.ts:17 特为此引入 clearPluginCache）。单个插件加载失败只产生 PluginError 进 AppState.plugins.errors（useManageMCPConnections.ts:95-132 去重展示；refresh.ts:207-217 mergePluginErrors 保序去重），不阻断其他插件。</li>
+<li>考据注记：hook 注册是「清后注册」原子对（gh-29767：旧实现把清空放在缓存清理里，导致插件 Stop hook 在任何插件管理操作后静默失效）；clearAllCaches 只修剪已移除插件的 hook（gh-36995），新增 hook 仍等 /reload-plugins，与命令/agent/MCP 行为一致。禁用插件的 MCP 连接要等 pluginReconnectKey bump 触发 excludeStalePluginClients 才真正断连，防止幽灵工具残留。插件 MCP 服务器键名 plugin:名:服务（scope 'dynamic'），与手动配置同内容的按「手配优先」内容级去重（dedupPluginMcpServers）。installed_plugins.json 的内存启动快照不被后台操作更新（installedPluginsManager.ts:68-73 注释），跨进程安装需重启或手动刷新才可见。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

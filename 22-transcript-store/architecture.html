@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>22-transcript-store · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：状态与落盘</h1>
+<p class="sub">22-transcript-store · 组成模块与调用关系</p>
+<p class="lead">「聊过的话和改过的设置都存在哪」由这些模块协作完成：界面状态放进一个外置容器，变化的部分立刻写出去；对话消息经记录钩子进入落盘引擎，去重排队后批量追加进会话文件；设置、输入历史、会话名单各走各的小文件；退出前统一冲刷。所有模块都靠底部的会话单例回答「我是谁、在哪个项目」。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 790" width="1040" height="790" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行 1：挂载/入口层 -->
+<rect x="90" y="40" width="280" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="230" y="68" class="n-title">界面状态提供者</text>
+<text x="230" y="89" class="n-sub">AppState.tsx · 被界面根组件挂载</text>
+<text x="230" y="110" class="n-body">把状态容器装进组件树，全界面读写同一份</text>
+
+<rect x="540" y="40" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="660" y="68" class="n-title">消息记录钩子</text>
+<text x="660" y="89" class="n-sub">useLogMessages.ts · 挂在界面上</text>
+<text x="660" y="110" class="n-body">盯住界面消息，只把新增的尾部交出去</text>
+
+<rect x="830" y="58" width="180" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="920" y="76" class="n-body">REPL 交互界面</text>
+<text x="920" y="95" class="n-sub">组件 14-repl-screen</text>
+
+<!-- 行 2：状态支撑 -->
+<rect x="90" y="170" width="280" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="230" y="198" class="n-title">状态结构与默认值</text>
+<text x="230" y="219" class="n-sub">AppStateStore.ts · 十余个子结构</text>
+<text x="230" y="240" class="n-body">规定状态里有哪些字段、出厂值是什么</text>
+
+<rect x="420" y="170" width="200" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="198" class="n-title">外置状态容器</text>
+<text x="520" y="219" class="n-sub">store.ts · 34 行手写</text>
+<text x="520" y="240" class="n-body">读 / 写 / 订阅的最小实现</text>
+
+<rect x="680" y="170" width="300" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="830" y="188" class="n-body">启动编排（装配初始状态并登记会话）</text>
+<text x="830" y="207" class="n-sub">组件 01-cli-entry</text>
+
+<!-- 行 3：分支持久化（紫） -->
+<rect x="90" y="300" width="280" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="230" y="328" class="n-title">状态变化出口</text>
+<text x="230" y="349" class="n-sub">onChangeAppState.ts</text>
+<text x="230" y="370" class="n-body">设置 · 权限模式 · 模型覆盖各自落盘</text>
+
+<rect x="680" y="300" width="260" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="328" class="n-title">会话注册表</text>
+<text x="810" y="349" class="n-sub">PID 小文件 · 供 claude ps 列会话</text>
+<text x="810" y="370" class="n-body">会话切换时自动换绑身份</text>
+
+<!-- 行 4：落盘引擎（主角） -->
+<rect x="360" y="420" width="340" height="120" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="530" y="448" class="n-title">会话落盘引擎</text>
+<text x="530" y="469" class="n-sub">sessionStorage.ts · 每个项目一个单例</text>
+<text x="530" y="490" class="n-body">消息去重、串成父子链、进写队列</text>
+<text x="530" y="511" class="n-body">约 100 毫秒批量追加进会话文件</text>
+<text x="530" y="532" class="n-body">标题、标签等元数据也记在同一文件</text>
+
+<rect x="760" y="420" width="240" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="880" y="438" class="n-body">会话恢复链（读旧文件续聊）</text>
+<text x="880" y="457" class="n-sub">组件 23-session-restore</text>
+
+<rect x="760" y="488" width="240" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="880" y="506" class="n-body">文件历史检查点（快照条目）</text>
+<text x="880" y="525" class="n-sub">组件 24-file-history</text>
+
+<!-- 行 5：退出兜底 + 输入历史 -->
+<rect x="360" y="580" width="340" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="530" y="608" class="n-title">退出兜底</text>
+<text x="530" y="629" class="n-sub">gracefulShutdown.ts · 限时 2 秒</text>
+<text x="530" y="650" class="n-body">统一执行登记的收尾冲刷，超时强退</text>
+
+<rect x="760" y="580" width="240" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="880" y="608" class="n-title">输入提示历史</text>
+<text x="880" y="629" class="n-sub">↑ / Ctrl+R 翻看 · 全局一份</text>
+<text x="880" y="650" class="n-body">与会话文件分开，跨项目共用</text>
+
+<!-- 底座 -->
+<rect x="60" y="700" width="950" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="535" y="724" class="n-title">进程级会话单例（上方所有模块读写）</text>
+<text x="535" y="745" class="n-sub">bootstrap/state.ts · 当前会话身份 · 项目根 · 成本统计</text>
+
+<!-- 连线 -->
+<path class="edge" d="M230,120 L230,166" marker-end="url(#ah)"/>
+<path class="edge" d="M330,120 L330,143 L520,143 L520,166" marker-end="url(#ah)"/>
+<path class="edge" d="M520,254 L520,277 L230,277 L230,296" marker-end="url(#ah)"/>
+<path class="edge" d="M655,120 L655,416" marker-end="url(#ah)"/>
+<path class="edge" d="M830,214 L830,296" marker-end="url(#ah)"/>
+<path class="edge" d="M530,540 L530,576" marker-end="url(#ah)"/>
+<path class="edge" d="M758,622 L704,622" marker-end="url(#ah)"/>
+<path class="edash" d="M828,80 L784,80" marker-end="url(#ahd)"/>
+<path class="edash" d="M758,442 L704,442" marker-end="url(#ahd)"/>
+<path class="edash" d="M758,510 L704,510" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（各写各的小文件，不经会话落盘引擎）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件引用</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据：界面状态提供者 src/state/AppState.tsx:59-102（App.tsx:25 挂载，:69 创建容器）；结构与默认值 src/state/AppStateStore.ts:91（类型）、:463（默认值工厂）；容器原语 src/state/store.ts:10-34（:23 同值短路、:26 逐个通知）；状态变化出口 src/state/onChangeAppState.ts:97-127（模型覆盖→内存单例、显示偏好→全局配置）。</li>
+<li>证据：消息钩子 src/hooks/useLogMessages.ts:19-118（REPL.tsx:4759 挂载，增量尾部转交）；落盘引擎 src/utils/sessionStorage.ts:1445（记录入口）、:613-630（每文件写队列、超 1000 丢最旧）、:573/:632-646（100 毫秒批量刷）、:574/:672（100MB 分块）、:449-465（向退出兜底登记冲刷）。</li>
+<li>证据：输入历史 src/history.ts:114（全局 history.jsonl，跨项目共用，上限 100 条）；会话注册表 src/utils/concurrentSessions.ts:98-108（PID 文件 + 会话切换换绑）；退出兜底 src/utils/gracefulShutdown.ts:440-462（清理 2 秒限时竞速）+ src/utils/cleanupRegistry.ts:23-25；会话单例 src/bootstrap/state.ts:423。</li>
+<li>考据注记：本子系统共 15 个模块，本图收 10 个、省略 5 个——派生选择器（selectors.ts，两个纯计算视图无副作用）、全局配置迁移（migrations，改设置文件与会话数据无关，仅启动时跑一次）、粘贴外置仓（pasteStore，随输入历史走）、语音空容器（AppState.tsx 内嵌）、大文件分块读取（sessionStoragePortable，落盘引擎的读取半边，与写入合并画成一盒）。</li>
+<li>考据注记：会话恢复三模块（加载器 conversationRecovery、编排 sessionRestore、会话内换脑 repl-resume-swap）与文件历史（fileHistory）分别属于组件 23/24 的页面，此处只作外部引用。查询引擎（组件 02/04）每轮用户消息触发的快照条目也经组件 24 写进同一会话文件。落盘引擎的远程持久化路径（写往远端）存在于 sessionStorage.ts 内部，但其注册入口未见接通，未上图。</li>
+<li>子流程：单条消息从界面到文件的逐跳见「会话消息落盘生命周期：turn 消息 → JSONL」；退出冲刷的完整时序见「进程退出的最终 flush 与元数据尾部重追加」。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>08-tool-lifecycle · 工具池组装流</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>工具池组装流</h1>
+<p class="sub">组件 08-tool-lifecycle · 工具生命周期</p>
+<p class="lead">从「settings 里的权限规则」到「模型这一回合能看到哪些工具」之间发生的全部事情：规则加载 → 权限上下文组装 → 条件收集内置工具 → deny 剥离与模式裁剪 → 与 MCP 工具合并去重排序 → 延迟工具剔除 → 随 API 请求发出；规则或 MCP 变化时整条链重新组装。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1320" width="1040" height="1320" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">开始组装工具池</text>
+
+<!-- B1 规则加载 -->
+<rect x="250" y="109" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="138" class="n-title">加载各源权限规则</text>
+<text x="400" y="162" class="n-sub">permissionsLoader.ts · 五处来源</text>
+
+<!-- B2 权限上下文 -->
+<rect x="250" y="217" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="246" class="n-title">组装权限上下文</text>
+<text x="400" y="270" class="n-sub">ToolPermissionContext · 规则+模式</text>
+
+<!-- B3 内置工具收集 -->
+<rect x="250" y="325" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="354" class="n-title">条件收集内置工具</text>
+<text x="400" y="378" class="n-sub">getAllBaseTools · 约 60 个</text>
+
+<!-- D1 deny 判定 -->
+<polygon points="400,433 530,475 400,517 270,475" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="472" class="n-title">整工具被 deny？</text>
+<text x="400" y="490" class="n-sub">getDenyRuleForTool</text>
+
+<!-- B4 过滤与裁剪 -->
+<rect x="250" y="553" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="582" class="n-title">过滤与模式裁剪</text>
+<text x="400" y="606" class="n-sub">isEnabled · REPL 隐藏 · 简单模式</text>
+
+<!-- B5 MCP 拉取 -->
+<rect x="250" y="661" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="690" class="n-title">拉取 MCP 工具并包装</text>
+<text x="400" y="714" class="n-sub">fetchToolsForClient · mcp__ 命名</text>
+
+<!-- B6 合并去重 -->
+<rect x="250" y="769" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="798" class="n-title">合并去重排序</text>
+<text x="400" y="822" class="n-sub">assembleToolPool · 去重内置优先</text>
+
+<!-- B7 汇入上下文 -->
+<rect x="250" y="877" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="906" class="n-title">汇入回合上下文</text>
+<text x="400" y="930" class="n-sub">useMergedTools → options.tools</text>
+
+<!-- D3 工具搜索判定 -->
+<polygon points="400,985 530,1027 400,1069 270,1027" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1024" class="n-title">启用工具搜索？</text>
+<text x="400" y="1042" class="n-sub">模式/模型/阈值三重门</text>
+
+<!-- B8 写入请求参数 -->
+<rect x="250" y="1131" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1160" class="n-title">写入请求参数</text>
+<text x="400" y="1184" class="n-sub">claude.ts · filteredTools 字段</text>
+
+<!-- 结束 -->
+<rect x="270" y="1239" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1264" class="n-title">模型看到这份工具池</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 deny 剥离 -->
+<rect x="640" y="435" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="464" class="n-title">整工具剥离出池</text>
+<text x="825" y="486" class="n-body">deny 规则按工具名整体封禁</text>
+<text x="825" y="504" class="n-body">mcp__server 前缀可整服剥离</text>
+
+<!-- E-R1 -->
+<rect x="675" y="537" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="562" class="n-title">模型看不到该工具</text>
+
+<!-- R3 延迟工具剔除 -->
+<rect x="640" y="987" width="370" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="1016" class="n-title">剔除延迟工具 schema</text>
+<text x="825" y="1040" class="n-body">未发现的工具不进请求，只留</text>
+<text x="825" y="1058" class="n-body">SearchExtraTools 作发现入口</text>
+<text x="825" y="1076" class="n-body">ExecuteExtraTool 运行时再查</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="34" y="450" width="185" height="130" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="126" y="480" class="n-title">工具的条件开关</text>
+<text x="126" y="504" class="n-body">USER_TYPE=ant、</text>
+<text x="126" y="522" class="n-body">feature() 决定谁进池</text>
+<text x="126" y="540" class="n-body">未启用分支构建期消除</text>
+<text x="126" y="558" class="n-body">(DCE 死代码消除)</text>
+
+<rect x="34" y="775" width="185" height="130" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="126" y="805" class="n-title">排序为何重要</text>
+<text x="126" y="829" class="n-body">服务端在最后一个内置</text>
+<text x="126" y="847" class="n-body">工具后放缓存断点，</text>
+<text x="126" y="865" class="n-body">内置 / MCP 混排会让</text>
+<text x="126" y="883" class="n-body">prompt cache 失效</text>
+
+<rect x="34" y="955" width="185" height="130" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="126" y="985" class="n-title">池没有长期状态</text>
+<text x="126" y="1009" class="n-body">每次查询都纯函数重建</text>
+<text x="126" y="1027" class="n-body">磁盘规则被改后需要</text>
+<text x="126" y="1045" class="n-body">syncRulesFromDisk</text>
+<text x="126" y="1063" class="n-body">从盘同步才生效</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,105" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,179 L400,213" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,287 L400,321" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,395 L400,429" marker-end="url(#ah)"/>
+
+<path class="edge" d="M530,475 L636,475" marker-end="url(#ah)"/>
+<text x="560" y="468" class="elab">是</text>
+
+<path class="edge" d="M400,517 L400,549" marker-end="url(#ah)"/>
+<text x="410" y="540" class="elab">否</text>
+
+<path class="edge" d="M825,519 L825,533" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,623 L400,657" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,731 L400,765" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,839 L400,873" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,947 L400,981" marker-end="url(#ah)"/>
+
+<path class="edge" d="M530,1027 L636,1027" marker-end="url(#ah)"/>
+<text x="560" y="1020" class="elab">是</text>
+
+<path class="edge" d="M400,1069 L400,1127" marker-end="url(#ah)"/>
+<text x="410" y="1096" class="elab">否</text>
+
+<!-- R3 汇合点 -->
+<circle cx="400" cy="1102" r="4" fill="#6B7280"/>
+<path class="edge" d="M825,1087 L825,1102 L408,1102" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1201 L400,1235" marker-end="url(#ah)"/>
+
+<!-- 回边：重新组装循环 -->
+<path class="edge" d="M400,1277 L400,1301 L14,1301 L14,50 L264,50" marker-end="url(#ah)"/>
+<text x="207" y="1290" class="elab">规则 / MCP 变化，或新回合 → 重新组装</text>
+
+<!-- 旁注虚线连接 -->
+<path class="edash" d="M219,560 L258,560" marker-end="url(#ahd)"/>
+<path class="edash" d="M219,840 L258,840" marker-end="url(#ahd)"/>
+<path class="edash" d="M219,1020 L258,1020" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支去向</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）· 左侧长回边 = 重新组装循环</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/permissions/permissionsLoader.ts（loadAllPermissionRulesFromDisk:120-146，五处来源循环加载）、src/tools.ts（getAllBaseTools:218-284、getTools:304-360、filterToolsByDenyRules:295-302、assembleToolPool:378-400）、src/services/mcp/client.ts（fetchToolsForClient:1755-1844）、src/hooks/useMergedTools.ts、src/screens/REPL.tsx:1079、src/services/api/claude.ts:1151-1204。</li>
+<li>规则来源：userSettings/projectSettings/localSettings/flagSettings/policySettings 五处 settings 文件循环加载；allowManagedPermissionRulesOnly 开启时只取 policySettings。权限上下文持有 allow/deny/ask 三类规则与权限模式，deny 剥离用的是与运行时权限判定相同的匹配器（step 1a）。</li>
+<li>getTools 内部顺序与图中略有合并：先移除三个特殊工具（ListMcpResources/ReadMcpResource/StructuredOutput），再 deny 剥离，再 REPL 模式隐藏 REPL_ONLY_TOOLS，最后 isEnabled 自检；CLAUDE_CODE_SIMPLE=1 在最前直接返回 Bash/Read/Edit 三件套（协调模式补 Agent/TaskStop/SendMessage）。assembleToolPool 对 MCP 工具会再过一次同样的 deny 匹配器（图 D1 分支同时覆盖这两处）。</li>
+<li>排序细节：内置与 MCP 各自 localeCompare 排序后拼接（内置在前），uniqBy 按名去重保留先插入的内置工具——源码注释明确服务端 claude_code_system_cache_policy 在最后一个前缀匹配的内置工具后放全局缓存断点，混排会让下游所有缓存键失效。</li>
+<li>延迟工具剔除（claude.ts:1187-1204）：启用搜索时延迟工具永不进入 tools 数组（连已发现的也不把 schema 加回，由 ExecuteExtraTool 运行时查全局注册表调用，保持 tools 数组稳定以保 prompt cache）；未启用时反而把 SearchExtraTools 自身从池中移除。启用判定 isSearchExtraToolsEnabled 受模式/模型/阈值三重门控（无延迟工具且无待连服务器时自动关闭）。</li>
+<li>重组装触发：每次 query、规则或 MCP 连接变化时整条链重跑；useMergedTools 是 useMemo（依赖 initialTools/mcpTools/toolPermissionContext），查询中途 MCP 接入靠 refreshTools 换新 toolUseContext.options.tools。工具搜索门控若在会话中途翻转，已见过的工具会从请求中消失（可见性突变，源码 failure mode 注记）。</li>
+<li>考据注记（来自子系统考据 tools-permissions.json）：CORE_TOOLS 数量存在文档漂移（CLAUDE.md 称 38，实测 29）；Tool.shouldDefer 字段无运行时消费者，延迟判定实际只看 alwaysLoad 与 CORE_TOOLS——直接影响本流程「剔除延迟工具」一节的语义。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

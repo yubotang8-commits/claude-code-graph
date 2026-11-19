@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13-memory-skill-injection · 相关记忆召回播放器</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px;max-width:1420px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12px;padding:6px 8px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--purple-f);border-color:var(--purple)}
+.phases span.p3.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p4.on{background:#f4f4f2;border-color:var(--sec)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--purple-f);border-color:var(--purple)}
+#bar .seg.p3.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p4.done{background:#f4f4f2;border-color:var(--sec)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:150px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subtitle{flex-basis:100%;font-size:14px;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:9px;padding:8px 12px;min-height:38px}
+#subtitle b{color:var(--blue)}
+#subtitle.end b{color:var(--good)}
+
+#stage{display:grid;grid-template-columns:305px 320px 370px 1fr;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:648px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;transition:box-shadow .35s ease,filter .35s ease,opacity .35s ease}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:7px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--sec)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-user .h{border-bottom:2px solid var(--sec)}
+#lane-main .h{border-bottom:2px solid var(--blue)}
+#lane-pf .h{border-bottom:2px solid var(--purple)}
+#lane-inj .h{border-bottom:2px solid var(--green)}
+#stage .lane.hot{box-shadow:0 0 0 2px var(--ink),0 10px 30px rgba(11,11,11,.12)}
+#stage #lane-user.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.12)}
+#stage #lane-main.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.22)}
+#stage #lane-pf.hot{box-shadow:0 0 0 2px var(--purple),0 10px 30px rgba(98,80,214,.22)}
+#stage #lane-inj.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.22)}
+
+.bubble{max-width:94%;font-size:12.5px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-all}
+.bubble.q{align-self:flex-end;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
+.bubble.a{align-self:flex-start;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-bottom-left-radius:4px}
+.bubble.a.fin{border-style:solid;font-weight:600}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.45;word-break:break-all}
+.chip.gate{background:#f4f4f2;border-color:var(--line);border-style:dashed}
+.chip.mech{background:var(--panel);border-color:var(--hair);color:var(--sec)}
+.chip.act{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.req{background:var(--blue-f);border-color:var(--blue);color:var(--ink);font-weight:600}
+.chip.tool{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.ok{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.sq{background:var(--purple-f);border-color:var(--purple);color:#3d2f9e}
+.chip.mech2{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.fin{background:var(--good);border-color:var(--good);color:#fff;font-weight:700}
+.ans-card{border:1.5px solid var(--green);border-radius:10px;padding:9px 11px;background:var(--green-f);font-size:12.5px;color:var(--ink);animation:pop .35s ease;line-height:1.5}
+.ans-card .t{font-weight:700;margin-bottom:3px}
+.mf-card{border:1px solid var(--purple);border-radius:10px;padding:8px 10px;background:var(--white);animation:pop .35s ease}
+.mf-card .t{font-size:11.5px;font-weight:700;color:#3d2f9e;margin-bottom:4px}
+.mf-card .pre{font-family:var(--mono);font-size:10.8px;white-space:pre-wrap;color:var(--sec);line-height:1.5}
+.mf-card.done{border-width:1.5px;background:var(--purple-f)}
+.mf-card.done .t::after{content:' ✓ 7 行就绪'}
+
+.sq{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 11px;max-height:186px;overflow-y:auto;transition:border-color .3s ease,box-shadow .3s ease}
+.sq .sq-h{font-size:12px;font-weight:700;color:#3d2f9e;margin-bottom:5px}
+.sq .sq-b{font-family:var(--mono);font-size:11px;color:var(--sec);line-height:1.55;white-space:pre-wrap}
+.sq.on{border-top-color:var(--purple)}
+.sq.done{border-top-color:var(--green);box-shadow:inset 0 0 0 1px var(--green-f)}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--purple);border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+.mv{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 11px;max-height:200px;overflow-y:auto;transition:border-color .3s ease}
+.mv .mv-h{font-size:12px;font-weight:700;color:var(--sec);margin-bottom:5px}
+.mv .mv-b{font-family:var(--mono);font-size:10.8px;color:var(--sec);line-height:1.55}
+.mv .mv-b .mv-msg{border:1px dashed var(--line);border-radius:8px;padding:6px 8px;background:var(--white);margin-bottom:6px;color:var(--ink)}
+.mv .mv-b .mv-msg.dim{color:var(--sec)}
+.mv .mv-b .mv-cap{color:var(--mut);font-family:var(--ui);font-size:11px}
+.mv.on{border-top-color:var(--green)}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
+.flight.prompt{background:var(--purple-f);border:1.5px solid var(--purple);color:#3d2f9e;font-weight:700;padding:6px 13px}
+.flight.mv{background:var(--purple-f);border:1.5px solid var(--purple);color:#3d2f9e}
+
+#failpanel{margin-top:12px;border:1.5px solid var(--line);border-radius:14px;background:var(--white);padding:12px 16px}
+#failpanel .ft{font-weight:700;font-size:14px;color:var(--ink)}
+#failpanel .ft small{font-weight:400;color:var(--mut);font-size:11.5px;margin-left:8px}
+#failpanel .rows{display:grid;grid-template-columns:1fr 1fr;gap:7px 24px;margin-top:9px}
+.frow{display:flex;gap:8px;align-items:baseline;font-size:12.5px;color:var(--sec);line-height:1.5}
+.frow b{color:var(--ink)}
+.frow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px);background:var(--orange)}
+
+.legend{margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:14px;font-size:11px;color:var(--mut);line-height:1.6}
+#selftest-result{margin-top:12px;font-family:var(--mono);font-size:11.5px;background:var(--white);border:1px solid var(--hair);border-radius:10px;padding:10px 13px;white-space:pre-wrap;color:var(--sec);max-height:220px;overflow-y:auto}
+#selftest-result:empty{display:none}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>相关记忆召回播放器：MEMORY.md 索引不进上下文，按需「浮现」记忆文件</h1>
+  <div class="sub">用户提问 → query() 用 <b>using</b> 每用户轮绑一次预取（先过 4 道门）→ 后台扫目录 + <b>Sonnet 小请求</b>选记忆（最多 5 个）→ 主轮工具执行完的<b>消费点</b>零等待取结果 → 去重后包成 <b>&lt;system-reminder&gt;</b> 消息并入下一轮请求 —— 预取全程藏在模型流式与工具执行的时间里</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 用户轮 · 预取启动（4 道门）</span>
+  <span class="p1" data-ph="1">后台管道 · 扫描 → Sonnet → 读文件（与主轮并行）</span>
+  <span class="p2" data-ph="2">消费点 · 去重 → 注入</span>
+  <span class="p3" data-ph="3">第 2 迭代生效 · 回合收尾</span>
+  <span class="p4" data-ph="4">第 2 用户轮（简）· 退出</span>
+</div>
+
+<div id="transport">
+  <div class="btns">
+    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+  </div>
+  <div id="bar"></div>
+  <div id="speed">
+    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+  </div>
+  <div id="readout">就绪</div>
+  <div id="subtitle"><b>现在：</b>就绪 · 点击 ▶ 播放，或用 ← → 单步</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-user">
+    <div class="h" id="h-user">👤 用户 · 回合入口 <span class="tag">query()</span><small>提问 · using 绑定 · dispose 收尾</small></div>
+    <div class="feed" id="feed-user"></div>
+    <div class="lane-foot"><b>这一格管什么</b>：query() 的入口与出口。预取句柄用 <b>using</b> 声明——生成器任何 return / throw 路径都会自动 dispose（中止在飞的小请求 + 报遥测）。</div>
+  </div>
+  <div class="lane" id="lane-main">
+    <div class="h" id="h-main">🧠 主轮（前台） <span class="tag">queryLoop</span><small>模型流式 + 工具执行 + 迭代</small></div>
+    <div class="feed" id="feed-main"></div>
+    <div class="lane-foot"><b>前台在忙什么</b>：模型流式输出 → 工具执行 → Continue 进下一迭代。记忆预取与消费全部藏在这些时间下面，用户全程无感。<br><b>循环语义</b>：while(true) 每迭代 = 一次 API 流 + 一轮工具。</div>
+  </div>
+  <div class="lane" id="lane-pf">
+    <div class="h" id="h-pf">🔍 记忆预取（后台） <span class="tag">sideQuery 管道</span><small>门 → 扫描 → Sonnet → 读文件</small></div>
+    <div class="feed" id="feed-pf"></div>
+    <div class="sq" id="sq-panel">
+      <div class="sq-h">⚡ Sonnet sideQuery（小请求 · 失败无害）</div>
+      <div class="sq-b" id="sq-body">（未发出 —— 等门全过后与主轮并行触发）</div>
+    </div>
+    <div class="lane-foot"><b>后台在忙什么</b>：4 道门 → 扫 .md 头 → Sonnet 从 manifest 里选（最多 5 个）→ 读文件正文。失败永远返回 []，对主轮零影响。</div>
+  </div>
+  <div class="lane" id="lane-inj">
+    <div class="h" id="h-inj">📥 消费与注入 <span class="tag">relevant_memories 附件</span><small>工具后消费点 → 下一轮</small></div>
+    <div class="feed" id="feed-inj"></div>
+    <div class="mv" id="mv-panel">
+      <div class="mv-h">🧬 模型视角：下一轮请求里真实存在的消息</div>
+      <div class="mv-b" id="mv-body">（尚未注入 —— 消费点未到达）</div>
+    </div>
+    <div class="lane-foot"><b>落效在哪</b>：每条记忆 = 一条 <b>isMeta</b> user 消息，单独包 &lt;system-reminder&gt;，随 toolResults 进入下一轮请求。header 在创建时定格——跨轮字节稳定才不打破 prompt 缓存。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="failpanel">
+  <div class="ft">故障面（代码里的真实分支）<small>对应源码 failure_modes —— 都是「跳过 / 降级」，没有一条会让主轮报错</small></div>
+  <div class="rows">
+    <div class="frow"><span class="d"></span><b>sideQuery 失败 / 未 settle / 用户 ESC</b>：返回 [] 或本轮跳过、下迭代再试——consume 永不阻塞主轮</div>
+    <div class="frow"><span class="d"></span><b>moth_copse 的双刃</b>：索引被从 CLAUDE.md 聚合滤掉——若预取又失败，模型整轮看不到任何记忆（索引+召回双缺失）</div>
+    <div class="frow"><span class="d"></span><b>会话字节 ≥ 60KB</b>（≈3 次满额注入）→ 整条流关闭；compact 后已浮现集清零、可重新浮现</div>
+    <div class="frow"><span class="d"></span><b>模型本轮 Read/Edit 过的文件</b>不重复注入（readFileState 累积去重，标记后置写入防自指过滤）</div>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--line)"></span>门检查 / 定格</span>
+  <span class="k"><span class="sw" style="background:var(--panel);border-color:var(--hair)"></span>纯本地步骤</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>Sonnet 小请求 / 记忆数据</span>
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>主轮请求 / 动作</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>工具 / 完成</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置</div>
+<footer>
+依据 claude-code 源码实读：src/query.ts:454-457（using 绑定 · 每用户轮一次）、src/query.ts:1906-1928（工具后消费点 · 零等待）、src/utils/attachments.ts:2248-2490（getRelevantMemoryAttachments / MemoryPrefetch / 60KB 会话预算 / 200 行 4KB 截断）、src/memdir/findRelevantMemories.ts:19-147（SELECT_MEMORIES_SYSTEM_PROMPT · JSON schema · max_tokens 256）、src/memdir/memoryScan.ts:35-77（frontmatter 头扫描 · newest-first · 上限 200）、src/utils/messages.ts:4140-4154（每条记忆单独包 system-reminder · header 定格）、src/utils/claudemd.ts:1141-1150（moth_copse 滤索引）、src/services/analytics/growthbook.ts:451（本 fork 默认开）。<br>
+考据注记：moth_copse 组合语义（索引不注入 + 仅靠预取浮现）为静态推断，未做运行时验证；本页演示数值（7 个记忆文件、2 条选中、0.6s settle）为示意。循环语义：预取每用户轮只发一次、消费每用户轮最多一次；消费点每迭代都会来问，settle 了才取。
+</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.onerror=function(msg){window.__errors.push(String(msg))};
+function $(id){return document.getElementById(id)}
+var feeds={user:$('feed-user'),main:$('feed-main'),pf:$('feed-pf'),inj:$('feed-inj')};
+var lanes={user:$('lane-user'),main:$('lane-main'),pf:$('lane-pf'),inj:$('lane-inj')};
+var heads={user:$('h-user'),main:$('h-main'),pf:$('h-pf'),inj:$('h-inj')};
+var flightsEl=$('flights'), barEl=$('bar'), readout=$('readout'), subtitleEl=$('subtitle');
+var activeAnims=[];
+var mfCard=null;
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function bubble(kind,text){var d=el('bubble '+kind,feeds.user,text);feeds.user.scrollTop=feeds.user.scrollHeight;return d}
+function flyEl(fromEl,toEl,label,cls,dur){
+  if(!fromEl||!toEl)return;
+  var a=fromEl.getBoundingClientRect(), b=toEl.getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+16-h.top, x1=b.left+b.width/2-h.left, y1=b.top+16-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0, dy=y1-y0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(dy*0.5)+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+dy+'px))'}],{duration:dur||750,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||750)}
+  pulse(laneOf(toEl));
+}
+function laneOf(elm){
+  var n=elm;
+  while(n){ if(n.id&&lanes[n.id])return n.id; n=n.parentElement }
+  return 'user';
+}
+function flyLane(from,to,label,cls,dur){flyEl(lanes[from],lanes[to],label,cls,dur)}
+function manifestEl(){return mfCard||feeds.pf}
+
+var MF_LINES=[
+'- [reference] windows-python-env.md (2026-11-18T10:22:41.000Z): python3 is Store stub, real Python in ~/APP/Python312',
+'- [reference] inno-extraction-toolchain.md (2026-11-16T02:11:45.000Z): choco innoextract 1.9 (<=6.0.5), r82 SAC-blocked',
+'- [reference] claude-streaming-study.md (2026-10-20T08:40:03.000Z): SSE/Message/Block doc location, verified facts',
+'- [reference] rea-deployment.md (2026-10-05T14:05:19.000Z): morluto/rea registered, npx entry, SAC limits',
+'- [reference] skillhub-preferred-source.md (2026-09-20T09:33:57.000Z): prefer skillhub, fallback clawhub',
+'- [reference] nextagent-pr-diff-viewer.md (2026-08-21T16:12:08.000Z): 3-PR diff tools, regen method',
+'- [reference] flow-player-skill.md (2026-07-22T11:47:30.000Z): generalized discrete-flow visualization skill'];
+
+function manifestCard(){
+  mfCard=el('mf-card',feeds.pf);
+  el('t',mfCard,'manifest（frontmatter 头 · 新→旧）');
+  el('pre',mfCard,'（读 frontmatter 中…）');
+}
+function manifestFill(){
+  if(!mfCard)return;
+  mfCard.querySelector('.pre').textContent=MF_LINES.join('\n');
+}
+function manifestDone(){if(mfCard)mfCard.classList.add('done')}
+
+function sqRequest(){
+  $('sq-body').innerHTML='<span style="color:#3d2f9e">system:</span> You are selecting memories that will be useful to Claude Code as it processes a user\'s query. … Return a list of filenames … (up to 5). If you are unsure … do not include it.（SELECT_MEMORIES_SYSTEM_PROMPT 摘录）<br><span style="color:#3d2f9e">user:</span> Query: Inno Setup 6.5+ 的安装包怎么解包分析？<br>Available memories:（7 行 manifest · Recently used tools 段为空）<br><span class="spin"></span> Sonnet 运行中…（max_tokens 256 · JSON schema 强约束 · querySource memdir_relevance）';
+  $('sq-panel').classList.add('on');
+}
+function sqResponse(){
+  $('sq-body').innerHTML='<span style="color:var(--green)">✓ 返回：</span>{ "selected_memories": [<br>&nbsp;&nbsp;"inno-extraction-toolchain.md",<br>&nbsp;&nbsp;"windows-python-env.md" ] }<br>只认 manifest 里真实存在的文件名（幻觉防线）；选不中 5 个也合法';
+  $('sq-panel').classList.remove('on');
+  $('sq-panel').classList.add('done');
+}
+function mvShow(){
+  $('mv-body').innerHTML=
+  '<div class="mv-msg">&lt;system-reminder&gt;<br>This memory is 3 days old. Memories are point-in-time observations, not live state — claims about code behavior or file:line citations may be outdated. Verify against current code before asserting as fact.<br><br>Memory: ~/.claude/projects/C--Users-naie/memory/inno-extraction-toolchain.md:<br>choco 有 innoextract 1.9（≤6.0.5）；r82 被 SAC 拦；≥6.5 无静态解法，需装后分析<br>&gt; This memory file was truncated (4096 byte limit). Use the FileReadTool tool to view the complete file at: ~/.claude/projects/C--Users-naie/memory/inno-extraction-toolchain.md&lt;/system-reminder&gt;</div>'+
+  '<div class="mv-msg dim">&lt;system-reminder&gt;<br>Memory (saved yesterday): ~/.claude/projects/C--Users-naie/memory/windows-python-env.md:<br>python3 是 Store stub；真实 Python 在 ~/APP/Python312；PATH/GBK 坑与解法…&lt;/system-reminder&gt;<br><span style="color:var(--mut)">（≤1 天的新记忆：无陈旧警示，header 用 saved yesterday 变体）</span></div>'+
+  '<div class="mv-cap">isMeta user 消息 ×2 —— 模型可见、不渲染为普通对话；随下一轮请求发出。header 定格 → 跨轮字节稳定（prompt 缓存）</div>';
+  $('mv-panel').classList.add('on');
+}
+function ansCard(text){
+  var d=el('ans-card',feeds.main);
+  var t=el('t',d,'模型作答（用上了记忆）');
+  el('',d,text);
+  d.insertBefore(t,d.firstChild);
+  feeds.main.scrollTop=feeds.main.scrollHeight;
+}
+
+// ---------- step script ----------
+var steps=[
+ // ── p0：第 1 用户轮 · 预取启动 ──
+ {id:'q1',ph:0,dur:950,lane:'user',lab:'用户提问，新一轮 query() 开始',state:function(){
+   bubble('q','Inno Setup 6.5+ 的安装包怎么解包分析？');
+ }},
+ {id:'using',ph:0,dur:950,lane:'user',lab:'query() 入口用 using 绑定预取句柄——回合生它生、回合灭它灭',state:function(){
+   chip('user','act','query() 入口 · using pendingMemoryPrefetch = startRelevantMemoryPrefetch(…)');
+   chip('user','mech','约 13 个 return 路径都会自动触发 dispose');
+ }},
+ {id:'gate1',ph:0,dur:850,lane:'pf',lab:'门 1/4：自动记忆开关 + tengu_moth_copse（本 fork 默认开：索引不进系统提示）',state:function(){
+   chip('pf','gate','门 1 ✓ isAutoMemoryEnabled + moth_copse = true');
+ }},
+ {id:'gate2',ph:0,dur:800,lane:'pf',lab:'门 2/4：穷鬼模式（/poor）直接不跑——省掉一次小请求的 token',state:function(){
+   chip('pf','gate','门 2 ✓ 非 poor mode');
+ }},
+ {id:'gate3',ph:0,dur:850,lane:'pf',lab:'门 3/4：取最后一条真实用户消息（跳过 isMeta 注入）；单词条 prompt 整条关',state:function(){
+   chip('pf','gate','门 3 ✓ 多词条 prompt（「hi」这类单词条会被直接跳过）');
+ }},
+ {id:'gate4',ph:0,dur:850,lane:'pf',lab:'门 4/4：扫历史附件算会话累计字节，≥ 60KB（约 3 次满额注入）就整条关',state:function(){
+   chip('pf','gate','门 4 ✓ 已浮现 0KB / 60KB 预算');
+ }},
+ {id:'spawn',ph:0,dur:950,lane:'pf',lab:'全过 → 建挂在回合 abort 下的子控制器，后台 promise 开跑（不阻塞主轮）',state:function(){
+   chip('pf','act','预取开跑 · 用户 ESC 会立即取消它（子 abort 链）');
+ },live:function(){flyLane('user','pf','startRelevantMemoryPrefetch()','prompt')}},
+ {id:'req1',ph:0,dur:950,lane:'main',lab:'主轮同时开跑：API 请求 1 流式返回——预取全部藏在这段时间下面',state:function(){
+   chip('main','req','请求 1 · 模型流式输出中…');
+ },live:function(){flyLane('user','main','用户消息 → API 请求 1','req')}},
+
+ // ── p1：后台管道（与主轮并行）──
+ {id:'dirs',ph:1,dur:850,lane:'pf',lab:'定位记忆目录：@agent 提及 → 只搜该 agent 专属目录（隔离）；否则默认 AutoMem 目录',state:function(){
+   chip('pf','mech','memoryDir = ~/.claude/projects/<git-root>/memory/（AutoMem 默认目录）');
+ }},
+ {id:'scan',ph:1,dur:900,lane:'pf',lab:'scanMemoryFiles：递归列目录收 .md 文件——MEMORY.md 索引本身排除在外',state:function(){
+   chip('pf','mech','扫描到 7 个 .md（basename = MEMORY.md 的除外）');
+   manifestCard();
+ }},
+ {id:'fm',ph:1,dur:900,lane:'pf',lab:'并发读每个文件的前 30 行 frontmatter（描述 / 类型 / mtime），读失败静默跳过',state:function(){
+   chip('pf','mech','读 frontmatter 头 · 失败文件跳过');
+   manifestFill();
+ }},
+ {id:'sort',ph:1,dur:800,lane:'pf',lab:'按修改时间新→旧排序、截前 200 个；已浮现路径先剔除——把 Sonnet 的 5 个名额留给新文件',state:function(){
+   chip('pf','mech','newest-first 排序 · 滤已浮现路径');
+ }},
+ {id:'manifest',ph:1,dur:900,lane:'pf',lab:'组成 manifest：一行一条「[类型] 文件名 (时间): 描述」',state:function(){
+   chip('pf','ok','manifest 就绪（7 行 · 给 Sonnet 看的目录页）');
+   manifestDone();
+ }},
+ {id:'sqout',ph:1,dur:1000,lane:'pf',lab:'sideQuery 出发：默认 Sonnet +「宁缺毋滥」选择器提示 + JSON schema 强约束 + max_tokens 256',state:function(){
+   chip('pf','sq','sideQuery → Sonnet（可选请求 · 失败无害）');
+   sqRequest();
+ },live:function(){flyEl(manifestEl(),$('sq-panel'),'manifest + 用户 query → Sonnet','prompt')}},
+ {id:'tool',ph:1,dur:850,lane:'main',lab:'主轮这边：模型决定调工具——Bash 查本机 innoextract 版本',state:function(){
+   chip('main','tool','tool_use: Bash("innoextract -v")');
+ }},
+ {id:'sqin',ph:1,dur:900,lane:'pf',lab:'Sonnet 返回 selected_memories——只认 manifest 里真实存在的文件名（幻觉防线）',state:function(){
+   chip('pf','ok','选中 2/5 槽位（宁缺毋滥，空列表也合法）');
+   sqResponse();
+ },live:function(){flyEl($('sq-panel'),manifestEl(),'selected_memories × 2','mv')}},
+ {id:'filt',ph:1,dur:850,lane:'pf',lab:'再滤 readFileState：模型本轮已 Read / Edit 过的文件不重复注入 → 最多 5 个',state:function(){
+   chip('pf','mech','滤「模型已读过」→ 2 个候选');
+ }},
+ {id:'read',ph:1,dur:900,lane:'pf',lab:'readMemoriesForSurfacing：每个文件读前 200 行 / 4096 字节，超限截断并附「用 Read 看全文」',state:function(){
+   chip('pf','mech','读 2 个文件正文（1 个 4KB 截断 + 提示行）');
+ }},
+ {id:'header',ph:1,dur:850,lane:'pf',lab:'header 定格：>1 天 → 陈旧警示 +「Memory: 路径:」；≤1 天 →「Memory (saved yesterday): 路径:」——创建时写死，跨轮字节稳定',state:function(){
+   chip('pf','ok','header 定格（3 天前→陈旧警示变体；昨天→saved yesterday 变体 · prompt 缓存友好）');
+ }},
+ {id:'settle',ph:1,dur:850,lane:'pf',lab:'promise settle：settledAt 打上时间戳——预取完成，就等主轮哪次迭代来取',state:function(){
+   chip('pf','ok','settledAt = T+0.6s ✓（尚未被消费）');
+ }},
+
+ // ── p2：消费点 ──
+ {id:'arrive',ph:2,dur:900,lane:'main',lab:'主轮工具执行完毕 → 到达本迭代的消费点（每轮工具后都会来问一次，零等待）',state:function(){
+   chip('main','tool','Bash 返回：innoextract 1.9（支持 ≤ 6.0.5）');
+   chip('main','act','到达记忆消费点（不 settle 就跳过、下迭代再问）');
+ },live:function(){flyLane('main','inj','工具结果 → 消费点','back')}},
+ {id:'check',ph:2,dur:850,lane:'inj',lab:'检查：settledAt 非空 且 本回合未消费过（consumedOnIteration === -1）才取',state:function(){
+   chip('inj','act','settled ✓ 未消费 ✓ → await promise（此刻已 settle，瞬间拿到）');
+ }},
+ {id:'dedup',ph:2,dur:900,lane:'inj',lab:'filterDuplicateMemoryAttachments：滤 readFileState 已有路径；幸存者回写标记（标记后置写入，防自指过滤）',state:function(){
+   chip('inj','mech','去重 → 2 条幸存（readFileState 标记后置写入）');
+ }},
+ {id:'render',ph:2,dur:1000,lane:'inj',lab:'每条记忆 → 一条 isMeta user 消息：定格 header + 正文，单独包进 <system-reminder>',state:function(){
+   chip('inj','ok','2 条 <system-reminder> 消息成型');
+   mvShow();
+ },live:function(){flyLane('pf','inj','relevant_memories × 2','mv')}},
+ {id:'push',ph:2,dur:850,lane:'inj',lab:'逐条 yield + toolResults.push：记忆消息与工具结果一起进消息数组',state:function(){
+   chip('inj','ok','yield → 消费者存储 · 随下一轮 messages 发出');
+ }},
+ {id:'consumed',ph:2,dur:850,lane:'inj',lab:'consumedOnIteration 定格——本回合最多消费这一次，后续迭代不再重复注入',state:function(){
+   chip('inj','gate','消费定格（每用户轮最多一次）');
+ }},
+
+ // ── p3：第 2 迭代生效 · 回合收尾 ──
+ {id:'cont',ph:3,dur:850,lane:'main',lab:'Continue 站点：messages 拼接、turnCount+1 → 进入下一迭代（循环语义）',state:function(){
+   chip('main','act','next_turn · 迭代 2 开始');
+ },live:function(){flyLane('inj','main','记忆 + 工具结果 → 请求 2','req')}},
+ {id:'req2',ph:3,dur:900,lane:'main',lab:'API 请求 2 发出：历史里带着记忆消息——模型第一次「看见」它们（索引本就不在系统提示里）',state:function(){
+   chip('main','req','请求 2（含 2 条记忆 <system-reminder>）');
+ }},
+ {id:'ans',ph:3,dur:950,lane:'main',lab:'模型借记忆作答：≤ 6.0.5 用 innoextract 1.9；6.5+ 没有静态解法，需装进环境后分析',state:function(){
+   ansCard('≤ 6.0.5 → choco 的 innoextract 1.9 就够；≥ 6.5 无静态解法 → 装进环境后再分析（记忆里还记着 SAC 会拦 r82）');
+ }},
+ {id:'end',ph:3,dur:850,lane:'main',lab:'stop_reason = end_turn、无更多工具调用 → 回合终止',state:function(){
+   chip('main','ok','Terminal completed');
+ }},
+ {id:'dispose',ph:3,dur:900,lane:'user',lab:'生成器退出 → Symbol.dispose：中止仍在飞的 sideQuery + 上报 tengu_memdir_prefetch_collected 遥测',state:function(){
+   chip('user','mech','dispose：abort 子控制器 + 遥测（hidden_by_first_iteration / latency_ms）');
+ }},
+ {id:'back',ph:3,dur:950,lane:'user',lab:'答案送达用户——预取全程藏在流式与工具时间里，用户无感',state:function(){
+   bubble('a','模型作答：innoextract 1.9 只到 6.0.5，6.5+ 装后分析（记忆生效）');
+ },live:function(){flyLane('main','user','✅ 答案（记忆生效）','back')}},
+
+ // ── p4：第 2 用户轮（简）· 退出 ──
+ {id:'q2',ph:4,dur:850,lane:'user',lab:'第 2 用户轮（简）：又一句提问 → 4 道门重新过一遍（会话字节预算在涨）',state:function(){
+   bubble('q','把上面的结论写成笔记存好');
+   chip('pf','gate','门重过 ✓ 已浮现 8KB / 60KB（预算在涨）');
+ }},
+ {id:'scan2',ph:4,dur:900,lane:'pf',lab:'扫描 + 选择再跑：已浮现路径已被剔除，Sonnet 在剩余文件里挑——空选择也合法（遥测要分母）',state:function(){
+   chip('pf','mech2','滤已浮现 → Sonnet 返回 []（宁缺毋滥）');
+ }},
+ {id:'skip',ph:4,dur:850,lane:'inj',lab:'空结果 → 本轮零注入；sideQuery 失败 / 未 settle 同样跳过——consume 永不阻塞、失败零影响',state:function(){
+   chip('inj','mech','注入 0 条 · 未 settle 则下迭代再试');
+ }},
+ {id:'fin',ph:4,dur:1000,lane:'user',lab:'流程结束：每用户轮一次「预取 + 消费」；compact 后已浮现集清零，记忆可重新浮现',state:function(){
+   chip('user','fin','✓ 流程结束');
+ }}
+];
+
+// ---------- rebuild / engine ----------
+var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
+var SUB_READY='就绪 · 点击 ▶ 播放，或用 ← → 单步';
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.user.innerHTML='';feeds.main.innerHTML='';feeds.pf.innerHTML='';feeds.inj.innerHTML='';
+  mfCard=null;
+  $('sq-panel').classList.remove('on','done');
+  $('sq-body').textContent='（未发出 —— 等门全过后与主轮并行触发）';
+  $('mv-panel').classList.remove('on');
+  $('mv-body').textContent='（尚未注入 —— 消费点未到达）';
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)s.state();
+}
+function setFocus(s){
+  for(var k in lanes)lanes[k].classList.remove('hot');
+  if(s&&s.lane)lanes[s.lane].classList.add('hot');
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function setSub(boldTxt,rest){
+  // 字幕用 DOM 节点拼接：lab 里含 "<system-reminder>" 字面量，innerHTML 会把它吃成标签
+  subtitleEl.textContent='';
+  var b=document.createElement('b');b.textContent=boldTxt;
+  subtitleEl.appendChild(b);
+  subtitleEl.appendChild(document.createTextNode(rest));
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){
+    readout.textContent='就绪';
+    setSub('现在：',SUB_READY);
+    subtitleEl.classList.remove('end');
+  }else if(idx>=n-1){
+    readout.innerHTML='<span class="fin">✓ 播放完毕</span>';
+    setSub('流程结束 ——',' '+steps[idx].lab);
+    subtitleEl.classList.add('end');
+  }else{
+    readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b>';
+    setSub('现在：',steps[idx].lab);
+    subtitleEl.classList.remove('end');
+  }
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  stepT0=Date.now(); remaining=delay;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)try{s.state()}catch(e){}
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true; $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){pause();renderTo(-1)};
+$('b-prev').onclick=function(){pause();renderTo(idx-1)};
+$('b-next').onclick=function(){pause();renderTo(idx+1)};
+$('b-end').onclick=function(){pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){toggle()};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();toggle()}
+  else if(e.key==='ArrowRight'){pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){pause();renderTo(-1)}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+
+// ---------- selftest (?selftest=1) ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  var pass=0,fail=0;
+  function line(s){var d=document.createElement('div');d.textContent=s;pre.appendChild(d)}
+  function T(name,fn){
+    try{
+      var r=fn();
+      if(r===false)throw new Error('断言返回 false');
+      pass++;line('PASS '+name);
+    }catch(e){
+      fail++;line('FAIL '+name+' — '+((e&&e.message)||e));
+    }
+  }
+  line('== selftest start ==');
+  T('步数 > 0（实际 '+steps.length+' 步）',function(){return steps.length>0});
+  T('进度条分段数 = 步数（'+barEl.children.length+' 段）',function(){return barEl.children.length===steps.length});
+  T('字幕含 <system-reminder> 字面量（不被 innerHTML 吞掉）',function(){
+    window.__goto(steps.map(function(s){return s.id}).indexOf('render'));
+    return subtitleEl.textContent.indexOf('system-reminder')>0;
+  });
+  var bad=[];
+  for(var i=0;i<steps.length;i++){
+    try{window.__goto(i)}catch(e){bad.push(i+':'+((e&&e.message)||e))}
+  }
+  T('__goto(i) 逐步 0..'+(steps.length-1)+' 全部无异常',function(){
+    if(bad.length)throw new Error(bad.join(' ; '));
+    return true;
+  });
+  var texts=[];
+  for(var j=0;j<steps.length;j++){
+    try{
+      window.__goto(j);
+      texts.push(subtitleEl.textContent);
+    }catch(e){
+      texts.push('ERROR@'+j+':'+((e&&e.message)||e));
+    }
+  }
+  var uniq={};for(var k=0;k<texts.length;k++)uniq[texts[k]]=1;
+  var uniqN=0;for(var key in uniq)uniqN++;
+  T('字幕文本随步变化（'+uniqN+' 种不同字幕）',function(){return uniqN>=10});
+  window.__goto(steps.length-1);
+  T('末步字幕明确「流程结束」',function(){return /流程结束/.test(subtitleEl.textContent)});
+  window.__goto(-1);
+  T('__goto(-1) 重置回空态（泳道清空 / 面板复位 / 字幕回就绪）',function(){
+    var emptyFeeds=feeds.user.children.length===0&&feeds.main.children.length===0&&feeds.pf.children.length===0&&feeds.inj.children.length===0;
+    var panelsReset=$('sq-body').textContent.indexOf('未发出')>=0&&$('mv-body').textContent.indexOf('尚未注入')>=0;
+    var subReset=subtitleEl.textContent.indexOf('就绪')>=0;
+    return emptyFeeds&&panelsReset&&subReset;
+  });
+  T('window.onerror 无运行时错误（'+window.__errors.length+' 条）',function(){return window.__errors.length===0});
+  line('== selftest done: '+pass+' pass / '+fail+' fail ==');
+  window.__selftest={pass:pass,fail:fail};
+}
+if(/selftest=1/.test(location.search)){
+  setTimeout(runSelfTest,0);
+}
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

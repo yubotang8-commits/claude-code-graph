@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>延迟工具按需加载播放器：剔除 → 名单 → 搜索 → 发现集 → 委托执行</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+
+#stage{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:640px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-width:0}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:7px;position:relative;flex-wrap:wrap;overflow-wrap:anywhere}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto;max-height:132px;overflow-y:auto;overflow-wrap:anywhere}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-req .h{border-bottom:2px solid var(--blue)}
+#lane-model .h{border-bottom:2px solid var(--sec)}
+#lane-search .h{border-bottom:2px solid var(--orange)}
+#lane-hist .h{border-bottom:2px solid var(--green)}
+#lane-exec .h{border-bottom:2px solid var(--purple)}
+
+.chip{font-family:var(--mono);font-size:11.8px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.45;word-break:break-all}
+.chip.k0{background:var(--panel);border-color:var(--hair);color:var(--sec)}
+.chip.k1{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.k2{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.k3{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.k4{background:var(--purple-f);border-color:var(--purple);color:var(--ink)}
+.chip.wide{width:100%;white-space:normal;font-family:var(--ui);font-size:12.5px}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+
+.hrow{border:1.5px solid var(--line);border-radius:9px;padding:6px 9px;background:var(--white);animation:pop .35s ease;flex:0 0 auto}
+.hrow .rt{font-size:11.5px;font-weight:700;color:var(--ink)}
+.hrow .rb{font-family:var(--mono);font-size:11px;color:var(--sec);margin-top:3px;white-space:pre-wrap;word-break:break-all}
+.hrow.res{border-color:var(--green);background:var(--green-f)}
+.hrow.ex{border-color:var(--purple);background:var(--purple-f)}
+
+.mem{flex:0 0 auto;max-height:210px;overflow-y:auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:10px 12px;display:flex;flex-direction:column;gap:8px;transition:border-color .3s ease,box-shadow .3s ease}
+.mem.glow{border-color:var(--green);box-shadow:0 0 0 2px rgba(27,175,122,.28)}
+.mem-h{font-size:12px;font-weight:700;color:var(--sec)}
+#disc-empty{font-size:12px;color:var(--mut);padding:8px 4px}
+#disc-tools{display:flex;flex-wrap:wrap;gap:6px}
+.dchip{font-family:var(--mono);font-size:12px;font-weight:600;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-radius:8px;padding:3px 9px;animation:pop .35s ease}
+#disc-src{font-size:11px;color:var(--mut);margin-top:2px}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-req.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-model.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-search.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-hist.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-exec.hot{box-shadow:0 0 0 2px var(--purple),0 10px 30px rgba(98,80,214,.25)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08);max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.flight.ev{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.mv{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.exe{background:var(--purple-f);border:1.5px solid var(--purple)}
+.flight.brk{background:var(--red-f);border:1.5px solid var(--red);color:var(--red);font-weight:700}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:210px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:330px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:170px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px;word-break:break-all}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.req .ev{color:var(--blue)}
+#lines .ln.usr .ev{color:var(--blue)}
+#lines .ln.tool .ev{color:var(--green)}
+#lines .ln.mech .ev{color:var(--purple)}
+#lines .ln.sys{color:var(--mut);font-style:italic}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost{color:#b3b2ad}
+#lines .ln.lost .ev{color:#b3b2ad}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px;flex-wrap:wrap}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:180px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subtitle{flex:1 1 100%;font-size:13px;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:9px;padding:7px 12px;line-height:1.5;min-height:34px}
+#subtitle::before{content:'字幕 ';font-size:10.5px;font-weight:700;color:var(--mut);letter-spacing:1px;margin-right:6px}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+.notes{margin-top:12px;border:1px solid var(--hair);border-radius:12px;background:var(--white);padding:11px 15px;font-size:12px;color:var(--sec)}
+.notes .nt{font-weight:700;color:var(--ink);font-size:12.5px;margin-bottom:5px}
+.notes ol{margin-left:18px;display:flex;flex-direction:column;gap:4px}
+.notes code{font-family:var(--mono);font-size:11.3px;background:var(--panel);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+footer{margin-top:14px;font-size:11px;color:var(--mut);line-height:1.7}
+#selftest-result{display:none;font-family:var(--mono);font-size:12px;white-space:pre-wrap}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>延迟工具按需加载播放器：剔除 → 名单 → 搜索 → 发现集 → 委托执行</h1>
+  <div class="sub">60 个内置工具 + MCP 工具里，只有 <b>CORE_TOOLS 白名单</b>随请求全量发送 schema；其余只报名字——模型用 <b>SearchExtraTools</b> 找、<b>ExecuteExtraTool</b> 执行，<b>tools 数组全程稳定（保 prompt cache）</b></div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 段 · 请求构建（门控 → 剔除 → 名单告知）</span>
+  <span class="p1" data-ph="1">第 2 段 · 第一轮：搜索 → 发现 → 执行</span>
+  <span class="p2" data-ph="2">第 3 段 · 第二轮：select 直达 + 收尾</span>
+</div>
+
+<div id="transport">
+  <div class="btns">
+    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+    <button id="b-brk" class="danger" title="断链演示 (B)">⚡ 断链演示</button>
+    <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+  </div>
+  <div id="bar"></div>
+  <div id="speed">
+    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+  </div>
+  <div id="readout">就绪 · 点击 ▶ 播放</div>
+  <div id="subtitle">现在：等待播放（空格开始）</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-req">
+    <div class="h" id="h-req">🔧 请求构建 <span class="tag">claude.ts</span><small>门控 → 剔除 → 名单</small></div>
+    <div class="feed" id="feed-req"></div>
+    <div class="lane-foot"><b>每轮请求重算</b> filteredTools；tst-auto = 延迟工具定义超模型上下文 <b>10%</b> 才自动启用；standard = 全量内联并把 SearchExtraTools 剔掉；无延迟工具且无 MCP 还在连接时整个功能让位</div>
+  </div>
+  <div class="lane" id="lane-model">
+    <div class="h" id="h-model">🧠 模型 <span class="tag">API</span><small>只见名单 · 不见 schema</small></div>
+    <div class="feed" id="feed-model"></div>
+    <div class="lane-foot"><b>延迟工具不能直呼其名</b>——必须两步走：SearchExtraTools 找到 → ExecuteExtraTool 执行；名单以 system-reminder（isMeta · 请求期临时消息）形式随请求送达</div>
+  </div>
+  <div class="lane" id="lane-search">
+    <div class="h" id="h-search">🔍 SearchExtraTools <span class="tag">搜索</span><small>select / discover / 关键词</small></div>
+    <div class="feed" id="feed-search"></div>
+    <div class="lane-foot">合并评分 = <b>关键词×0.4 + TF-IDF×0.6</b>；<b>select:</b> 精确直达（逗号多选，missing 只记日志）；<b>discover:</b> 只返回名字+描述+schema 不动身；命中已加载核心工具会提示直接调用</div>
+  </div>
+  <div class="lane" id="lane-hist">
+    <div class="h" id="h-hist">📜 消息历史 <span class="tag">软状态</span><small>tool_result 文本模式</small></div>
+    <div class="feed" id="feed-hist"></div>
+    <div class="mem">
+      <div class="mem-h">🧭 发现集 Set&lt;string&gt; —— 惰性重建（守卫扫描时现算）</div>
+      <div id="disc-empty">∅ 空 —— 消息历史里还没有可提取的 tool_result</div>
+      <div id="disc-set" style="display:none">
+        <div id="disc-tools"></div>
+        <div id="disc-src">—</div>
+      </div>
+    </div>
+    <div class="lane-foot">发现集<b>没有独立存储</b>：靠正则 <b>^Found \d+ deferred tool\(s\): (.+)\.$</b> 从 tool_result 文本重建；compact 边界携带 preCompactDiscoveredTools 续传；delta attachment 的 addedNames 也计入</div>
+  </div>
+  <div class="lane" id="lane-exec">
+    <div class="h" id="h-exec">⚡ ExecuteExtraTool <span class="tag">委托执行</span><small>守卫 → 预校验 → 委托</small></div>
+    <div class="feed" id="feed-exec"></div>
+    <div class="lane-foot">延迟工具<b>本体一直在进程内工具池</b>——『延迟』的只是 schema 不发给 API，不是不加载；ExecuteExtraTool 自身权限 passthrough，由目标工具自己把关</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 断链现场<small>tool_result 没能落进消息历史（在途丢失，或输出格式改动使 ^Found …$ 失配）</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>请求构建 · 剔除 · 名单告知</b><span>已完成，无副作用风险</span></div>
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>"Found 1 deferred tool(s): CronCreate."</b><span>已产出 —— 停在搜索引擎一侧</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>消息历史无该 tool_result</b><span>extractDiscoveredToolNames() = ∅（发现集是软状态，断链即蒸发）</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>ExecuteExtraTool 守卫将拦截</b><span>"Tool \"CronCreate\" has not been discovered yet… Usage: SearchExtraTools(\"select:CronCreate\")" —— 无副作用，可重试</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>另一种断法</b><span>模型直呼延迟工具：schema 从未发送 → 参数必错 → zod 报错 + buildSchemaNotSentHint 追加引导</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">恢复 / 续传通道（按证据）</div>
+    <ul>
+      <li><b>重新搜索</b>：按引导文案补一次 select:（无副作用，幂等）</li>
+      <li><b>compact 续传</b>：压缩边界显式携带 preCompactDiscoveredTools</li>
+      <li><b>delta attachment</b>（ant 内部）：deferred_tools_delta 的 addedNames 计入发现集</li>
+    </ul>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤日志（载荷照录源码，可截断）<span class="lg">紫色 = 机制说明，独立于真实单元</span></div>
+  <div id="lines"></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>消息 / 载荷（请求 · tool_use · 名单）</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>搜索动作</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>结果 / 落效</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>执行动作</span>
+  <span class="k"><span class="sw" style="background:var(--panel);border-color:var(--hair)"></span>机制说明（不可直接观测）</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 断链演示</div>
+
+<div class="notes">
+  <div class="nt">考据注记（来自源码核查，分歧如实标注）</div>
+  <ol>
+    <li><b>CORE_TOOLS 实测 29 个名字</b>（SHELL_TOOL_NAMES 展开 2 + 27 个独立名）；CLAUDE.md 称 38 —— 文档漂移，同目录旧测试注释 "7+19" 亦陈旧。</li>
+    <li><code>Tool.shouldDefer</code> 字段（约 25 个工具仍设置）与实现脱节：<code>isDeferredTool</code> 只看 <code>alwaysLoad</code> 与 CORE_TOOLS，完全不用 shouldDefer。</li>
+    <li><b>defer_loading beta 与 API 侧 tool_reference 已移除</b>，改为自建搜索（claude.ts:1206-1208 注释）；旧会话消息里的 tool_reference 块仅为向后兼容提取。</li>
+    <li><b>注释分歧以代码为准</b>：searchExtraTools.ts:479-481 旧注释称「发现的工具会加回后续 API 请求的 tools 数组」；实际 claude.ts:1187-1199 与 openai/index.ts:255-268 <b>永不加回</b> —— 本图按代码绘制。</li>
+    <li><b>名单告知两通道</b>：默认 = 请求期临时 system-reminder（isMeta，不落盘）；ant 内部（USER_TYPE / tengu_glacier_2xr GrowthBook 门）= 持久化 deferred_tools_delta attachment（增量 added/removed，OpenAI 路径同步切换）。</li>
+    <li><b>工具预取</b>与模型流式输出并行（query.ts 每迭代启动 startSearchExtraToolsPrefetch）；turn-zero 用户输入预取因弹窗频繁已禁用。</li>
+  </ol>
+</div>
+
+<footer>
+依据 claude-code-best 仓库源码实读（只读取证）：<br>
+src/services/api/claude.ts:1151-1204（门控/预计算/剔除）、1388-1420（名单注入/diff）· packages/builtin-tools/src/tools/SearchExtraToolsTool/SearchExtraToolsTool.ts:350-530（三模式搜索）、542-601（结果文本）· SearchExtraToolsTool/prompt.ts:9-91（两步工作法/isDeferredTool）· src/services/searchExtraTools/toolIndex.ts:80-233（TF-IDF 索引）· src/utils/searchExtraTools.ts:489-556（发现集重建）、593-670（delta）· packages/builtin-tools/src/tools/ExecuteTool/ExecuteTool.ts:66-219（守卫与委托）· src/services/tools/toolExecution.ts:607-672（schema 未发送提示）· src/services/searchExtraTools/prefetch.ts:94-136（预取）· src/query.ts:489-493（预取启动点）· src/constants/tools.ts:137-179（CORE_TOOLS）
+</footer>
+
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.onerror=function(m){window.__errors.push(String(m));return false;};
+var $=function(id){return document.getElementById(id)};
+var STATIONS=['req','model','search','hist','exec'];
+var feeds={},lanes={},heads={};
+for(var si=0;si<STATIONS.length;si++){var kk=STATIONS[si];
+  feeds[kk]=$('feed-'+kk);lanes[kk]=$('lane-'+kk);heads[kk]=$('h-'+kk);}
+var flightsEl=$('flights'),linesEl=$('lines'),barEl=$('bar'),readout=$('readout');
+var stage=$('stage'),memPanel=document.querySelector('#lane-hist .mem');
+var activeAnims=[];var breakMode=false,focusMode=true;
+var discovered=[];
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function wchip(lane,cls,txt){var c=el('chip '+cls+' wide',feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function histRow(kind,title,body){var d=el('hrow '+kind,feeds.hist);
+  el('rt',d,title);el('rb',d,body);
+  feeds.hist.scrollTop=feeds.hist.scrollHeight;return d}
+function setDisc(names,src){discovered=names.slice();
+  var tools=$('disc-tools');tools.innerHTML='';
+  for(var i=0;i<discovered.length;i++){var c=document.createElement('span');c.className='dchip';c.textContent=discovered[i];tools.appendChild(c);}
+  $('disc-src').textContent=src;
+  $('disc-empty').style.display=names.length?'none':'';
+  $('disc-set').style.display=names.length?'':'none';}
+function addLog(kind,text){
+  var d=document.createElement('div');d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('·');
+    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
+    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur');for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight;return d;}
+function fly(from,to,label,cls,dur){
+  var a=lanes[from].getBoundingClientRect(),b=lanes[to].getBoundingClientRect(),h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div');f.className='flight '+cls;f.textContent=label;
+  var x0=a.left+a.width/2-h.left,y0=a.top+18-h.top,x1=b.left+b.width/2-h.left,y1=b.top+18-h.top;
+  f.style.left=x0+'px';f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(to);}
+var memGlowT=null;
+function setFocus(s){
+  STATIONS.forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(memPanel)memPanel.classList.remove('glow');
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  STATIONS.forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+  if(s.mem&&memPanel){memPanel.classList.add('glow');clearTimeout(memGlowT);memGlowT=setTimeout(function(){memPanel.classList.remove('glow')},900)}}
+
+// ---------- steps：35 步（ph 0 请求构建 / 1 第一轮 / 2 第二轮+收尾）----------
+var steps=[].concat(
+ // ── 第 1 段：请求构建 ──
+ {id:'pool',ph:0,dur:900,focus:'req',lab:'工具池就位：60 个内置工具 + 各 MCP 服务器的工具，组装成进程内工具池',
+  log:'工具池 · getAllBaseTools(60 内置) + MCP fetchToolsForClient → assembleToolPool（按名排序，保 prompt cache）',logKind:'mech',
+  state:function(){chip('req','k0','工具池 60 内置 + MCP')},live:null},
+ {id:'gate',ph:0,dur:950,focus:'req',lab:'门控判定 + 预计算延迟名单：默认 tst 模式——CORE_TOOLS 白名单之外、且未标 alwaysLoad 的工具全部延迟（含全部 MCP 工具）',
+  log:'isSearchExtraToolsEnabled → tst（默认）· isDeferredTool 逐个判定（每次 2 次 GrowthBook 查询，故只预计算一遍）→ deferredToolNames',logKind:'mech',
+  state:function(){chip('req','k0','tst 模式（默认）');chip('req','k0','deferredToolNames 预计算')},live:null},
+ {id:'filter',ph:0,dur:900,focus:'req',lab:'剔除落效：发给 API 的 tools 数组永不包含延迟工具——SearchExtraTools / ExecuteExtraTool 本身是核心工具，照常在列',
+  log:'filteredTools = 核心工具（含两件搜索工具）· 延迟工具 schema 永不进 tools 数组——数组全程稳定，prompt cache 不被发现的工具撑爆',logKind:'mech',
+  state:function(){chip('req','k0','tools = 核心工具（schema 全量）');chip('req','k1','延迟工具 → 仅留在进程内池')},live:null},
+ {id:'ann-a',ph:0,dur:850,focus:'req',lab:'名单比对：当前延迟工具列表 vs 上次已注入集合（模块级 lastAnnouncedDeferredTools）——只在出现新工具时重注入',
+  log:null,
+  state:function(){chip('req','k0','diff：出现新延迟工具？MCP 中途接入会触发')},live:null},
+ {id:'ann-b',ph:0,dur:950,focus:'req',lab:'名单告知落效：注入 <available-deferred-tools> system-reminder（isMeta · 仅本次请求生效）——只有名字没有 schema，附两步用法说明',
+  log:'messagesForAPI += <system-reminder><available-deferred-tools>CronCreate, CronList, …</available-deferred-tools>IMPORTANT: 1. SearchExtraTools({"query":"select:<tool_name>"}) 2. ExecuteExtraTool({"tool_name":"<name>","params":{…}})</system-reminder>（isMeta · 请求期临时消息）',logKind:'req',
+  state:function(){chip('req','k1','名单已注入本轮请求（不落盘）')},live:null},
+ {id:'send',ph:0,dur:900,focus:'req',lab:'请求发出：消息 + 精简 tools 数组 → Anthropic API（流式）',
+  log:'POST /v1/messages · stream:true · tools = 核心工具（延迟工具不在列）',logKind:'req',
+  state:function(){chip('req','k1','请求已发出 · tools 稳定')},
+  live:function(){fly('req','model','POST /v1/messages · tools=核心工具','req',750)}},
+ {id:'view',ph:0,dur:900,focus:'model',lab:'模型视野落定：核心工具的完整 schema + 一张只有名字的延迟工具名单——想用名单上的工具，必须两步走',
+  log:null,
+  state:function(){chip('model','k1','看到：核心工具 schema + 延迟工具名单（仅名字）')},live:null},
+
+ // ── 第 2 段：第一轮完整旅程 ──
+ {id:'task',ph:1,dur:1000,focus:'model',lab:'用户请求进来：『每 5 分钟检查一次部署』——核心工具里没有定时能力，模型决定按名单先搜索',
+  log:'user · schedule a cron to check deploy every 5 minutes',logKind:'usr',
+  state:function(){wchip('model','k1','用户：每 5 分钟检查一次部署 → 核心工具没有定时能力，去名单里找')},live:null},
+ {id:'pf',ph:1,dur:900,focus:'search',lab:'（并行 · 不阻塞）回合循环同时启动工具预取：从消息历史提取查询词跑 TF-IDF，新命中挂 tool_discovery 附件供 UI 提示',
+  log:'query.ts 每迭代 startSearchExtraToolsPrefetch(tools, messages) · searchTools(query, index, 3) · 会话去重集上限 500→400',logKind:'mech',
+  state:function(){chip('search','k2','prefetch 并行跑（top-3）')},live:null},
+ {id:'cs1',ph:1,dur:900,focus:'model',lab:'模型发出 SearchExtraTools({"query": "cron schedule"})——不知道确切名字，先用关键词搜',
+  log:'tool_use · SearchExtraTools {"query": "cron schedule", "max_results": 5}',logKind:'tool',
+  state:function(){chip('model','k1','tool_use · SearchExtraTools("cron schedule")')},
+  live:function(){fly('model','search','SearchExtraTools(query)','ev',700)}},
+ {id:'sr1',ph:1,dur:900,focus:'search',lab:'搜索到达：识别为 keyword 模式（非 select: / discover:）——关键词搜索与 TF-IDF 索引并行执行',
+  log:null,
+  state:function(){chip('search','k2','keyword 模式 · 双路并行')},live:null},
+ {id:'skw',ph:1,dur:950,focus:'search',lab:'关键词打分：工具名拆词（CamelCase / mcp__server__action）——名件命中 10 分、searchHint 4 分、描述 2 分（MCP 部件 12/6；+前缀词为必含项）',
+  log:null,
+  state:function(){chip('search','k2','keyword 评分完成')},live:null},
+ {id:'sti',ph:1,dur:950,focus:'search',lab:'TF-IDF 检索：索引向量按 name×3.0 + searchHint×2.5 + description×1.0 加权，与查询向量算余弦相似度（显示门槛 0.10；索引按工具名集合缓存失效）',
+  log:null,
+  state:function(){chip('search','k2','TF-IDF 命中（cos 相似度）')},live:null},
+ {id:'smg',ph:1,dur:900,focus:'search',lab:'合并落效：关键词分 ×0.4 + TF-IDF 分 ×0.6，排序取前 max_results（默认 5）→ matches = [CronCreate]',
+  log:null,
+  state:function(){chip('search','k3','matches: CronCreate')},live:null},
+ {id:'stx',ph:1,dur:1000,focus:'search',lab:'产出结果文本：『Found 1 deferred tool(s): CronCreate. Use ExecuteExtraTool with …』——这段文本就是发现集的唯一持久载体',
+  log:'tool_result · "Found 1 deferred tool(s): CronCreate.\nUse ExecuteExtraTool with {\"tool_name\": \"<name>\", \"params\": {...}} to invoke any of these deferred tools."',logKind:'tool',
+  state:function(){chip('search','k3','结果文本已产出 → 回传')},
+  live:function(){fly('search','model','tool_result: Found 1 deferred tool(s): CronCreate.','back',750)}},
+ {id:'sbk',ph:1,dur:900,focus:'model',lab:'模型收到搜索结果：知道 CronCreate 可用、参数该怎么传——但它的 schema 依然不在请求里',
+  log:null,
+  state:function(){chip('model','k1','收到：CronCreate 可用（两步走第 2 步）')},live:null},
+ {id:'sld',ph:1,dur:950,focus:'hist',mem:true,lab:'落效：tool_result 写进消息历史——发现集从此有了持久载体（守卫以后靠正则从这里重建）',
+  log:'消息历史 += tool_result(SearchExtraTools) —— DISCOVERED_TOOLS_PATTERN /^Found \d+ deferred tool\(s\): (.+)\.$/ 可提取 [CronCreate]',logKind:'mech',
+  state:function(){histRow('res','tool_result · SearchExtraTools','"Found 1 deferred tool(s): CronCreate.\nUse ExecuteExtraTool with …"')},live:null},
+ {id:'ce1',ph:1,dur:950,focus:'model',lab:'模型发出 ExecuteExtraTool({"tool_name": "CronCreate", "params": {"schedule": "*/5 * * * *", "prompt": "check the deploy"}})',
+  log:'tool_use · ExecuteExtraTool {"tool_name": "CronCreate", "params": {"schedule": "*/5 * * * *", "prompt": "check the deploy"}}',logKind:'tool',
+  state:function(){chip('model','k1','tool_use · ExecuteExtraTool(CronCreate)')},
+  live:function(){fly('model','exec','ExecuteExtraTool(CronCreate)','exe',720)}},
+ {id:'efd',ph:1,dur:950,focus:'exec',lab:'执行器先找本体：findToolByName 在进程内工具池查 CronCreate——延迟工具的本体一直在池里（『延迟』的只是 schema 不发给 API，不是不加载）',
+  log:null,
+  state:function(){chip('exec','k4','找到 CronCreate 本体 ✓（池内直查）')},live:null},
+ {id:'egd',ph:1,dur:1000,focus:'hist',mem:true,lab:'发现守卫：扫描整个消息历史重建发现集（惰性、每次现算）→ CronCreate ∈ 发现集 ✓ 放行',
+  log:'extractDiscoveredToolNames(消息历史) = {CronCreate} —— 命中 1 条 Found 文本 · 0 条 delta attachment · 0 条 compact 续传',logKind:'mech',
+  state:function(){setDisc(['CronCreate'],'来源：1 条 Found 文本 · 0 条 delta attachment · 0 条 compact 续传');chip('exec','k3','守卫放行 ✓')},live:null},
+ {id:'ech',ph:1,dur:950,focus:'exec',lab:'预校验链：目标 zod schema safeParse（补默认值、剥未知键）→ validateInput → checkPermissions（deny 即拒；ExecuteExtraTool 自身权限 passthrough）',
+  log:null,
+  state:function(){chip('exec','k4','safeParse ✓ → validateInput ✓ → 权限 ✓')},live:null},
+ {id:'ecl',ph:1,dur:1000,focus:'exec',lab:'委托执行：CronCreate.call(params, context, canUseTool, …)——进度回调原样透传给内层工具',
+  log:null,
+  state:function(){chip('exec','k4','CronCreate.call 运行中…')},live:null},
+ {id:'ewp',ph:1,dur:950,focus:'exec',lab:'包装落效：结果装进 { result, tool_name: "CronCreate" } 返回——渲染也委托内层工具自己的 UI',
+  log:'tool_result · {"result": <CronCreate 的输出>, "tool_name": "CronCreate"}（渲染走 CronCreate.renderToolResultMessage）',logKind:'tool',
+  state:function(){chip('exec','k3','结果已包装 {result, tool_name}')},
+  live:function(){fly('exec','model','tool_result: {result, tool_name}','back',750)}},
+ {id:'ebk',ph:1,dur:900,focus:'model',lab:'模型收到真实结果：定时任务已建好——全程没有发生任何『把 CronCreate 装载进请求』的动作',
+  log:null,
+  state:function(){chip('model','k1','收到 CronCreate 真实结果 ✓')},live:null},
+ {id:'ehs',ph:1,dur:900,focus:'hist',mem:true,lab:'ExecuteExtraTool 的 tool_result 也落历史：JSON 形态、不匹配发现正则——发现集保持 {CronCreate} 不变',
+  log:'消息历史 += tool_result(ExecuteExtraTool) —— JSON.stringify 形态，不匹配 ^Found …$，发现集不变',logKind:'mech',
+  state:function(){histRow('ex','tool_result · ExecuteExtraTool','{"result": <CronCreate 输出>, "tool_name": "CronCreate"} —— 不匹配发现正则')},live:null},
+ {id:'ntx',ph:1,dur:950,focus:'req',lab:'下一轮请求：tools 数组原样重算、结果不变——发现不会把 schema 加回请求，prompt cache 保住',
+  log:'第 2 轮请求 · filteredTools 重算结果不变 —— 发现集不回流 tools 数组（代码为准，见考据注记 4）',logKind:'mech',
+  state:function(){chip('req','k0','tools 数组不变 ✓ cache 命中')},live:null},
+
+ // ── 第 3 段：第二轮（循环语义）+ 收尾 ──
+ {id:'w2',ph:2,dur:900,focus:'model',lab:'第二轮（循环语义：每遇到一个新的延迟工具 = 搜索 + 执行一小循环）：模型还想列出已有定时任务 → 名单里的 CronList',
+  log:null,
+  state:function(){wchip('model','k1','还想列出定时任务 → CronList（名单里见过名字）')},live:null},
+ {id:'cs2',ph:2,dur:900,focus:'model',lab:'这次用 select: 直达：SearchExtraTools({"query": "select:CronList"})——知道确切名字时最快',
+  log:'tool_use · SearchExtraTools {"query": "select:CronList"}',logKind:'tool',
+  state:function(){chip('model','k1','tool_use · SearchExtraTools("select:CronList")')},
+  live:function(){fly('model','search','select:CronList','ev',700)}},
+ {id:'sh2',ph:2,dur:950,focus:'search',lab:'select 命中：精确名匹配（支持逗号多选；命中的若是已加载核心工具，会提示直接调用、别包 ExecuteExtraTool）→ 产出结果文本',
+  log:'tool_result · "Found 1 deferred tool(s): CronList.\nUse ExecuteExtraTool with …"',logKind:'tool',
+  state:function(){chip('search','k3','select 命中 CronList → 结果文本已产出')},
+  live:function(){fly('search','model','tool_result: Found 1 deferred tool(s): CronList.','back',720)}},
+ {id:'sl2',ph:2,dur:900,focus:'hist',mem:true,lab:'新 tool_result 落历史：发现素材 +1——发现集是惰性重建的，要等下一次守卫扫描才会并入 CronList',
+  log:'消息历史 += tool_result —— 发现素材 +1（守卫下次扫描才并入）',logKind:'mech',
+  state:function(){histRow('res','tool_result · SearchExtraTools','"Found 1 deferred tool(s): CronList.\nUse ExecuteExtraTool with …"')},live:null},
+ {id:'ce2',ph:2,dur:900,focus:'model',lab:'模型直接调用 ExecuteExtraTool({"tool_name": "CronList"})——不用再搜索第二遍',
+  log:'tool_use · ExecuteExtraTool {"tool_name": "CronList", "params": {…}}',logKind:'tool',
+  state:function(){chip('model','k1','tool_use · ExecuteExtraTool(CronList)')},
+  live:function(){fly('model','exec','ExecuteExtraTool(CronList)','exe',700)}},
+ {id:'eg2',ph:2,dur:1000,focus:'hist',mem:true,lab:'守卫再扫描：两条 Found 文本都命中 → 发现集 = {CronCreate, CronList} → 放行',
+  log:'extractDiscoveredToolNames(消息历史) = {CronCreate, CronList} —— 2 条 Found 文本命中',logKind:'mech',
+  state:function(){setDisc(['CronCreate','CronList'],'来源：2 条 Found 文本 · 0 条 delta attachment · 0 条 compact 续传');chip('exec','k3','守卫放行 ✓')},live:null},
+ {id:'ex2',ph:2,dur:1000,focus:'exec',lab:'同一管道一步到位：safeParse → validateInput → checkPermissions → CronList.call → 包装 {result, tool_name}',
+  log:null,
+  state:function(){chip('exec','k4','CronList 预校验 ✓ → 委托执行 ✓ → 包装 ✓')},live:null},
+ {id:'eb2',ph:2,dur:900,focus:'model',lab:'结果回流：第二轮小循环闭合——注意这次连 tools 数组都没碰',
+  log:null,
+  state:function(){chip('model','k1','收到 CronList 结果 ✓')},
+  live:function(){fly('exec','model','tool_result: {result, tool_name}','back',720)}},
+ {id:'end',ph:2,dur:1100,focus:'model',lab:'流程结束：模型 end_turn 收尾——整个会话 tools 数组从未变过；发现集留在消息历史里，压缩时随 compact_boundary 续传',
+  log:'流程结束 —— 发现集 {CronCreate, CronList} 留存于消息历史；compact 时 preCompactDiscoveredTools 随边界携带',logKind:'sys',
+  state:function(){chip('model','k3','end_turn ✓ 任务完成')},live:null}
+);
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='stx')return i}return -1})();
+
+// ---------- engine ----------
+var idx=-1,playing=false,timer=null,speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  for(var k=0;k<STATIONS.length;k++)feeds[STATIONS[k]].innerHTML='';
+  linesEl.innerHTML='';
+  setDisc([],'—');
+}
+function applyStep(i){var s=steps[i];if(s.state)s.state();if(s.log)addLog(s.logKind||'sys',s.log)}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else{$('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放'}
+  $('subtitle').textContent='现在：'+(idx<0?'等待播放（空格开始）':steps[idx].lab);
+  if(idx<0){readout.textContent='就绪 · 点击 ▶ 播放'}
+  else if(idx>=n-1){readout.innerHTML='<span class="fin">✓ 播放完毕 · 流程结束</span>'}
+  else{readout.textContent='步骤 '+(idx+1)+'/'+n}
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  timer=setTimeout(next,s.dur/speed);
+}
+function pause(){playing=false;clearTimeout(timer);
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();}
+function play(){if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();}
+function toggle(){playing?pause():play()}
+
+// ---------- break demo ----------
+function breakDemo(){
+  pause();breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ 断链 —— tool_result 未能落进消息历史：以下单元未执行 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 断链现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意位置恢复';
+  $('subtitle').textContent='现在：⚡ 断链——tool_result 未落进消息历史，发现集蒸发，守卫将拦截后续执行';
+}
+function exitBreak(){breakMode=false;$('break-panel').classList.remove('on');renderTo(idx)}
+
+// ---------- wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__seek=window.__goto;
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest（?selftest=1）----------
+function runSelftest(){
+  var pre=$('selftest-result');
+  pre.style.display='block';
+  var pass=0,fail=0;
+  function W(s){var d=document.createElement('div');d.textContent=s;pre.appendChild(d)}
+  function P(name,ok){W((ok?'PASS ':'FAIL ')+name);if(ok)pass++;else fail++}
+  try{
+    P('steps>0 (n='+steps.length+')',steps.length>0);
+    P('步数在 20–40 区间',steps.length>=20&&steps.length<=40);
+    var okAll=true;
+    for(var i=0;i<steps.length;i++){
+      try{window.__goto(i)}catch(e){okAll=false;W('FAIL __goto('+i+') 抛异常: '+e.message);fail++}
+    }
+    P('逐步 __goto(i) 全部无异常',okAll);
+    var uniq=true,prev=null,midHasNow=false,finHasEnd=false,mid=Math.floor(steps.length/2);
+    for(var j=0;j<steps.length;j++){
+      window.__goto(j);
+      var t=$('subtitle').textContent;
+      if(j===mid)midHasNow=t.indexOf('现在：')===0;
+      if(prev!==null&&t===prev)uniq=false;
+      prev=t;
+    }
+    window.__goto(steps.length-1);
+    finHasEnd=$('subtitle').textContent.indexOf('流程结束')>=0;
+    P('字幕行文本随步变化（无相邻重复）',uniq);
+    P('字幕格式「现在：<本步人话>」',midHasNow);
+    P('终止步字幕明确「流程结束」',finHasEnd);
+    var iBack=window.__idxOf('sbk'),iLand=window.__idxOf('sld');
+    window.__goto(iBack);
+    P('在途断言：结果落历史前 feed-hist 无 tool_result 行',feeds.hist.children.length===0);
+    window.__goto(iLand);
+    P('落效断言：结果落历史后出现 tool_result 行',feeds.hist.children.length===1);
+    var iGuard=window.__idxOf('egd');
+    window.__goto(iGuard-1);
+    P('发现集在守卫扫描前仍为空',($('disc-empty').style.display!=='none')&&($('disc-set').style.display==='none'));
+    window.__goto(iGuard);
+    P('守卫扫描后发现集含 CronCreate',($('disc-set').style.display!=='none')&&$('disc-tools').textContent.indexOf('CronCreate')>=0);
+    window.__goto(-1);
+    P('__goto(-1) 重置回空态（五条泳道全空）',
+      feeds.req.children.length===0&&feeds.model.children.length===0&&feeds.search.children.length===0&&
+      feeds.hist.children.length===0&&feeds.exec.children.length===0);
+    P('重置后字幕回等待态（空态）',$('subtitle').textContent.indexOf('等待')>=0&&readout.textContent.indexOf('就绪')>=0);
+    window.__goto(3);var r1=$('b-play').getBoundingClientRect();
+    window.__goto(20);var r2=$('b-play').getBoundingClientRect();
+    window.__goto(-1);var r3=$('b-play').getBoundingClientRect();
+    P('控制按钮坐标恒定（布局零位移）',r1.top===r2.top&&r2.top===r3.top&&r1.left===r2.left&&r2.left===r3.left);
+    var noOf=true;
+    for(var q=0;q<STATIONS.length;q++){
+      var ln=lanes[STATIONS[q]];
+      if(ln.scrollWidth>ln.clientWidth+2)noOf=false;
+    }
+    P('泳道内容无横向溢出',noOf);
+    var stH=stage.getBoundingClientRect().height;
+    P('舞台高度固定（640±2）',stH>638&&stH<642);
+    breakDemo();
+    P('断链演示：break-panel 显示且后续日志灰显为未到达',(' '+$('break-panel').className+' ').indexOf(' on ')>=0&&linesEl.querySelectorAll('.ln.lost').length>0);
+    exitBreak();
+    P('断链退出后恢复常规渲染',(' '+$('break-panel').className+' ').indexOf(' on ')<0);
+    P('window.onerror 为空',window.__errors.length===0);
+    window.__goto(-1);
+  }catch(e){W('FAIL 自检异常: '+((e&&e.message)||e));fail++}
+  W((fail===0?'PASS ':'FAIL ')+'selftest 汇总: '+pass+' PASS / '+fail+' FAIL');
+}
+if(/[?&]selftest=1/.test(location.search)){setTimeout(runSelftest,30)}
+
+// debug/inspection params: ?step=N 起始步；?brk=1 断链演示态
+var mInit=/[?&]step=(\d+)/.exec(location.search);
+if(/[?&]brk=1/.test(location.search)){breakDemo()}
+else if(mInit){renderTo(parseInt(mInit[1],10));pause()}
+else{renderTo(-1)}
+})();
+</script>
+</body>
+</html>

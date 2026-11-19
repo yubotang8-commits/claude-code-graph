@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>12-context-assembly · CLAUDE.md 层级发现与递归加载</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>CLAUDE.md 层级发现与 @include 递归加载</h1>
+<p class="sub">组件 12-context-assembly · 上下文组装</p>
+<p class="lead">从「会话第一次需要用户上下文」到「一份拼接好的 claudeMd 文本」：先判定是否被禁用，再按 系统托管 → 用户全局 → 项目层级（根→当前目录）→ 附加目录 → 记忆入口 的顺序逐个读文件，@include 引用递归展开，最终格式化成单一字符串，随之后的每次请求前置注入对话。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1850" width="1040" height="1850" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">会话首取用户上下文</text>
+
+<!-- D1 禁用判定 -->
+<polygon points="400,113 520,155 400,197 280,155" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="150" class="n-title">CLAUDE.md 被禁用？</text>
+<text x="400" y="170" class="n-sub">硬关 env 或 --bare</text>
+
+<!-- B1 memoized 发现 -->
+<rect x="250" y="235" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="264" class="n-title">启动一次性全量发现</text>
+<text x="400" y="288" class="n-sub">getMemoryFiles · 整个会话缓存</text>
+
+<!-- B2 Managed -->
+<rect x="250" y="333" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="362" class="n-title">读系统级托管指令</text>
+<text x="400" y="386" class="n-sub">Managed · 全机策略，总是加载</text>
+
+<!-- D2 用户级判定 -->
+<polygon points="400,431 520,473 400,515 280,473" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="470" class="n-title">用户级设置开启？</text>
+<text x="400" y="490" class="n-sub">userSettings 开关</text>
+
+<!-- B3 User -->
+<rect x="250" y="553" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="582" class="n-title">读用户级全局指令</text>
+<text x="400" y="606" class="n-sub">~/.claude/CLAUDE.md + rules</text>
+
+<!-- B4 收集目录 -->
+<rect x="250" y="690" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="719" class="n-title">向上收集目录到根</text>
+<text x="400" y="743" class="n-sub">cwd 逐级向上，再反转</text>
+
+<!-- B5 逐目录读项目文件 -->
+<rect x="250" y="788" width="300" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="817" class="n-title">逐目录读项目与本地文件</text>
+<text x="400" y="841" class="n-sub">每目录：CLAUDE.md、.claude/CLAUDE.md</text>
+<text x="400" y="861" class="n-sub">.claude/rules/*.md 与 CLAUDE.local.md</text>
+
+<!-- D3 附加目录判定 -->
+<polygon points="400,930 520,972 400,1014 280,972" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="969" class="n-title">有附加目录？</text>
+<text x="400" y="989" class="n-sub">显式 --add-dir 时</text>
+
+<!-- B6 附加目录 -->
+<rect x="250" y="1052" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1081" class="n-title">读附加目录指令</text>
+<text x="400" y="1105" class="n-sub">同样找 CLAUDE.md 与 rules</text>
+
+<!-- D4 记忆入口判定 -->
+<polygon points="400,1190 520,1232 400,1274 280,1232" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1229" class="n-title">自动记忆开启？</text>
+<text x="400" y="1249" class="n-sub">AutoMem / TeamMem</text>
+
+<!-- B7 记忆入口 -->
+<rect x="250" y="1310" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1339" class="n-title">读记忆体系入口文件</text>
+<text x="400" y="1363" class="n-sub">MEMORY.md / TeamMem（截断）</text>
+
+<!-- B8 hooks + 遥测 -->
+<rect x="250" y="1448" width="300" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1477" class="n-title">触发加载钩子与遥测</text>
+<text x="400" y="1501" class="n-sub">InstructionsLoaded 不等待</text>
+<text x="400" y="1521" class="n-sub">首次加载记一次遥测</text>
+
+<!-- B9 实验门过滤 -->
+<rect x="250" y="1560" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1589" class="n-title">实验门过滤记忆</text>
+<text x="400" y="1613" class="n-sub">moth_copse：滤掉记忆入口</text>
+
+<!-- B10 格式化 -->
+<rect x="250" y="1658" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1687" class="n-title">格式化拼接成 claudeMd</text>
+<text x="400" y="1711" class="n-sub">getClaudeMds·前缀+逐文件</text>
+
+<!-- 结束 -->
+<rect x="270" y="1748" width="260" height="58" rx="29" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1773" class="n-title">userContext 定型（含日期）</text>
+<text x="400" y="1794" class="n-sub">注入 project-instructions 消息</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 禁用旁路 -->
+<rect x="640" y="120" width="370" height="64" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="145" class="n-title">跳过全部 CLAUDE.md 发现</text>
+<text x="825" y="169" class="n-body">claudeMd 置空，只保留当前日期</text>
+
+<!-- R2 @include 递归 -->
+<rect x="650" y="778" width="360" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="806" class="n-title">@include 递归展开</text>
+<text x="830" y="830" class="n-body">读到 @path、@~/… 引用时</text>
+<text x="830" y="850" class="n-body">递归读取；processedPaths 防环</text>
+<text x="830" y="870" class="n-body">深度≤5；外部引用默认丢弃</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="20" y="700" width="220" height="110" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="728" class="n-title">顺序即优先级</text>
+<text x="130" y="752" class="n-body">Managed 最先，记忆入口</text>
+<text x="130" y="772" class="n-body">最后；同一层级内靠近</text>
+<text x="130" y="792" class="n-body">cwd 的文件最后加载</text>
+
+<rect x="20" y="940" width="220" height="120" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="968" class="n-title">读不到就静默跳过</text>
+<text x="130" y="992" class="n-body">ENOENT / EISDIR 属预期</text>
+<text x="130" y="1012" class="n-body">无权限：只记遥测不打断</text>
+<text x="130" y="1032" class="n-body">worktree 嵌套时去重防重</text>
+
+<rect x="20" y="1560" width="220" height="120" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1588" class="n-title">结果整个会话定型</text>
+<text x="130" y="1612" class="n-body">memoize 缓存，磁盘后续</text>
+<text x="130" y="1632" class="n-body">改动不再生效；/clear、</text>
+<text x="130" y="1652" class="n-body">compact 等才清缓存重走</text>
+
+<!-- ===== 汇合点 ===== -->
+<circle cx="400" cy="652" r="4" fill="#6B7280"/>
+<circle cx="400" cy="898" r="4" fill="#6B7280"/>
+<circle cx="400" cy="1150" r="4" fill="#6B7280"/>
+<circle cx="400" cy="1408" r="4" fill="#6B7280"/>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,109" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,155 L634,161" marker-end="url(#ah)"/>
+<text x="560" y="148" class="elab">是</text>
+
+<path class="edge" d="M400,197 L400,231" marker-end="url(#ah)"/>
+<text x="410" y="220" class="elab">否</text>
+
+<path class="edge" d="M400,305 L400,329" marker-end="url(#ah)"/>
+<path class="edge" d="M400,403 L400,427" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,515 L400,549" marker-end="url(#ah)"/>
+<text x="410" y="538" class="elab">是</text>
+
+<!-- D2 否：跳过用户级，汇合于 B3 与 B4 之间 -->
+<path class="edge" d="M520,473 L560,473 L560,652 L408,652" marker-end="url(#ah)"/>
+<text x="545" y="465" class="elab">否</text>
+
+<path class="edge" d="M400,623 L400,686" marker-end="url(#ah)"/>
+<path class="edge" d="M400,760 L400,784" marker-end="url(#ah)"/>
+
+<!-- B5 → @include 递归 -->
+<path class="edge" d="M550,810 L646,810" marker-end="url(#ah)"/>
+<text x="598" y="798" class="elab">文件含引用时</text>
+
+<!-- R2 自回环（递归） -->
+<path class="edge" d="M830,778 L830,756 L930,756 L930,774" marker-end="url(#ah)"/>
+<text x="880" y="748" class="elab">嵌套引用递归</text>
+
+<!-- R2 结果汇回主干 -->
+<path class="edge" d="M830,878 L830,898 L408,898" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,868 L400,926" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1014 L400,1048" marker-end="url(#ah)"/>
+<text x="410" y="1037" class="elab">是</text>
+
+<!-- D3 否：跳过附加目录 -->
+<path class="edge" d="M520,972 L560,972 L560,1150 L408,1150" marker-end="url(#ah)"/>
+<text x="545" y="964" class="elab">否</text>
+
+<path class="edge" d="M400,1122 L400,1186" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1274 L400,1308" marker-end="url(#ah)"/>
+<text x="410" y="1297" class="elab">是</text>
+
+<!-- D4 否：跳过记忆入口 -->
+<path class="edge" d="M520,1232 L560,1232 L560,1408 L408,1408" marker-end="url(#ah)"/>
+<text x="545" y="1224" class="elab">否</text>
+
+<path class="edge" d="M400,1380 L400,1444" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1528 L400,1556" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1630 L400,1654" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1728 L400,1744" marker-end="url(#ah)"/>
+
+<!-- R1 旁路：一路贴右缘下行，直达终点 -->
+<path class="edge" d="M1010,152 L1030,152 L1030,1777 L532,1777" marker-end="url(#ah)"/>
+
+<!-- 左侧旁注虚线指引 -->
+<path class="edash" d="M240,758 L246,760" marker-end="url(#ahd)"/>
+<path class="edash" d="M130,940 L130,882 L246,882" marker-end="url(#ahd)"/>
+<path class="edash" d="M240,1620 L246,1622" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 递归展开</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>触发与落点：getUserContext（src/context.ts:155，memoize 化）由 queryContext.fetchSystemPromptParts 与 defaultSystemPrompt / systemContext 三件套并行调用（REPL.tsx:3470-3485、QueryEngine.ts:298-310）。产出的 claudeMd 之后由 utils/api.ts 的 prependUserContext 渲染为消息数组最前的 &lt;project-instructions&gt; isMeta user 消息（每轮请求前置），currentDate 等其余字段走 &lt;system-reminder&gt; 注入。</li>
+<li>禁用判定（context.ts:162-168）：环境变量 CLAUDE_CODE_DISABLE_CLAUDE_MDS 硬关；--bare 且无 --add-dir 时跳过自动发现但尊重显式 --add-dir（"skip what I didn't ask for, not ignore what I asked for"）。</li>
+<li>加载顺序（claudemd.ts:2-26 文件头注释）：Managed（如 /etc/claude-code/CLAUDE.md，策略级总是加载）→ User（~/.claude/CLAUDE.md 与 ~/.claude/rules/*.md，需 userSettings 开启，User 类型始终允许外部 include）→ Project（root→cwd 逐目录的 CLAUDE.md、.claude/CLAUDE.md、.claude/rules/*.md，需 projectSettings）→ Local（CLAUDE.local.md，需 localSettings）→ --add-dir 附加目录（env CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD 门控，默认关；SDK 默认 settingSources=[] 时也照读，因属用户显式动作，:935-976）→ AutoMem MEMORY.md 入口（isAutoMemoryEnabled）与 TeamMem 入口（feature('TEAMMEM')，:978-1006）。越晚加载优先级越高（模型更关注）。</li>
+<li>@include 递归（claudemd.ts:617-684）：支持 @path、@./relative、@~/home、@/absolute 四种写法，仅在叶子文本节点生效（代码块/代码字符串内不解析）；processedPaths 以归一化路径 + 符号链接解析结果双登记防环防重（:628-647，兼容 Windows 盘符大小写）；深度上限 5（:536）；外部引用（不在 originalCwd 内）默认丢弃，Project 需 hasClaudeMdExternalIncludesApproved 配置批准或 forceIncludeExternal，User 始终允许（:665-669、:797-800）。</li>
+<li>内容清洗（:342-399，parseMemoryFileContent 纯函数）：非文本扩展名直接跳过（防二进制入上下文，TEXT_FILE_EXTENSIONS 白名单）；frontmatter 剥离并提取 globs（条件规则字段）；HTML 块注释剥离（marked lexer，gfm:false）；AutoMem/TeamMem 入口截断（truncateEntrypointContent，200 行/25KB）；contentDiffersFromDisk 与 rawContent 记录清洗后与磁盘原文的差异。数据单元 MemoryFileInfo{path,type,content,parent?,globs?,contentDiffersFromDisk?,rawContent?}——@include 递归给 parent 字段指向包含者。</li>
+<li>失败面：ENOENT / EISDIR 静默跳过（:401-415，文件不存在属预期）；EACCES 记 tengu_claude_md_permission_error 遥测不抛错（:408-414）；嵌套 worktree（.claude/worktrees/<name>）向上走同时穿过 worktree 根与主仓根，主仓目录的 Project 文件被跳过去重、CLAUDE.local.md 因 gitignore 只存在于主仓仍加载（:858-883）；tengu_paper_halyard gate 开启时 getClaudeMds 直接丢弃 Project/Local（:1157-1165）。中断后 memoize 为空则下轮全量重走目录，天然可恢复。</li>
+<li>考据注记（文档与代码矛盾）：文件头注释（:23）称"被含文件作为独立条目排在包含者之前"，代码实际先 push 主文件、include 随后（:660-681 "parent before children"），以代码为准。</li>
+<li>hooks 与遥测：首次加载记一次 tengu_claudemd__initial_load 遥测（:1024-1039）；InstructionsLoaded hooks fire-and-forget，逐文件触发（AutoMem/TeamMem 被有意排除——它们是独立记忆体系不算 instructions），parent 文件报 reason 'include'（:1041-1070）；nextEagerLoadReason / shouldFireHook 一次性标志使 compact 后重载报 'compact' 而非 'session_start'（:1087-1107）。</li>
+<li>缓存语义：getMemoryFiles 与 getUserContext 双层 memoize，会话内定型——磁盘上的 CLAUDE.md 中途修改不生效（陈旧即部分状态）；/clear（resetGetMemoryFilesCache）、compact（postCompactCleanup.ts:63-72，同时清 getUserContext 外层缓存，否则内层缓存清了也永远轮不到重走、hook 永不触发）、/memory、settingsSync、sessionRestore 清缓存；worktree 进出等只为正确性的失效走 clearMemoryFileCaches（不触发 hook）。</li>
+<li>moth_copse 门（:1141-1150，本 fork GrowthBook 本地默认开）：开启时 filterInjectedMemoryFiles 把 AutoMem/TeamMem 从 claudeMd 滤除，记忆内容改经 relevant_memories 预取按需浮现——索引与召回双通道的组合语义无运行时验证（考据不确定点：若预取又失败，模型整轮看不到任何记忆内容）。</li>
+<li>副产物：setCachedClaudeMdContent（context.ts:176 → bootstrap/state.ts:1185-1190）把 claudeMd 文本另存进模块级 STATE，供 yoloClassifier 免循环依赖读取。</li>
+<li>证据来源：src/context.ts:155-189、src/utils/claudemd.ts:2-26、:342-415、:536、:617-684、:789-1074、:1087-1150、:1152-1194、src/bootstrap/state.ts:1185-1190、src/services/compact/postCompactCleanup.ts:63-72；后续落点（prependUserContext → &lt;project-instructions&gt;）见 src/utils/api.ts:317-485。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>16-mcp-lifecycle · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：MCP 服务器生命周期</h1>
+<p class="sub">16-mcp-lifecycle · 组成模块与调用关系</p>
+<p class="lead">「把外部工具服务器接进对话」由这些模块协作完成：两条入口（界面自动启动 + 管理命令）→ 五处配置聚合成一份清单 → 编排核心逐台连接（需登录的走右侧分支）→ 拉到的工具、命令、技能注入注册表，落入全局状态仓库供界面与模型回合使用。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 760" width="1040" height="760" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行 1：两条入口 -->
+<rect x="60" y="40" width="240" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="180" y="66" class="n-title">管理与诊断命令</text>
+<text x="180" y="88" class="n-sub">claude mcp 命令组 · /mcp 面板</text>
+<text x="180" y="108" class="n-body">增删服务器配置 · 健康检查与重连</text>
+
+<rect x="390" y="40" width="260" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="66" class="n-title">界面启动入口</text>
+<text x="520" y="88" class="n-sub">会话界面挂载时自动启动</text>
+<text x="520" y="108" class="n-body">界面一开即接管全部连接并常驻</text>
+
+<!-- 外部组件：REPL 界面 -->
+<rect x="760" y="52" width="200" height="40" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="860" y="70" class="n-body">REPL 交互界面</text>
+<text x="860" y="87" class="n-sub">组件 14</text>
+
+<!-- 行 2：配置聚合（支撑） + 编排核心 -->
+<rect x="60" y="170" width="250" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="200" class="n-title">配置聚合</text>
+<text x="185" y="222" class="n-sub">config.ts</text>
+<text x="185" y="244" class="n-body">五处来源合并成一份服务器清单</text>
+<text x="185" y="266" class="n-body">优先级：本地>项目>个人>插件</text>
+
+<rect x="350" y="170" width="380" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="540" y="204" class="n-title">连接编排核心</text>
+<text x="540" y="228" class="n-sub">useManageMCPConnections.ts</text>
+<text x="540" y="252" class="n-body">分批并发连接所有服务器，结果批量写入状态</text>
+<text x="540" y="274" class="n-body">断线退避重连 · 服务器报告变更时增量刷新</text>
+
+<!-- 旁路：协议客户端库包 -->
+<rect x="770" y="178" width="210" height="76" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="875" y="206" class="n-title">协议客户端库包</text>
+<text x="875" y="228" class="n-sub">packages/mcp-client</text>
+<text x="875" y="250" class="n-body">完整协议库，主流程未接线</text>
+
+<!-- 行 3：单台连接执行 + 鉴权分支 -->
+<rect x="350" y="300" width="380" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="540" y="332" class="n-title">单台服务器连接执行</text>
+<text x="540" y="356" class="n-sub">client.ts</text>
+<text x="540" y="378" class="n-body">按配置选通道：子进程 · 网络长连接 · 内置直连</text>
+<text x="540" y="400" class="n-body">协商能力后并发拉取工具、命令、资源清单</text>
+
+<rect x="770" y="300" width="210" height="104" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="332" class="n-title">鉴权与登录分支</text>
+<text x="875" y="356" class="n-sub">auth.ts</text>
+<text x="875" y="378" class="n-body">远程服务器需登录时接管</text>
+<text x="875" y="400" class="n-body">补登录后重试连接</text>
+
+<!-- 外部组件：插件体系 -->
+<rect x="60" y="308" width="200" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="160" y="326" class="n-body">插件体系</text>
+<text x="160" y="344" class="n-sub">组件 18</text>
+
+<!-- 行 4：两类注入 -->
+<rect x="140" y="460" width="300" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="290" y="490" class="n-title">远程工具注入</text>
+<text x="290" y="512" class="n-sub">tools.ts</text>
+<text x="290" y="534" class="n-body">服务器工具包装成统一工具对象</text>
+<text x="290" y="556" class="n-body">与内置工具合并进模型工具池</text>
+
+<rect x="500" y="460" width="300" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="650" y="490" class="n-title">命令与技能注入</text>
+<text x="650" y="512" class="n-sub">mcpSkills.ts</text>
+<text x="650" y="534" class="n-body">服务器提示词注册为斜杠命令</text>
+<text x="650" y="556" class="n-body">技能资源注册为可调用技能</text>
+
+<!-- 底座：全局状态仓库 -->
+<rect x="60" y="590" width="920" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="618" class="n-title">全局状态仓库（上方写入 · 界面与回合读取）</text>
+<text x="520" y="642" class="n-sub">每台服务器一条连接状态：连接中 · 已连接 · 失败 · 待登录 · 已停用</text>
+
+<!-- 外部组件：模型回合 -->
+<rect x="470" y="686" width="200" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="570" y="704" class="n-body">模型回合</text>
+<text x="570" y="722" class="n-sub">组件 02</text>
+
+<!-- 连线 -->
+<path class="edash" d="M760,72 L655,72" marker-end="url(#ahd)"/>
+<path class="edge" d="M150,116 L150,166" marker-end="url(#ah)"/>
+<path class="edge" d="M520,116 L520,166" marker-end="url(#ah)"/>
+<path class="edge" d="M310,212 L342,212" marker-end="url(#ah)"/>
+<path class="edge" d="M540,280 L540,296" marker-end="url(#ah)"/>
+<path class="edge" d="M730,342 L762,342" marker-end="url(#ah)"/>
+<path class="edge" d="M430,404 L430,432 L290,432 L290,454" marker-end="url(#ah)"/>
+<path class="edge" d="M650,404 L650,454" marker-end="url(#ah)"/>
+<path class="edge" d="M290,560 L290,584" marker-end="url(#ah)"/>
+<path class="edge" d="M650,560 L650,584" marker-end="url(#ah)"/>
+<path class="edash" d="M570,650 L570,680" marker-end="url(#ahd)"/>
+<path class="edash" d="M160,308 L160,282" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（服务器要求登录时）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁路实现 / 外部组件（虚线箭头 = 跨组件引用）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（仓库 C:/Users/naie/Desktop/claude-code，均为实测行号）：
+  <ul>
+  <li>界面挂载：src/screens/REPL.tsx:5889（连接管理组件包裹整个界面树，重挂键控制重建）。</li>
+  <li>状态批量写入：src/services/mcp/useManageMCPConnections.ts:203-215（16ms 批量合并写状态）；断线退避重连：同文件 :371-464（最多 5 次，1s→30s）；服务器推送变更的增量刷新：同文件 :612-745。</li>
+  <li>配置聚合：src/services/mcp/config.ts:1231（合并顺序 plugin &lt; user &lt; project &lt; local）；企业配置独占：同文件 :650-653；启用/禁用落盘 setMcpServerEnabled：同文件 :1534-1580。</li>
+  <li>通道选择：src/services/mcp/client.ts:959（stdio 子进程）、:674 与 :703（SSE 长连接）、:822 一带（Streamable HTTP）、:735/:784（WebSocket）、:918-948（内置直连 createLinkedTransportPair，Chrome 与 Computer Use 走此路）；未授权（401）共享处理：同文件 :337-354，转入「待登录」态并注入登录工具。</li>
+  <li>工具注入：src/tools.ts:378-400（工具池装配：内置工具拼接 + 按服务器前缀的拒绝清单过滤 + 缓存稳定排序）；src/hooks/useMergedTools.ts:19-29（REPL 与子代理共用同一装配函数）。</li>
+  <li>命令与技能：src/hooks/useMergedCommands.ts:5-15（按名去重，内置优先）；src/skills/mcpSkills.ts:30 起（资源清单中 skill:// 资源转技能，特性开关门控）。</li>
+  <li>CLI 命令组：src/main.tsx:4614-4618（mcp 命令组：serve/add/remove/list/get/add-json/add-from-claude-desktop/reset-project-choices）；REPL 内面板 src/commands/mcp/mcp.tsx（手动重连/启停）。</li>
+  <li>五态定义：src/services/mcp/types.ts:248（connected/failed/needs-auth/pending/disabled，即底座注释里的 连接中/已连接/失败/待登录/已停用）。</li>
+  <li>协议库包边界：src/services/mcp/client.ts:123-127（主 CLI 仅从 @claude-code-best/mcp-client 导入 3 个符号：会话过期判定、描述长度上限、Unicode 清洗）。</li>
+  </ul>
+</li>
+<li>考据注记（省略与合并，如实说明）：
+  <ul>
+  <li>本组件证据共 7 个 MCP 相关模块，图中「连接编排核心」与「单台服务器连接执行」按职责拆为两盒（前者管批量/状态/重连，后者管单台传输与拉取），同属 mcp-connection-orchestrator。</li>
+  <li>「管理与诊断命令」对编排核心的直接调用（list/get 健康检查复用同一连接函数、/mcp 面板的手动重连与启停）为避免连线交叉未单独画箭头，实际存在。</li>
+  <li>工具被调用时的放行/拦截不在本组件内：工具对象自带的权限检查是空操作，真正判定在权限子系统（组件 09）按「服务器名前缀」规则进行，故未画引用盒。</li>
+  <li>协议客户端库包（packages/mcp-client）是完整协议实现（含连接管理器、工具发现/执行），但主 CLI 未接线——连接逻辑在 src/services/mcp/client.ts（约 3400 行）独立实现了一遍，判断为反编译产物「包抽取未完成/双轨并存」，图中以虚线旁路表示，仅 3 个符号被借用。</li>
+  <li>合并进「鉴权与登录分支」或省略的次要模块：claude.ai 连接器拉取（config.ts 的 Phase2 去重）、XAA IdP 登录、本地 OAuth 回调端口、通知通道（channelNotification/channelPermissions，KAIROS 特性）、elicitation 问答闭环、环境变量展开与官方注册表预取。</li>
+  <li>状态仓库的写入方除两个注入模块外还有编排核心本身（连接状态条目由它批量写入）；读取方除模型回合外还有 /mcp 面板与无头 print 模式（cli/print.ts:1503 同函数装配工具池）。</li>
+  <li>hooks 管道（组件 17）与 slash/技能/插件（组件 18）的架构另见各自页面，本图不展开。</li>
+  </ul>
+</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

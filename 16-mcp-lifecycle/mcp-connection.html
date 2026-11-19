@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>16-mcp-lifecycle · MCP 服务器连接生命周期</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>MCP 服务器连接生命周期</h1>
+<p class="sub">组件 16-mcp-lifecycle · MCP / Hooks / 技能与命令</p>
+<p class="lead">从「REPL 挂载连接管理器」到「远程工具进入模型工具池」：配置聚合 → 分批并发连接 → 握手竞速 → 四类清单拉取 → 批量写回 → 长驻监听。每台服务器独立成败，一台失败不拖累其他。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1580" width="1040" height="1580" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="30" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="55" class="n-title">REPL 挂载 MCP 管理器</text>
+
+<!-- T2 配置聚合 -->
+<rect x="250" y="106" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="133" class="n-title">聚合各来源配置</text>
+<text x="400" y="152" class="n-sub">config.ts · 企业配置独占</text>
+<text x="400" y="170" class="n-sub">插件＜用户＜项目＜本地</text>
+
+<!-- T3 预写 pending -->
+<rect x="250" y="212" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="239" class="n-title">全部预写为连接中</text>
+<text x="400" y="258" class="n-sub">AppState 先占位 pending</text>
+<text x="400" y="276" class="n-sub">会话或插件重载会重跑</text>
+
+<!-- D1 禁用判定 -->
+<polygon points="400,318 520,364 400,410 280,364" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="361" class="n-title">服务器被禁用?</text>
+<text x="400" y="381" class="n-sub">看磁盘启用开关</text>
+
+<!-- T4 分批并发 -->
+<rect x="250" y="440" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="467" class="n-title">按远近分两批并发</text>
+<text x="400" y="486" class="n-sub">本地子进程低并发</text>
+<text x="400" y="504" class="n-sub">远程网络高并发连接</text>
+
+<!-- T6 传输通道 -->
+<rect x="250" y="546" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="573" class="n-title">创建传输通道</text>
+<text x="400" y="592" class="n-sub">stdio 子进程 · SSE/HTTP/WS</text>
+<text x="400" y="610" class="n-sub">特殊服务器走进程内通道</text>
+
+<!-- T7 握手 -->
+<rect x="250" y="652" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="679" class="n-title">握手并竞速超时</text>
+<text x="400" y="698" class="n-sub">Client.connect 与超时赛跑</text>
+<text x="400" y="716" class="n-sub">读回能力清单与说明</text>
+
+<!-- D2 连接成功判定 -->
+<polygon points="400,758 520,804 400,850 280,804" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="801" class="n-title">连接成功?</text>
+<text x="400" y="821" class="n-sub">失败或超时走右侧</text>
+
+<!-- T9 拉取清单 -->
+<rect x="250" y="880" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="907" class="n-title">并发拉取四类清单</text>
+<text x="400" y="926" class="n-sub">tools / prompts / resources</text>
+<text x="400" y="944" class="n-sub">以及 skill:// 技能资源</text>
+
+<!-- T11 包装 -->
+<rect x="250" y="986" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1013" class="n-title">包装成内部格式</text>
+<text x="400" y="1032" class="n-sub">工具名加 mcp__ 前缀</text>
+<text x="400" y="1050" class="n-sub">命令变为同名斜杠命令</text>
+
+<!-- 汇合点 -->
+<circle cx="400" cy="1160" r="4" fill="#6B7280"/>
+
+<!-- T12 批量写回 -->
+<rect x="250" y="1180" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1207" class="n-title">批量写回应用状态</text>
+<text x="400" y="1226" class="n-sub">16ms 合并刷新 · 按服务器替换</text>
+<text x="400" y="1244" class="n-sub">失败或禁用则清空其工具</text>
+
+<!-- T13 工具池 -->
+<rect x="250" y="1286" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1313" class="n-title">并入全局工具池</text>
+<text x="400" y="1332" class="n-sub">与内置工具去重合并</text>
+<text x="400" y="1350" class="n-sub">命令并入斜杠命令表</text>
+
+<!-- T14 长驻监听 -->
+<rect x="250" y="1392" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1419" class="n-title">注册长驻监听</text>
+<text x="400" y="1438" class="n-sub">断线自动重连 · 变更即刷新</text>
+<text x="400" y="1456" class="n-sub">服务器可随时通知更新</text>
+
+<!-- 结束 -->
+<rect x="270" y="1506" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1531" class="n-title">长驻服务至会话结束</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 禁用 -->
+<rect x="640" y="334" width="300" height="62" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="790" y="361" class="n-title">落为禁用状态</text>
+<text x="790" y="383" class="n-body">不发起连接，工具为空</text>
+
+<!-- D3 401 判定 -->
+<polygon points="770,790 880,835 770,880 660,835" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="770" y="832" class="n-title">返回 401?</text>
+<text x="770" y="852" class="n-sub">远程鉴权失败</text>
+
+<!-- R2 需登录 -->
+<rect x="640" y="916" width="290" height="62" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="785" y="943" class="n-title">落为需登录状态</text>
+<text x="785" y="965" class="n-body">附带一个登录引导工具</text>
+
+<!-- R3 失败 -->
+<rect x="640" y="1084" width="290" height="62" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="785" y="1111" class="n-title">落为失败状态</text>
+<text x="785" y="1133" class="n-body">该服务器工具清空，可 /mcp 重连</text>
+
+<!-- 落态汇流干线（三种落态统一写回） -->
+<text x="668" y="1032" class="elab">落态统一写回状态表</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="120" width="180" height="92" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="120" y="146" class="n-title">两阶段加载</text>
+<text x="120" y="170" class="n-body">本地配置先连，不等</text>
+<text x="120" y="188" class="n-body">claude.ai 连接器</text>
+<text x="120" y="206" class="n-body">到货后再补一批</text>
+
+<rect x="30" y="660" width="180" height="92" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="120" y="686" class="n-title">连接结果有缓存</text>
+<text x="120" y="710" class="n-body">握手与拉取的答案</text>
+<text x="120" y="728" class="n-body">都会被记住，重挂</text>
+<text x="120" y="746" class="n-body">时不必重复请求</text>
+
+<rect x="30" y="1196" width="180" height="92" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="120" y="1222" class="n-title">失败彼此隔离</text>
+<text x="120" y="1246" class="n-body">每台服务器是</text>
+<text x="120" y="1264" class="n-body">独立单元，一台</text>
+<text x="120" y="1282" class="n-body">失败不拖累其他</text>
+
+<!-- ===== 回边（循环）标注 -->
+<text x="75" y="556" class="elab">断线自动重连</text>
+<text x="75" y="574" class="elab">退避1s→30s，至多5次</text>
+<text x="75" y="940" class="elab">清单变更，重拉该服务器</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,68 L400,102" marker-end="url(#ah)"/>
+<path class="edge" d="M400,182 L400,208" marker-end="url(#ah)"/>
+<path class="edge" d="M400,288 L400,314" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,364 L636,360" marker-end="url(#ah)"/>
+<text x="566" y="352" class="elab">是</text>
+<path class="edge" d="M400,410 L400,436" marker-end="url(#ah)"/>
+<text x="410" y="429" class="elab">否</text>
+
+<path class="edge" d="M400,516 L400,542" marker-end="url(#ah)"/>
+<path class="edge" d="M400,622 L400,648" marker-end="url(#ah)"/>
+<path class="edge" d="M400,728 L400,754" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,804 L656,830" marker-end="url(#ah)"/>
+<text x="566" y="795" class="elab">否</text>
+<path class="edge" d="M400,850 L400,876" marker-end="url(#ah)"/>
+<text x="410" y="867" class="elab">是</text>
+
+<path class="edge" d="M400,956 L400,982" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1062 L400,1176" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1256 L400,1282" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1362 L400,1388" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1468 L400,1502" marker-end="url(#ah)"/>
+
+<!-- 右侧分支连线 -->
+<path class="edge" d="M770,880 L770,912" marker-end="url(#ah)"/>
+<text x="780" y="900" class="elab">是</text>
+<path class="edge" d="M880,835 L960,835 L960,1080 L790,1080" marker-end="url(#ah)"/>
+<text x="912" y="826" class="elab">否</text>
+
+<!-- 三种落态汇入干线（无箭头，汇入共享干线） -->
+<path class="edge" d="M790,396 L790,420 L604,420"/>
+<path class="edge" d="M785,978 L785,998 L604,998"/>
+<path class="edge" d="M785,1146 L785,1156 L604,1156"/>
+<!-- 干线入汇合点 -->
+<path class="edge" d="M600,420 L600,1160 L412,1160" marker-end="url(#ah)"/>
+
+<!-- 回边：断线重连（回 T6）与清单变更（回 T9） -->
+<path class="edge" d="M250,1440 L20,1440 L20,590 L246,590" marker-end="url(#ah)"/>
+<path class="edge" d="M20,918 L246,918" marker-end="url(#ah)"/>
+
+<!-- 旁注虚线连接 -->
+<path class="edash" d="M210,164 L246,164" marker-end="url(#ahd)"/>
+<path class="edash" d="M210,700 L246,700" marker-end="url(#ahd)"/>
+<path class="edash" d="M210,1234 L246,1234" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/services/mcp/useManageMCPConnections.ts（挂载、16ms 批量写回、onclose 重连、list_changed 刷新）、src/services/mcp/config.ts（scope 合并与企业独占）、src/services/mcp/client.ts（transport 创建、连接超时竞速、四类清单拉取、本地/远程分批）、src/skills/mcpSkills.ts、src/hooks/useMergedTools.ts、src/tools.ts、src/hooks/useMergedCommands.ts、src/screens/REPL.tsx（MCPConnectionManager 挂载与工具合并）。</li>
+<li>考据注记：实际链路 9 个站点，本图展开为 14 个主干节点；enterprise MCP 配置存在时独占全部服务器（其他 scope 全被忽略），图中以「企业配置独占」一行带过；.mcp.json 项目级配置需用户批准后才参与合并。</li>
+<li>禁用判定在代码中出现于三处而非一处：预写 pending 时（isMcpServerDisabled 直接把占位写成 disabled，useManageMCPConnections.ts:815-817）、发起连接前过滤 enabledConfigs（:885-887）、批处理入口再分区一次（client.ts:2253-2266）——本图合并为一个判定节点，置于分批之前以匹配首次判定位置。</li>
+<li>同一套装配逻辑也服务无头模式：print（-p）模式每台服务器连接完成后增量写入 headlessStore.mcp，最终同样经 assembleToolPool 组装工具池（cli/print.ts:1503 附近 buildAllTools），与 REPL 的 useMergedTools 共享这个纯函数。</li>
+<li>三种非成功落态（禁用 / 需登录 / 失败）与成功态走同一条 updateServer 批量写回通道：失败或禁用时该服务器的 tools/commands/resources 自动清空（useManageMCPConnections.ts:232-243），需登录时替换为一个 McpAuthTool 登录引导工具——这就是右下汇合点的含义。</li>
+<li>资源浏览工具（ListMcpResources / ReadMcpResource）只在第一个声明支持 resources 的服务器落态时挂载一次（client.ts:2372-2376），本图并入「并发拉取四类清单」节点。</li>
+<li>自动重连只覆盖远程传输（SSE/HTTP 等）：指数退避 1s→30s、至多 5 次（useManageMCPConnections.ts:88-90, 371-464）；stdio/SDK 断线直接落 failed，等 /mcp 手动重连。list_changed 通知只重拉该服务器自己的清单并作废对应缓存。</li>
+<li>claude.ai 连接器是第二阶段：与本地配置的连接并行发起拉取，配置到货后再补一批连接（useManageMCPConnections.ts:852-958 两阶段 effect）。</li>
+<li>packages/mcp-client 是完整的 MCP 协议客户端库，但主 CLI 运行时只从它导入 3 个符号（client.ts:123-127），连接逻辑在 src/services/mcp/client.ts（3400+ 行）里另行实现了一遍——反编译产物的双轨并存，未确证 createMcpManager 有外部消费者。</li>
+<li>KAIROS channel 推送、elicitation 请求队列、401 缓存跳连（15 分钟 TTL）等门控机制本图省略。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

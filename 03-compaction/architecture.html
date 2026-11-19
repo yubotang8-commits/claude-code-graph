@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>03-compaction · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：上下文压缩</h1>
+<p class="sub">03-compaction · 组成模块与调用关系</p>
+<p class="lead">「对话越滚越长、快超出模型上下文窗口了怎么办」由这组模块回答：主循环每轮发请求前先做轻量瘦身；水位逼近上限时由自动压缩触发器发起真正的摘要压缩——隔离子代理（或直连模型）把整段历史换写成一份摘要，对话从压缩边界处重新开始。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 810" width="1040" height="810" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 上游调用者（外部组件） -->
+<rect x="280" y="40" width="360" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="460" y="66" class="n-title">主回合循环（上游调用方）</text>
+<text x="460" y="88" class="n-sub">组件 02-query-turn-loop · 每轮发请求前先给上下文瘦身</text>
+
+<!-- 入口/编排层 -->
+<rect x="80" y="170" width="440" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="300" y="202" class="n-title">自动压缩触发器</text>
+<text x="300" y="224" class="n-sub">autoCompact.ts</text>
+<text x="300" y="248" class="n-body">盯着上下文水位：快满就发起压缩</text>
+<text x="300" y="270" class="n-body">压缩中的对话不重复压 · 连败三次熔断</text>
+
+<!-- 分支：微压缩 -->
+<rect x="620" y="170" width="330" height="104" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="785" y="202" class="n-title">微压缩 · 请求前的轻量瘦身</text>
+<text x="785" y="224" class="n-sub">microCompact.ts</text>
+<text x="785" y="248" class="n-body">把过期的工具结果内容清空</text>
+<text x="785" y="270" class="n-body">不生成摘要 · 开关默认关闭</text>
+
+<!-- 核心执行层 -->
+<rect x="80" y="310" width="440" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="300" y="344" class="n-title">对话压缩执行器</text>
+<text x="300" y="366" class="n-sub">compact.ts</text>
+<text x="300" y="390" class="n-body">把整段历史换写成一份摘要：</text>
+<text x="300" y="410" class="n-body">先跑用户钩子，再生成摘要文本，</text>
+<text x="300" y="430" class="n-body">重建附件与计划，打包成「压缩后消息」</text>
+
+<!-- 分支：急救压缩（默认未启用） -->
+<rect x="620" y="310" width="330" height="112" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8" stroke-dasharray="5,4"/>
+<text x="785" y="342" class="n-title">超限急救压缩</text>
+<text x="785" y="364" class="n-sub">reactiveCompact.ts · 默认构建未启用</text>
+<text x="785" y="388" class="n-body">请求因超长被拒时，扣住报错先压缩</text>
+<text x="785" y="410" class="n-body">救不回来才把错误亮给用户</text>
+
+<!-- 支撑：隔离子代理 -->
+<rect x="80" y="470" width="240" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="500" class="n-title">隔离子代理执行</text>
+<text x="200" y="522" class="n-sub">forkedAgent.ts</text>
+<text x="200" y="546" class="n-body">开一条分身对话跑摘要</text>
+<text x="200" y="566" class="n-body">复用主对话的缓存</text>
+
+<!-- 外部组件：模型请求 -->
+<rect x="370" y="470" width="250" height="100" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="495" y="500" class="n-title">模型流式请求</text>
+<text x="495" y="522" class="n-sub">组件 05-api-request</text>
+<text x="495" y="546" class="n-body">压缩的摘要请求从这里发出</text>
+
+<!-- 旁路：剪除重放（默认已禁用） -->
+<rect x="660" y="470" width="320" height="100" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="820" y="500" class="n-title">剪除重放</text>
+<text x="820" y="522" class="n-sub">snipCompact.ts · 默认已禁用</text>
+<text x="820" y="546" class="n-body">按「剪除标记」过滤已删的对话</text>
+<text x="820" y="566" class="n-body">防超长会话内存无限增长</text>
+
+<!-- 支撑：压缩后清理 -->
+<rect x="80" y="610" width="250" height="92" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="205" y="638" class="n-title">压缩后清理</text>
+<text x="205" y="660" class="n-sub">postCompactCleanup.ts</text>
+<text x="205" y="684" class="n-body">压缩成功后清空各类模块缓存</text>
+
+<!-- 共享底座 -->
+<rect x="60" y="730" width="950" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="535" y="754" class="n-title">压缩边界消息底座（压缩家族与主循环共用）</text>
+<text x="535" y="776" class="n-sub">messages.ts · 构造与识别压缩边界，压缩后的对话从边界处重新切片</text>
+
+<!-- 连线 -->
+<path class="edge" d="M330,104 L330,138 L300,138 L300,166" marker-end="url(#ah)"/>
+<path class="edge" d="M560,104 L560,132 L785,132 L785,166" marker-end="url(#ah)"/>
+<path class="edge" d="M640,76 L975,76 L975,285 L785,285 L785,306" marker-end="url(#ah)"/>
+<path class="edge" d="M640,56 L1005,56 L1005,438 L820,438 L820,466" marker-end="url(#ah)"/>
+<path class="edge" d="M300,274 L300,306" marker-end="url(#ah)"/>
+<path class="edge" d="M620,374 L524,374" marker-end="url(#ah)"/>
+<path class="edge" d="M180,438 L180,466" marker-end="url(#ah)"/>
+<path class="edash" d="M480,438 L480,466" marker-end="url(#ahd)"/>
+<path class="edge" d="M320,520 L366,520" marker-end="url(#ah)"/>
+<path class="edge" d="M80,222 L52,222 L52,658 L76,658" marker-end="url(#ah)"/>
+
+<!-- 连线标注 -->
+<text x="365" y="128" class="elab">水位快满时</text>
+<text x="672" y="126" class="elab">发请求前</text>
+<text x="880" y="299" class="elab">超长报错时</text>
+<text x="912" y="432" class="elab">每轮重放时</text>
+<text x="570" y="366" class="elab">复用同一套压缩</text>
+<text x="250" y="456" class="elab">优先走分身</text>
+<text x="560" y="460" class="elab">分身失败时直连</text>
+<text x="343" y="511" class="elab">嵌套</text>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（不生成摘要的上下文管理）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9;border-style:dashed"></i>分支路径 · 默认构建未启用</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>已停用路径 / 外部组件（标「组件 NN」）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（仅定位用，非图面内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（已抽查核对）：src/query.ts:567-624（每轮预请求裁剪链：工具结果预算→剪除→微压缩）、:651-741（自动压缩检查点与压缩后落效）、:826-888（预测性自动压缩）；src/services/compact/autoCompact.ts:270-380（开关门、连败熔断、会话记忆实验路径、清理调用）、:101-120（阈值＝有效窗口−缓冲）；src/services/compact/compact.ts:411-651（压缩主体：钩子→摘要→重建→组装）、:231 与 :474-515（摘要请求自身超长时截头重试，上限 3 次）、:455-459（分身路径复用主对话提示缓存）、:1280-1288（分身失败回退直连）；src/utils/forkedAgent.ts:52-105（与父对话共享缓存关键参数）；src/services/compact/microCompact.ts:257-297、timeBasedMCConfig.ts:30-43（默认 enabled:false、间隔 60 分钟、保留最近 5 条）；src/services/compact/reactiveCompact.ts:18-37（复用同一压缩执行器）、:39-60（扣留超长/媒体超限错误不外泄）；src/query.ts:17-18（REACTIVE_COMPACT 编译门控，默认构建中为 null）；src/services/compact/snipCompact.ts 与 snipProjection.ts；scripts/defines.ts:62-63（HISTORY_SNIP、CONTEXT_COLLAPSE 注释禁用）；src/services/compact/postCompactCleanup.ts:43-109（由 autoCompact.ts:326、355 调用）；src/utils/messages.ts:4970-4996（构造压缩边界消息）、:5083-5096（压缩后按边界切片）。</li>
+<li>考据注记（合并与省略）：压缩目录完整文件还包含 sessionMemoryCompact.ts（会话记忆压缩：保留近段对话、只压更早部分，autoCompact.ts:317-339 会先尝试，图中并入触发器）、prompt.ts（压缩提示词，并入压缩执行器）、cachedMicrocompact.ts 与 timeBasedMCConfig.ts（并入微压缩）、snipProjection.ts（并入剪除重放）、compactWarningHook.ts 与 compactWarningState.ts（「上下文将满」的用户提醒横幅）、apiMicrocompact.ts、grouping.ts（摘要分组）等，均未单独上图。</li>
+<li>默认构建的实际生效面与仓库自述文档存在分歧：scripts/defines.ts:62-63 将 HISTORY_SNIP（「snip 功能暂时关闭」）与 CONTEXT_COLLAPSE（空壳 stub）注释禁用；REACTIVE_COMPACT 与 CACHED_MICROCOMPACT 不在 DEFAULT_BUILD_FEATURES；时间触发微压缩的实验开关默认关闭（timeBasedMCConfig.ts:30-34）。即默认构建里真正会动作的只有自动压缩（含预测性触发）与阻塞上限检查——图中的紫色虚线框在默认构建中被编译剔除，灰色虚线框为空转。</li>
+<li>简化说明：隔离子代理实际经由「嵌套的主回合循环」（以压缩专用来源调用，避免递归压缩）再抵达模型请求，图面简化为直指组件 05；手动 /compact 命令（组件 14 的命令层）与无头侧编排器（组件 04）也会调用同一个对话压缩执行器，图面只画了主循环与急救两个调用来源；压缩结果由消费侧（界面/无头）整组替换消息数组并落盘（组件 22），属下游副作用，未画箭头。</li>
+<li>触发器内部还有一条递归守卫：压缩请求自身标明来源后，下一层不再触发自动压缩；用户按 ESC 中止压缩不计入熔断失败次数（autoCompact.ts:364-368）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

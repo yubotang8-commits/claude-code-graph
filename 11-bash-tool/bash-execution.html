@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BashTool 执行流播放器：权限判定 → 沙箱 → 执行 → 结果定型</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB; --blue-l:#9db9e6;
+  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
+  --green:#1baf7a; --green-f:#E6F5EF; --green-l:#8fcdaf;
+  --red:#d03b3b; --red-f:#fdf1f0; --red-l:#e3a2a2;
+  --good:#0ca30c; --ser:#ec835a;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1380px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+
+#ctl{position:sticky;top:0;z-index:30;margin:12px 0 10px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);padding:10px 6px 8px}
+#transport{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 4px}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f);color:var(--red)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:170px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subrow{display:flex;align-items:baseline;gap:10px;margin-top:8px;padding:6px 12px;background:var(--white);border:1px solid var(--hair);border-radius:10px;min-height:34px}
+#subrow .subtag{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 7px;letter-spacing:2px}
+#subtitle{font-size:13.5px;font-weight:600;color:var(--ink)}
+#subtitle.idle{font-weight:400;color:var(--mut)}
+#subtitle.fin{color:var(--good)}
+
+#stage{display:grid;grid-template-columns:232px 1fr 1fr 288px;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:648px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;transition:box-shadow .35s ease,opacity .35s ease,border-color .35s ease}
+.lane>.h{padding:9px 12px;font-size:14.5px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.6;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+#lane-model .h{border-top:3px solid var(--sec)}
+#lane-perm .h{border-top:3px solid var(--blue)}
+#lane-exec .h{border-top:3px solid var(--green)}
+#lane-os .h{border-top:3px solid var(--orange)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+#stage.spot .lane.dim{opacity:.5}
+#stage.spot .lane.hot{opacity:1}
+#lane-model.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.14)}
+#lane-perm.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#lane-exec.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#lane-os.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+
+@keyframes pop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
+.ent{border:1px solid var(--hair);background:var(--white);border-radius:9px;padding:7px 9px;animation:pop .3s ease;flex:0 0 auto}
+.ent .et{font-weight:700;font-size:12.5px}
+.ent .eb{font-size:12px;color:var(--sec);margin-top:3px;line-height:1.55}
+.ent .eb code{font-family:var(--mono);font-size:11.5px;background:rgba(255,255,255,.7);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+.ent.io{background:var(--blue-f);border-color:var(--blue-l)}
+.ent.d{background:var(--orange-f);border-color:var(--orange-l)}
+.ent.x{background:var(--green-f);border-color:var(--green-l)}
+.ent.warn{background:var(--red-f);border-color:var(--red-l)}
+.ent.e{background:#f4f4f2}
+.ent.good{background:var(--green-f);border-color:var(--green)}
+.ent.good .et{color:var(--good)}
+.ent.lost{opacity:.55;border-style:dashed;background:var(--page)}
+.ent.lost .et{color:var(--mut)}
+.ent.lost .eb{color:var(--mut)}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:180px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px;line-height:1.5}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:330px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08);background:var(--white);border:1.5px solid var(--line)}
+.flight.cmd{background:var(--blue-f);border-color:var(--blue)}
+.flight.allow{background:var(--green-f);border-color:var(--green);font-weight:700}
+.flight.spawn{background:var(--orange-f);border-color:var(--orange)}
+.flight.prog{background:#f4f4f2;border-color:var(--sec)}
+.flight.back{background:var(--green-f);border-color:var(--green);font-weight:700;padding:6px 13px}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:16px;font-size:11px;color:var(--mut)}
+#selftest-result{display:none;margin-top:14px;background:var(--white);border:1px solid var(--hair);border-radius:10px;padding:12px 16px;font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;color:var(--sec)}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>BashTool 执行流播放器：一条命令从「模型想要」到「结果定型」</h1>
+  <div class="sub">模型敲出 <b>tool_use</b> → <b>权限管道</b>（zod → 钩子 → tree-sitter AST → 规则 → 用户确认）→ <b>Bash 执行核心</b>（沙箱决策 · 前台进度循环 / 后台化分叉）→ <b>子进程与任务状态</b> → tool_result 回传 —— 副作用不原子：进程一旦拉起，中断也不回滚</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 轮 · 前台命令完整走一轮（rg 检索）</span>
+  <span class="p1" data-ph="1">第 2 轮 · 执行期分叉：后台化（npm run build）</span>
+</div>
+
+<div id="ctl">
+  <div id="transport">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-brk" class="danger" title="中断演示 (B)">⚡ 中断演示</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪</div>
+  </div>
+  <div id="subrow">
+    <span class="subtag">字幕</span>
+    <span id="subtitle" class="idle">就绪 · 点击 ▶ 播放</span>
+  </div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-model">
+    <div class="h" id="h-model">🧠 模型回合 <span class="tag">query.ts</span><small>产出 tool_use · 收 tool_result</small></div>
+    <div class="feed" id="feed-model"></div>
+    <div class="lane-foot"><b>进</b>：API 流里的 tool_use 块攒成 toolUseBlocks。<br><b>出</b>：tool_result 拼回消息历史，成为下一轮请求的输入。</div>
+  </div>
+  <div class="lane" id="lane-perm">
+    <div class="h" id="h-perm">🛂 权限管道 <span class="tag">toolExecution · bashPermissions</span><small>校验 → 钩子 → AST → 规则 → 用户</small></div>
+    <div class="feed" id="feed-perm"></div>
+    <div class="lane-foot">级联顺序：<b>deny 整工具 → ask 规则（沙箱快路径）→ 工具自检（AST → 语义 → 精确/前缀规则）→ 模式与 allow 规则 → 兜底问用户</b>。PreToolUse 钩子决策优先于常规流。</div>
+  </div>
+  <div class="lane" id="lane-exec">
+    <div class="h" id="h-exec">⚙️ Bash 执行核心 <span class="tag">BashTool.call · runShellCommand</span><small>沙箱 · 进度循环 · 结果定型</small></div>
+    <div class="feed" id="feed-exec"></div>
+    <div class="lane-foot">BashTool.call 只做三件事：<b>sed 预览直改 / 跑 runShellCommand / 把结果加工成模型能读的样子</b>。后台化有四个触发：显式 run_in_background、超时、15 秒阻塞预算、Ctrl+B。</div>
+  </div>
+  <div class="lane" id="lane-os">
+    <div class="h" id="h-os">🖥 子进程与任务状态 <span class="tag">exec · TaskOutput · AppState</span><small>bash -c · 输出文件 · 后台注册表</small></div>
+    <div class="feed" id="feed-os"></div>
+    <div class="lane-foot">子进程是<b>真的 bash</b>；输出先落盘再被轮询读回；后台任务进 AppState 注册表（可 kill）；大输出 / 图片由磁盘接管。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 中断现场<small>断点：spawn 之后（步骤 o1）——用户在子进程启动后按 ESC 中断；abort 信号全局可见</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>已定 / 不回滚</b><span>权限 allow 已定型；子进程已启动——磁盘副作用不随中断消失（恢复靠 fileHistory 快照 / git）</span></div>
+    <div class="brow"><span class="d" style="background:var(--ser)"></span><b>部分生效</b><span>输出文件已有部分输出；语义判读 / 沙箱违规标注 / cwd 回写 / 大输出落盘 均未执行</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>缺失</b><span>tool_result 以 is_error:true + 「Command was aborted before completion」收场，作为错误标记进入下一轮 messages</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>竞态对照</b><span>另一条边界：刚后台化、命令其实已完成 → 剥离 backgroundTaskId 按完成上报并补回输出文件路径（BashTool.tsx:1227-1243）</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">恢复 / 回退路径</div>
+    <ul>
+      <li>文件改动不回滚——靠文件历史快照 / git 恢复</li>
+      <li>后台任务注册在 AppState 注册表——agent 退出时连带 kill，不留孤儿进程</li>
+      <li>沙箱违规只标注输出、不中止——安全控制点在权限系统（用户排除名单也明示非安全边界）</li>
+    </ul>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue-l)"></span>数据在流动</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange-l)"></span>权限判定</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green-l)"></span>执行动作</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red-l)"></span>危险与修复</span>
+  <span class="k"><span class="sw" style="background:var(--page);border-color:var(--line);border-style:dashed"></span>中断后未到达</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--line)"></span>背景机制</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条逐段跳转 · R = 重置 · B = 中断演示 · 倍速 0.5–4×</div>
+<footer>依据 claude-code 仓库实读整理：BashTool.tsx · bashPermissions.ts · shouldUseSandbox.ts · permissions.ts · toolExecution.ts · commandSemantics.ts · timeouts.ts（第 2 轮是同一流水线的另一条出口，非循环）。考据注记：bashToolHasPermission 全函数约 900 行，本图呈现主干（AST → 语义 → 规则级联 → 沙箱快路径），中段规则级联细节有简化；Windows 沙箱后端实际能力未在仓库内验证。</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var LANES=['model','perm','exec','os'];
+var feeds={},lanes={},heads={};
+for(var i=0;i<LANES.length;i++){
+  feeds[LANES[i]]=$('feed-'+LANES[i]);
+  lanes[LANES[i]]=$('lane-'+LANES[i]);
+  heads[LANES[i]]=$('h-'+LANES[i]);
+}
+var flightsEl=$('flights'),barEl=$('bar'),subEl=$('subtitle'),readout=$('readout');
+var activeAnims=[];
+
+window.__errCount=0;
+window.onerror=function(){window.__errCount++;return false;};
+
+function el(cls,parent){var d=document.createElement('div');d.className=cls;if(parent)parent.appendChild(d);return d}
+function addEntry(lane,kind,title,body){
+  var d=el('ent '+kind,feeds[lane]);
+  var t=el('et',d);t.textContent=title;
+  var b=el('eb',d);b.textContent=body;
+  feeds[lane].scrollTop=feeds[lane].scrollHeight;
+  return d;
+}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function fly(from,to,label,cls,dur){
+  var a=lanes[from].getBoundingClientRect(),b=lanes[to].getBoundingClientRect(),h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div');f.className='flight '+cls;f.textContent=label;
+  var x0=a.left+a.width/2-h.left,y0=a.top+18-h.top,x1=b.left+b.width/2-h.left,y1=b.top+18-h.top;
+  f.style.left=x0+'px';f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i2=activeAnims.indexOf(an);if(i2>=0)activeAnims.splice(i2,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(to);
+}
+function setFocus(s){
+  var stage=$('stage');
+  for(var k=0;k<LANES.length;k++){lanes[LANES[k]].classList.remove('hot');lanes[LANES[k]].classList.remove('dim')}
+  if(!s){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  for(var j=0;j<LANES.length;j++){if(LANES[j]!==s.focus)lanes[LANES[j]].classList.add('dim')}
+}
+
+// ---------- steps ----------
+// st(id, 阶段ph, 泳道focus, 字幕lab, 条目{lane,k,t,b}, 飞行包[from,to,label,cls], 时长dur)
+function st(id,ph,focus,lab,ent,fl,dur){return {id:id,ph:ph,focus:focus,lab:lab,ent:ent,fl:fl||null,dur:dur||950}}
+
+var steps=[].concat(
+ // ── 第 1 轮：前台命令（rg 检索）完整走一轮 ──
+ st('m1',0,'model','模型产出 tool_use：rg -n TODO src/',
+   {lane:'model',k:'io',t:'🧠 tool_use · Bash',b:'模型在流式回复里敲出一个工具调用块：Bash{command: "rg -n \'TODO\' src/"}。此刻它只是模型输出的一段文本——你的机器上什么都还没发生。'}),
+ st('m2',0,'model','流结束，进入工具执行环节',
+   {lane:'model',k:'e',t:'stop_reason = tool_use',b:'API 流走完，回合循环把 tool_use 块收进 toolUseBlocks，标记「还需要善后」。该干活了。'}),
+ st('p1',0,'perm','执行引擎找到 BashTool',
+   {lane:'perm',k:'io',t:'runToolUse · findToolByName',b:'按名字在工具池里找 BashTool；找不到时回退全量列表做别名匹配，再找不到就合成一条错误 tool_result——不会碰你的机器。'},
+   ['model','perm','tool_use · Bash','cmd',700]),
+ st('p2',0,'perm','参数过 zod 校验',
+   {lane:'perm',k:'d',t:'zod safeParse',b:'输入过 schema：command 必须是字符串、timeout 是数字、run_in_background 是布尔。形状不对 → 立即合成错误 tool_result，连权限都不会问。'}),
+ st('p3',0,'perm','工具自定义校验（sleep 会被拦）',
+   {lane:'perm',k:'d',t:'validateInput · 阻塞命令拦截',b:'Bash 自带一道校验：裸跑 sleep 这类阻塞命令会被拦下，要求改用 run_in_background 或 Monitor 工具（提示「2 秒内的延迟才允许」）。rg 这条没触发。'}),
+ st('p4',0,'perm','防御性剥离内部字段',
+   {lane:'perm',k:'warn',t:'剥离 _simulatedSedEdit',b:'这个字段是权限系统专属（用户在 sed 预览里确认过才注入）。模型要是敢自己带上——直接扔掉，schema 层和这里各防一道。'}),
+ st('p5',0,'perm','PreToolUse 钩子先行',
+   {lane:'perm',k:'d',t:'PreToolUse hooks',b:'用户配置的钩子先跑一遍：可以改写输入（updatedInput）、直接放行 / 拒绝，或叫停整个工具调用（stop）。钩子决策优先于下面的常规级联。'}),
+ st('p6',0,'perm','级联 1a：整工具 deny 检查',
+   {lane:'perm',k:'d',t:'级联 1a · 整工具 deny',b:'settings / 策略里有没有把 Bash 整个拒掉的规则？没有 → 继续。有的话在这里就直接 deny 收场（合成 is_error tool_result）。'},null,800),
+ st('p7',0,'perm','级联 1b：ask 规则遇上沙箱快路径',
+   {lane:'perm',k:'d',t:'级联 1b · ask 规则 × 沙箱快路径',b:'整工具 ask 规则若存在，先看这条命令是否真的会进沙箱：沙箱可用 + 不在用户排除名单 + 没被显式禁用。会进沙箱 → 跳过 ask，交给后面的命令级规则（沙箱里的命令跑不出去，值得免打扰）。'}),
+ st('p8',0,'perm','tree-sitter 把命令拆成 AST',
+   {lane:'perm',k:'d',t:'bashToolHasPermission 第 0 步',b:'把命令解析成语法树：引号已还原、变量展开、命令替换看得一清二楚。rg 这条被判「干净命令」（simple），后续规则匹配可以信任分词结果。'}),
+ st('p9',0,'perm','AST 太复杂 → 升级为 ask',
+   {lane:'perm',k:'warn',t:'too-complex 会怎样',b:'如果命令里有 $(...)、控制流等静态分析不了的结构 → 判 too-complex：先照常查 deny 规则（deny 不能被降级），没有就升为 ask 交给用户。环境变量可关掉这层检查。'},null,1000),
+ st('p10',0,'perm','语义检查：eval / 内建命令',
+   {lane:'perm',k:'d',t:'checkSemantics',b:'分词没问题但名字就危险的：eval、zsh 内建命令等单独点名——它们能把字符串再变成命令执行。命中同样先查 deny，否则 ask。'},null,850),
+ st('p11',0,'perm','精确 / 前缀 / 通配符规则匹配',
+   {lane:'perm',k:'d',t:'checkCommandAndSuggestRules',b:'规则级匹配开始：先精确匹配整条命令，再按前缀 / 通配符匹配（Bash(rg:*) 这种写法），复合命令还会拆开逐段查。rg 没有命中任何规则。'}),
+ st('p12',0,'perm','无命中 → ask 并生成建议规则',
+   {lane:'perm',k:'d',t:'passthrough → ask + 建议',b:'级联走到头还没人拍板 → 转 ask。顺手生成「总是允许 rg:*」的前缀建议挂在对话框上，用户一键保存（保存后就成为下一轮第 11 步命中的规则）。'}),
+ st('p13',0,'perm','用户在对话框点了「允许」',
+   {lane:'perm',k:'d',t:'用户确认对话框',b:'REPL 渲染权限请求（队列首项）。auto 模式下还有个投机分类器在旁边赛跑：2 秒宽限内给出判定就不打扰用户。用户点了「允许」。'},null,1400),
+ st('p14',0,'perm','决策 allow，交给执行',
+   {lane:'perm',k:'io',t:'allow + updatedInput 定型',b:'决策收敛为 allow（钩子 / 权限流可以顺手改写输入）。「总是允许」的选项会写进 settings.json——分两步走，规则可能下一轮才生效。'},
+   ['perm','exec','allow · input','allow',700]),
+ st('e1',0,'exec','BashTool.call：走正路执行',
+   {lane:'exec',k:'x',t:'BashTool.call 入口',b:'若输入带 _simulatedSedEdit（用户刚在预览里确认过的 sed 改写）→ 直接改文件，不走 shell——所见即所写。rg 走正路：runShellCommand 生成器。'}),
+ st('e2',0,'exec','定型超时与沙箱决策',
+   {lane:'exec',k:'x',t:'沙箱与超时定型',b:'超时：默认 2 分钟（上限 10 分钟，可被 timeout 参数覆盖）。沙箱：shouldUseSandbox(input) 再判一次（平台开关、排除名单、显式禁用），连同命令一起交给 exec。'}),
+ st('o1',0,'os','拉起 bash 子进程，输出落盘',
+   {lane:'os',k:'x',t:'spawn bash -c',b:'子进程真的拉起来了。stdout / stderr 合并成一条流写进 TaskOutput 输出文件——先落盘，再轮询读回（UI 和模型看到的都来自这份磁盘文件）。'},
+   ['exec','os','spawn bash -c','spawn',720],1100),
+ st('e3',0,'exec','先等 2 秒：快命令不过进度循环',
+   {lane:'exec',k:'e',t:'2 秒起步等待',b:'先等 PROGRESS_THRESHOLD（2 秒）：跑得快的命令直接拿结果——不进进度循环、不注册任何任务、不显示进度条。rg 没跑完……'}),
+ st('o2',0,'os','轮询器开始每秒读输出文件',
+   {lane:'os',k:'e',t:'TaskOutput 每秒轮询',b:'轮询器每秒读一次输出文件，汇报新增行、总行数、字节数。进度数据全部来自磁盘上的真实输出——不是子进程内存。'}),
+ st('e4',0,'exec','进度循环：bash_progress 每秒一跳',
+   {lane:'exec',k:'x',t:'注册前台任务 + 进度流',b:'超过 2 秒：注册为前台任务（用户 Ctrl+B 可手动转后台），UI 显示进度条；每秒一条 bash_progress 事件（增量输出 + 已耗时 + 总行数）经 onProgress 驱动界面。'},
+   ['os','exec','bash_progress ×N','prog',650],1200),
+ st('e5',0,'exec','15 秒自动后台哨兵待命',
+   {lane:'exec',k:'e',t:'KAIROS 15 秒阻塞预算',b:'助手模式另挂一个 15 秒计时器：主线程阻塞太久就自动转后台，让 agent 去继续协调（命令照跑不丢状态）。本命令 8 秒就结束，哨兵没响。'}),
+ st('o3',0,'os','命令退出，ExecResult 定型',
+   {lane:'os',k:'x',t:'bash 退出 · ExecResult',b:'子进程退出，exit code + 完整输出定型成 ExecResult{code, stdout, interrupted}。输出文件仍在磁盘上——大输出的恢复入口。'},
+   ['os','exec','ExecResult','back',700],1000),
+ st('e6',0,'exec','语义判读：rg 的 exit 1 不算错',
+   {lane:'exec',k:'d',t:'interpretCommandResult',b:'按命令语义判错而不是裸 exit code：rg 退出 1 =「没有匹配到」不算错误；&& 串联的命令保守处理（说不清执行的是哪段就不猜）。'}),
+ st('e7',0,'exec','沙箱违规：标注，不中止',
+   {lane:'exec',k:'warn',t:'annotateStderrWithSandboxFailures',b:'子进程在沙箱里越界写文件的话，只在输出上追加标注说明——不中止。安全控制点在权限系统，不在这里（用户排除名单也明示不是安全边界）。'}),
+ st('e8',0,'exec','大输出落盘：路径 + 预览',
+   {lane:'exec',k:'io',t:'大输出 → tool-results 目录',b:'输出超限 → 复制进 tool-results 目录（超过 64MB 先截断），模型收到「文件路径 + 预览」而不是全文；图片输出也会被压缩。UI 永远只看 stdout 原文。'}),
+ st('e9',0,'exec','组装模型视角的 tool_result',
+   {lane:'exec',k:'io',t:'mapToolResultToToolResultBlockParam',b:'收尾组装：stdout 去空白行收边、被中断则 is_error + 「aborted before completion」、后台任务则附「运行中 + 输出路径」说明——一条给模型看的消息定型。'}),
+ st('m3',0,'model','tool_result 回传，模型作答',
+   {lane:'model',k:'io',t:'tool_result 进消息历史',b:'tool_result 拼进消息历史，成为下一轮 API 请求的一部分。模型看到 rg 的输出，开始组织最终回答——这就是「前台出口」。'},
+   ['exec','model','tool_result','back',800],1100),
+
+ // ── 第 2 轮：执行期分叉——后台化（简短） ──
+ st('m4',1,'model','第二轮：run_in_background 分叉',
+   {lane:'model',k:'io',t:'第二轮 · 另一条分叉',b:'模型这次要跑 npm run build（要几分钟），参数里带 run_in_background: true。注意字幕语义：这不是循环，是同一条流水线的另一条出口。'}),
+ st('p15',1,'perm','前缀规则命中，直接放行',
+   {lane:'perm',k:'io',t:'级联快速通过',b:'同一套权限级联：这次前缀规则 Bash(npm run:*) 命中 allow → 不弹对话框直接过。这条规则可能就来自用户上次的「总是允许」。'},null,900),
+ st('o4',1,'os','注册进后台任务表',
+   {lane:'os',k:'x',t:'spawnShellTask 注册',b:'子进程照常拉起，但任务立刻注册进 AppState 的后台任务注册表（走共享任务通道——异步 agent 退出时能连带 kill 它，不留孤儿进程）。'},
+   ['exec','os','spawn + 注册任务','spawn',700],1000),
+ st('e10',1,'exec','立即返回：后台运行回执',
+   {lane:'exec',k:'io',t:'立即返回 {code:0, backgroundTaskId}',b:'runShellCommand 不等结果，直接返回回执。模型马上拿到 tool_result：「命令后台运行中，输出写在 <路径>，完成后会通知你」——对话不用干等。'},
+   ['exec','model','tool_result（后台回执）','back',800],1100),
+ st('o5',1,'os','后台自转，完成后通知',
+   {lane:'os',k:'e',t:'LocalShellTask 接管',b:'轮询、资源清理、输出文件都交给 LocalShellTask 接管；真正完成时经 task_notification 通知模型——不占用当前回合的对话。'}),
+ st('e11',1,'exec','后台化与完成的竞态修复',
+   {lane:'exec',k:'warn',t:'竞态修复（1227-1243）',b:'边界情况：刚转后台、命令其实已经退出 → 剥离 backgroundTaskId、按「已完成」上报并补回输出文件路径——避免模型收到「既完成又后台运行」的自相矛盾结果。'},null,1000),
+ st('m5',1,'model','两条出口都走完',
+   {lane:'model',k:'good',t:'✓ 流程结束',b:'两条出口都走完：前台命令 = 结果定型回传；后台命令 = 先回执、后通知。Bash 执行流到此结束——副作用不原子：进程一旦拉起，中断 / 超时都不回滚，恢复靠文件快照。'},null,1200)
+);
+
+// ---------- engine ----------
+var idx=-1,playing=false,timer=null,speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  for(var k=0;k<LANES.length;k++)feeds[LANES[k]].innerHTML='';
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.ent)addEntry(s.ent.lane,s.ent.k,s.ent.t,s.ent.b);
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing)$('b-play').textContent='⏸ 暂停';
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){
+    readout.textContent='就绪';
+    subEl.textContent='就绪 · 点击 ▶ 播放';
+    subEl.className='idle';
+  }else if(idx>=n-1){
+    readout.innerHTML='<span class="fin">✓ 播放完毕</span>';
+    subEl.textContent='现在：'+steps[idx].lab+' —— 流程结束';
+    subEl.className='fin';
+  }else{
+    readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b>';
+    subEl.textContent='现在：'+steps[idx].lab;
+    subEl.className='';
+  }
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  applyStep(idx);
+  if(s.fl)try{fly(s.fl[0],s.fl[1],s.fl[2],s.fl[3],s.fl[4])}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;$('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- break demo（故障注入：副作用不原子） ----------
+var breakMode=false;
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='o1')return i}return 18})();
+function clearBreak(){breakMode=false;$('break-panel').classList.remove('on')}
+function exitBreak(){if(!breakMode)return;clearBreak();renderTo(idx)}
+function breakDemo(){
+  pause();clearBreak();breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    var s=steps[k];
+    if(s.ent)addEntry(s.ent.lane,'lost','未到达 · '+s.ent.t,s.ent.b);
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 中断现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意步骤恢复';
+  subEl.textContent='现在：⚡ 用户中断——子进程已拉起、副作用不回滚，后续单元未执行';
+  subEl.className='idle';
+}
+
+// ---------- wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){exitBreak();renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){exitBreak();toggle()};
+$('b-brk').onclick=function(){if(breakMode)exitBreak();else breakDemo()};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){if(breakMode)exitBreak();else breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();clearBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing,breakMode:breakMode}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  pre.style.display='block';
+  pre.textContent='';
+  var pass=0,fail=0;
+  function rec(ok,name){
+    var line=(ok?'PASS ':'FAIL ')+name;
+    pre.appendChild(document.createTextNode(line+'\n'));
+    if(ok)pass++;else fail++;
+  }
+  Promise.resolve().then(function(){
+    rec(steps.length>0,'步骤数 > 0（共 '+steps.length+' 步）');
+    var bad=-1,errMsg='';
+    for(var i=0;i<steps.length;i++){
+      try{
+        var r=window.__goto(i);
+        if(r!==i){bad=i;errMsg='返回值不匹配（'+r+' != '+i+'）';break}
+      }catch(e){bad=i;errMsg=String(e&&e.message||e);break}
+    }
+    rec(bad<0,'逐步 __goto(0..'+(steps.length-1)+') 无异常'+(bad<0?'':'（第 '+(bad+1)+' 步：'+errMsg+'）'));
+    var miss=[];
+    for(var j=0;j<steps.length;j++){
+      window.__goto(j);
+      if(subEl.textContent.indexOf(steps[j].lab)<0)miss.push(j+1);
+    }
+    rec(miss.length===0,'字幕文本随步变化且与步骤文案一致'+(miss.length===0?'':'（未命中步：'+miss.join(',')+'）'));
+    window.__goto(-1);
+    var empty=true;
+    for(var m=0;m<LANES.length;m++){if(feeds[LANES[m]].childElementCount!==0)empty=false}
+    if(flightsEl.childElementCount!==0)empty=false;
+    var subOk=subEl.textContent.indexOf('就绪')>=0;
+    rec(empty&&subOk,'__goto(-1) 重置回空态（泳道清空 + 字幕复位）');
+    rec(window.__errCount===0,'window.onerror 无错误（count='+window.__errCount+'）');
+    pre.appendChild(document.createTextNode('RESULT: '+pass+' PASS / '+fail+' FAIL\n'));
+  });
+}
+if(location.search.indexOf('selftest=1')>=0)runSelfTest();
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>06-providers-compat · OpenAI 兼容层流适配</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>OpenAI 兼容层流适配</h1>
+<p class="sub">06-providers-compat · openai-adapter</p>
+<p class="lead">后端不是 Anthropic 而是 OpenAI 兼容端点（vLLM / DeepSeek / Ollama，或 ChatGPT 订阅）时的一次模型调用：请求先被翻译成 OpenAI 格式发出，对方回的 SSE 增量流再被逐块翻译回 Anthropic 自家事件——主循环和下游全程无感，以为什么都没变。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1620" width="1040" height="1620" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始：模型调用进入主干（共享预处理已在 claude.ts 完成） -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">模型调用进入主干</text>
+
+<!-- D1 provider 判定 -->
+<polygon points="400,107 530,151 400,195 270,151" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="144" class="n-title">后端选了 OpenAI？</text>
+<text x="400" y="166" class="n-sub">claude.ts:1343</text>
+
+<!-- B1 动态加载适配层 -->
+<rect x="250" y="233" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="262" class="n-title">动态加载适配层</text>
+<text x="400" y="288" class="n-sub">openai/index.ts · queryModelOpenAI</text>
+
+<!-- B2 模型名映射 -->
+<rect x="250" y="341" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="370" class="n-title">模型名映射</text>
+<text x="400" y="396" class="n-sub">claude-sonnet 可映射成 gpt-4o 等</text>
+
+<!-- B3 复做共享预处理 -->
+<rect x="250" y="449" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="478" class="n-title">复做共享预处理</text>
+<text x="400" y="504" class="n-sub">openai/index.ts:235 · 工具全量重过滤</text>
+
+<!-- B4 转 OpenAI 格式 -->
+<rect x="250" y="557" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="586" class="n-title">转成 OpenAI 格式</text>
+<text x="400" y="612" class="n-sub">消息·工具·选择 → max_tokens 预算</text>
+
+<!-- D2 认证方式判定 -->
+<polygon points="400,665 530,709 400,753 270,709" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="702" class="n-title">ChatGPT 订阅认证？</text>
+<text x="400" y="724" class="n-sub">官方订阅 vs API Key</text>
+
+<!-- B5 发起流式请求 -->
+<rect x="250" y="791" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="820" class="n-title">发起流式请求</text>
+<text x="400" y="846" class="n-sub">Chat Completions · maxRetries:0</text>
+
+<!-- B6 状态机逐块翻译 -->
+<rect x="250" y="899" width="300" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="927" class="n-title">状态机逐块翻译</text>
+<text x="400" y="949" class="n-sub">openaiStreamAdapter.ts:73</text>
+<text x="400" y="969" class="n-body">思考/文本/工具增量 → 自家事件</text>
+
+<!-- D3 流结束判定（循环回边） -->
+<polygon points="400,1021 530,1065 400,1109 270,1065" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1058" class="n-title">流结束了吗？</text>
+<text x="400" y="1080" class="n-sub">chunk 供应完毕</text>
+
+<!-- B7 流尾补终止事件 -->
+<rect x="250" y="1133" width="300" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1161" class="n-title">流尾补终止事件</text>
+<text x="400" y="1183" class="n-sub">finish_reason → stop_reason</text>
+<text x="400" y="1203" class="n-body">stop→end_turn · tool_calls→tool_use</text>
+
+<!-- B8 同构累加并转发 -->
+<rect x="250" y="1259" width="300" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1287" class="n-title">同构累加并转发</text>
+<text x="400" y="1309" class="n-sub">openai/index.ts:428 事件循环</text>
+<text x="400" y="1329" class="n-body">累加内容块与用量，实时再转发</text>
+
+<!-- B9 组装最终助手消息 -->
+<rect x="250" y="1381" width="300" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1409" class="n-title">组装最终助手消息</text>
+<text x="400" y="1431" class="n-sub">assembleFinalAssistantOutputs</text>
+<text x="400" y="1451" class="n-body">全部内容块一次成型 + 计成本</text>
+
+<!-- 结束 -->
+<rect x="270" y="1503" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1528" class="n-title">下游零改动消费</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 其他后端通路 -->
+<rect x="640" y="118" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="146" class="n-title">其他后端通路</text>
+<text x="825" y="168" class="n-body">gemini / grok / Anthropic 原生请求</text>
+<text x="825" y="186" class="n-body">结构同源，本图不展开</text>
+
+<!-- R2 ChatGPT Responses 通路 -->
+<rect x="640" y="684" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="712" class="n-title">ChatGPT Responses 通路</text>
+<text x="825" y="734" class="n-body">订阅认证走另一套 API 端点</text>
+<text x="825" y="752" class="n-body">同样转成自家事件后汇入累加</text>
+
+<!-- R3 错误兜底 -->
+<rect x="640" y="1516" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="1544" class="n-title">错误兜底（无重试）</text>
+<text x="825" y="1566" class="n-body">任何异常都转成一条错误消息</text>
+<text x="825" y="1584" class="n-body">（maxRetries:0，不走重试链）</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<!-- L2 客户端模拟动态工具 -->
+<rect x="30" y="442" width="200" height="148" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="470" class="n-title">客户端模拟动态工具</text>
+<text x="130" y="494" class="n-body">OpenAI 端做不了服务端</text>
+<text x="130" y="512" class="n-body">动态加载，所以过滤和</text>
+<text x="130" y="530" class="n-body">延迟工具名单在本地重做</text>
+<text x="130" y="548" class="n-body">（SearchExtraTools 全量）</text>
+
+<!-- L1 块开闭的规矩 -->
+<rect x="30" y="880" width="200" height="148" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="908" class="n-title">块开闭的规矩</text>
+<text x="130" y="932" class="n-body">思考块开着时来了文本</text>
+<text x="130" y="950" class="n-body">先关思考块再开文本块</text>
+<text x="130" y="968" class="n-body">空思考也必须开块回传</text>
+<text x="130" y="986" class="n-body">（否则 DeepSeek 报 400）</text>
+
+<!-- L3 用量字段换算 -->
+<rect x="30" y="1116" width="200" height="148" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1144" class="n-title">用量字段换算</text>
+<text x="130" y="1168" class="n-body">prompt − 缓存读 − 缓存写</text>
+<text x="130" y="1186" class="n-body">= 真实输入 tokens</text>
+<text x="130" y="1204" class="n-body">输出量直接对应</text>
+<text x="130" y="1222" class="n-body">流尾统一一次发出</text>
+
+<!-- L4 提前断流的兜底 -->
+<rect x="30" y="1280" width="200" height="134" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1308" class="n-title">提前断流的兜底</text>
+<text x="130" y="1332" class="n-body">无 finish_reason 时不发</text>
+<text x="130" y="1350" class="n-body">终止事件；循环后安全</text>
+<text x="130" y="1368" class="n-body">兜底补组装已到手的</text>
+<text x="130" y="1386" class="n-body">内容块（仅限正常结束）</text>
+
+<!-- ===== 连线 ===== -->
+<!-- 主干直连 -->
+<path class="edge" d="M400,69 L400,103" marker-end="url(#ah)"/>
+
+<!-- D1 分支：否 → 其他通路 -->
+<path class="edge" d="M530,151 L634,151" marker-end="url(#ah)"/>
+<text x="560" y="144" class="elab">否</text>
+
+<!-- D1 分支：是 → 适配层 -->
+<path class="edge" d="M400,195 L400,229" marker-end="url(#ah)"/>
+<text x="410" y="218" class="elab">是</text>
+
+<path class="edge" d="M400,303 L400,337" marker-end="url(#ah)"/>
+<path class="edge" d="M400,411 L400,445" marker-end="url(#ah)"/>
+<path class="edge" d="M400,519 L400,553" marker-end="url(#ah)"/>
+<path class="edge" d="M400,627 L400,661" marker-end="url(#ah)"/>
+
+<!-- D2 分支：是 → Responses 通路 -->
+<path class="edge" d="M530,709 L634,709" marker-end="url(#ah)"/>
+<text x="560" y="702" class="elab">是</text>
+
+<!-- D2 分支：否 → Chat Completions -->
+<path class="edge" d="M400,753 L400,787" marker-end="url(#ah)"/>
+<text x="410" y="776" class="elab">否</text>
+
+<path class="edge" d="M400,861 L400,895" marker-end="url(#ah)"/>
+<path class="edge" d="M400,983 L400,1017" marker-end="url(#ah)"/>
+
+<!-- D3 分支：否 → 回边循环收下一块 -->
+<path class="edge" d="M530,1065 L585,1065 L585,941 L554,941" marker-end="url(#ah)"/>
+<text x="548" y="1056" class="elab">否</text>
+<text x="620" y="1000" class="elab">继续收下一块</text>
+
+<!-- D3 分支：是 → 流尾收尾 -->
+<path class="edge" d="M400,1109 L400,1129" marker-end="url(#ah)"/>
+<text x="410" y="1124" class="elab">是</text>
+
+<!-- B7 → 汇合点 → B8 -->
+<circle cx="400" cy="1241" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,1217 L400,1237" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1245 L400,1255" marker-end="url(#ah)"/>
+
+<!-- R2 汇入累加循环 -->
+<path class="edge" d="M825,764 L825,1241 L404,1241" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1343 L400,1377" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1465 L400,1499" marker-end="url(#ah)"/>
+
+<!-- B9 → 错误兜底 → 结束 -->
+<path class="edge" d="M550,1423 L760,1423 L760,1512" marker-end="url(#ah)"/>
+<text x="655" y="1413" class="elab">任何一步抛异常</text>
+<path class="edge" d="M640,1528 L536,1528" marker-end="url(#ah)"/>
+
+<!-- 左侧旁注虚线指向 -->
+<path class="edash" d="M230,484 L246,484" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,941 L246,941" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1168 L246,1168" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1301 L246,1301" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/services/api/claude.ts:1343-1356（openai 分流与动态 import）、src/services/api/openai/index.ts:220-580（queryModelOpenAI 全流程：模型映射 232、复做预处理 235-293、格式转换 306-312、后端选择 373-409、事件循环 428-535、组装 490-526、Langfuse 537-554、安全兜底 557-569、catch 570-580）、packages/@ant/model-provider/src/shared/openaiStreamAdapter.ts:36-356（状态机与 finish_reason 映射）、packages/@ant/model-provider/src/providers/openai/modelMapping.ts:36-55（模型映射优先级）。</li>
+<li>与 Anthropic 路径的关键差异：官方路径每个 content_block_stop 就组装一条 AssistantMessage 逐块产出；OpenAI 路径把组装推迟到 message_stop 一次性完成（代码注释明言 matching the Anthropic SDK path），中断时已收到的块靠循环外安全兜底补组装。</li>
+<li>无重试：OpenAI 客户端显式 maxRetries:0，任何错误只转成一条错误 AssistantMessage；Anthropic 路径的 withRetry 十次指数退避不覆盖此通路。</li>
+<li>max_tokens 必须显式传：多数兼容端点默认值极小，思考模式会先吃光预算（openai/index.ts:331-347 注释）；这里用 64000 上限而非官方路径的 8k 槽位上限，因为 OpenAI 路径没有对应的自动升档重试。</li>
+<li>模型映射优先级：OPENAI_MODEL &gt; OPENAI_DEFAULT_{FAMILY}_MODEL &gt; ANTHROPIC_DEFAULT_{FAMILY}_MODEL &gt; DEFAULT_MODEL_MAP（sonnet→gpt-4o、opus→o3、haiku→gpt-4o-mini）&gt; 原名透传。</li>
+<li>DeepSeek 细节：空 reasoning_content 也必须开 thinking 块并在后续请求回传，否则对方 400（openaiStreamAdapter.ts:133-137 注释）。</li>
+<li>usage 映射（openaiStreamAdapter.ts:16-24 注释）：prompt_tokens−cached−cache_write→input_tokens、completion_tokens→output_tokens、prompt_tokens_details.cached_tokens→cache_read_input_tokens；缓存写字段仅在官方 OpenAI 缓存契约（prompt_cache_key 按会话限定）下上报。</li>
+<li>图与代码的合并说明：实际代码中「同构累加」与「组装最终消息」发生在同一个 for-await 循环内（message_stop 分支触发组装），图中拆为两步以便阅读；「复做共享预处理」里 claude.ts 主干已做过一遍规范化，适配层对收到的 messages 再跑一次 normalizeMessagesForAPI 并重做延迟工具过滤（claude.ts:1345-1347 注释：OpenAI 需要全量工具池供 SearchExtraToolsTool 检索被过滤的 MCP 工具）。</li>
+<li>未逐行核验项（据子系统考据）：responsesAdapter.ts（ChatGPT 订阅 Responses API 的事件转换内部）与 Langfuse 记账内部实现未细读，图中 Responses 通路仅按调用关系画出。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>06-providers-compat · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：模型服务路由与兼容层</h1>
+<p class="sub">06-providers-compat · 组成模块与调用关系</p>
+<p class="lead">一次模型调用怎么发往七种后端：主循环发起 → 核心生成器先做共用预处理再组装请求 → 路由判定按配置七选一——官方通路交给客户端工厂按「直连 / 云托管」四分支构造，三家兼容层把别家格式转成自家格式、回复流也转回自家事件；重试与观测全程护航；底部规范化桥是「输出同构、下游零改动」的落点。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 790" width="1040" height="790" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部：会话主循环（调用方） -->
+<rect x="70" y="40" width="250" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="195" y="66" class="n-title">会话主循环</text>
+<text x="195" y="88" class="n-sub">组件 02 · 发起一次模型调用</text>
+
+<!-- 配置入口 -->
+<rect x="690" y="40" width="300" height="76" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="840" y="66" class="n-title">Provider 配置入口</text>
+<text x="840" y="88" class="n-sub">/provider 命令 · /login 表单</text>
+<text x="840" y="106" class="n-body">选择写入设置与环境变量</text>
+
+<!-- 核心生成器 -->
+<rect x="240" y="170" width="420" height="118" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="450" y="200" class="n-title">核心查询生成器</text>
+<text x="450" y="222" class="n-sub">claude.ts · 约 3600 行 · 各通路共用的主干</text>
+<text x="450" y="248" class="n-body">组装请求参数（系统提示 · 工具 · 思考预算）</text>
+<text x="450" y="272" class="n-body">消费流式事件，逐块产出回复消息</text>
+
+<!-- 路由判定 -->
+<rect x="690" y="150" width="300" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="840" y="178" class="n-title">路由判定</text>
+<text x="840" y="200" class="n-sub">providers.ts · 读设置与环境变量</text>
+<text x="840" y="222" class="n-body">七路分发：官方直连 · 云托管 · 兼容层</text>
+
+<!-- 外部：流式请求全程（延伸） -->
+<rect x="740" y="240" width="220" height="48" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="850" y="262" class="n-body">一次流式请求的全程</text>
+<text x="850" y="280" class="n-sub">组件 05</text>
+
+<!-- OpenAI 兼容层 -->
+<rect x="690" y="300" width="300" height="88" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="840" y="328" class="n-title">OpenAI 兼容层</text>
+<text x="840" y="350" class="n-sub">openai/ · 双后端：对话补全 / ChatGPT 订阅</text>
+<text x="840" y="374" class="n-body">消息与工具双向转换，回复流逐段转回</text>
+
+<!-- Gemini 兼容层 -->
+<rect x="690" y="412" width="300" height="88" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="840" y="440" class="n-title">Gemini 兼容层</text>
+<text x="840" y="462" class="n-sub">gemini/ · 原生接口，手写流式解析</text>
+<text x="840" y="486" class="n-body">消息与工具转换 · 思考预算与签名映射</text>
+
+<!-- Grok 兼容层 -->
+<rect x="690" y="524" width="300" height="88" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="840" y="552" class="n-title">Grok 兼容层</text>
+<text x="840" y="574" class="n-sub">grok/ · 复用 OpenAI 转换器</text>
+<text x="840" y="598" class="n-body">仅接口地址与模型映射独立</text>
+
+<!-- 重试与错误翻译 -->
+<rect x="60" y="300" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="328" class="n-title">重试与错误翻译</text>
+<text x="200" y="350" class="n-sub">withRetry.ts · errors.ts（组件 07）</text>
+<text x="200" y="374" class="n-body">指数退避重试 · 连续过载换备用模型</text>
+<text x="200" y="396" class="n-body">错误翻译成用户可读消息</text>
+
+<!-- 官方客户端工厂 -->
+<rect x="60" y="440" width="280" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="468" class="n-title">官方客户端工厂</text>
+<text x="200" y="490" class="n-sub">client.ts · 按路由四选一</text>
+<text x="200" y="514" class="n-body">直连 / Bedrock / Vertex / Foundry</text>
+<text x="200" y="536" class="n-body">注入请求头 · 凭据自动刷新</text>
+
+<!-- 观测与记账 -->
+<rect x="60" y="580" width="280" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="608" class="n-title">观测与记账</text>
+<text x="200" y="630" class="n-sub">全程计时 · 遥测上报 · 缓存命中检测</text>
+<text x="200" y="654" class="n-body">请求/成功/错误全程留痕，可录制回放</text>
+
+<!-- 共享底座：消息规范化桥 -->
+<rect x="60" y="700" width="930" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="525" y="726" class="n-title">消息规范化桥（上方所有通路共同调用）</text>
+<text x="525" y="748" class="n-sub">剥离临时内容 · 合并相邻消息 · 修复工具配对 · 解析工具入参</text>
+
+<!-- 注释 -->
+<text x="620" y="660" class="elab">三兼容层同样调用这座桥 → 输出同构，下游零改动</text>
+
+<!-- 连线 -->
+<path class="edge" d="M195,104 L195,140 L400,140 L400,166" marker-end="url(#ah)"/>
+<path class="edge" d="M840,116 L840,146" marker-end="url(#ah)"/>
+<path class="edge" d="M660,200 L688,200" marker-end="url(#ah)"/>
+<path class="edge" d="M640,288 L640,344 L686,344" marker-end="url(#ah)"/>
+<path class="edge" d="M612,288 L612,456 L686,456" marker-end="url(#ah)"/>
+<path class="edge" d="M584,288 L584,568 L686,568" marker-end="url(#ah)"/>
+<path class="edash" d="M660,262 L736,262" marker-end="url(#ahd)"/>
+<path class="edge" d="M310,288 L310,296 L200,296" marker-end="url(#ah)"/>
+<path class="edge" d="M200,400 L200,436" marker-end="url(#ah)"/>
+<path class="edge" d="M350,288 L350,570 L200,570" marker-end="url(#ah)"/>
+<path class="edge" d="M450,288 L450,696" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>三家兼容层（分支路径）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件 / 延伸阅读</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（只读取证，未运行构建）：src/services/api/claude.ts、src/utils/model/providers.ts、src/utils/model/providerClassification.ts、src/services/api/client.ts、src/services/api/bedrockClient.ts、src/services/api/openai/、src/services/api/gemini/、src/services/api/grok/、packages/@ant/model-provider/src/、src/services/api/withRetry.ts、src/services/api/errors.ts、src/services/api/logging.ts、src/utils/messages.ts、src/commands/provider.ts、src/components/ConsoleOAuthFlow.tsx。</li>
+<li>分流点：claude.ts:1343（OpenAI）/ 1358（Gemini）/ 1371（Grok），位于共用预处理（消息规范化 claude.ts:1289）之后、Anthropic 专有逻辑（功能头组装 1102、系统提示 1433、缓存断点）之前；主入口 queryModel（claude.ts:1048），上游经 src/query/deps.ts:35 的 callModel 接入主循环。</li>
+<li>路由判定：providers.ts:12-29——settings.modelType（仅识别 openai/gemini/grok 三值）优先，其次 CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY，再次 CLAUDE_CODE_USE_OPENAI/GEMINI/GROK，默认 firstParty；七值类型定义见 providerClassification.ts:1-8。</li>
+<li>官方客户端工厂：client.ts:84-316——bedrock 分支 153-190（AWS 凭据/Bearer token）、foundry 191-220（Azure AD 或 API key）、vertex 221-298（GoogleAuth+区域解析）、默认直连 301-315（OAuth 或 API key）；请求 ID 包装 356-389；bedrockClient.ts 为薄包装。</li>
+<li>「下游不改」的直接证据：openai/index.ts:214-219 自述把 Anthropic 格式消息/工具转为 OpenAI 格式、把回复流转回内部事件供既有查询管线消费；Grok 复用同一流适配器（grok/index.ts:121-124）；Gemini 走原生接口（gemini/index.ts:117 起适配）。转换器与流适配器实现在 packages/@ant/model-provider/src/。</li>
+<li>重试：withRetry.ts:170-517（默认 10 次指数退避+抖动、连续 3 次过载触发模型回退、上下文超限自动下调输出上限）；错误翻译在 errors.ts / errorUtils.ts。</li>
+<li>配置入口：commands/provider.ts:88/104/118 写 modelType（openai/grok/gemini）、:143 通用写入，bedrock/vertex/foundry 仅设环境变量（:126-156）；/login 表单 ConsoleOAuthFlow.tsx:461/488 提供选项、:888 等处写 modelType。</li>
+<li>考据注记：本组件完整组成 12 个模块，本图并为 10 盒——错误翻译（api-error-mapping）并入「重试与错误翻译」；实验功能头组装（betas-assembly，claude.ts:1102 调用，按模型能力开启长上下文/交错思维链等）省略未画；「观测与记账」合并了日志、缓存命中检测、Langfuse 对接、VCR 录制回放四个文件。</li>
+<li>考据注记：Grok 没有 /login 表单入口（ConsoleOAuthFlow.tsx 全文检索 grok 为 0 命中，本次复核确认），只能经 /provider 命令或环境变量启用——与仓库自述文档「通过 /login 配置」的说法有出入；/login 实际持久化 settings.modelType（优先级高于 CLAUDE_CODE_USE_* 环境变量），两者是覆盖关系而非并列。</li>
+<li>考据注记：bedrock/vertex/foundry 三条云分支无法经 settings.modelType 设置；其 SDK 内部行为未逐行核验（实现在依赖包内，本环境不装依赖、只读源码）。</li>
+<li>考据注记：路由判定也被客户端工厂（client.ts:367）、功能头组装、重试与遥测多方调用，图上只画了核心生成器的主调用；三兼容层各自调用「观测与记账」与底部规范化桥（OpenAI 层复做预处理见 openai/index.ts:235-293），为避免连线拥挤未画。配置入口→路由判定的箭头表示「写入其读取的配置」，非函数调用。</li>
+<li>延伸：单次流式请求的事件全程见组件 05；重试与模型回退的完整链路见组件 07。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

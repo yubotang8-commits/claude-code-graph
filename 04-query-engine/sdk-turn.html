@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QueryEngine SDK 回合播放器：submitMessage → query → SDK 消息流 → result</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px;max-width:1120px}
+header .sub b{color:var(--ink)}
+
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12px;padding:6px 8px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:var(--purple-f);border-color:var(--purple)}
+.phases span.p4.on{background:#f4f4f2;border-color:var(--sec)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06)}
+#transport .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 13px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:92px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:240px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:var(--purple-f);border-color:var(--purple)}
+#bar .seg.p4.done{background:#f4f4f2;border-color:var(--sec)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#bar .seg.lost{opacity:.25;border-style:dashed}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:220px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#caption{margin-top:7px;font-size:13.5px;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-left:4px solid var(--blue);border-radius:8px;padding:7px 12px;min-height:34px}
+#caption.brk{border-left-color:var(--red);color:var(--red);font-weight:600}
+
+#stage{display:grid;grid-template-columns:270px 400px 345px 315px;gap:15px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:620px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.desc{padding:6px 12px 7px;font-size:11px;color:var(--mut);border-bottom:1px dashed var(--hair);background:#fafaf8;line-height:1.5}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+#lane-caller .h{border-bottom:2px solid var(--blue)}
+#lane-engine .h{border-bottom:2px solid var(--green)}
+#lane-loop .h{border-bottom:2px solid var(--orange)}
+#lane-disk .h{border-bottom:2px solid var(--sec)}
+#lane-caller .feed{gap:9px;padding:12px 10px}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+
+.bubble{align-self:flex-end;max-width:92%;font-size:12.5px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-all;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
+.chip{font-family:var(--mono);font-size:11.8px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.45}
+.chip.req{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.act{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.turn{background:var(--orange-f);border-color:var(--orange);color:var(--ink);font-weight:600}
+.chip.io{background:#f4f4f2;border-color:var(--line);color:var(--ink)}
+.chip.note{background:var(--purple-f);border:1px dashed var(--purple);color:#3d2f9e}
+.chip.recv{align-self:flex-start;font-family:var(--ui);font-size:12px;max-width:95%}
+.chip.recv.a{background:var(--green-f);border:1.5px solid var(--green);color:var(--ink)}
+.chip.recv.u{background:#f4f4f2;border:1.5px solid var(--line);color:var(--ink)}
+.chip.recv.sys{background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink)}
+.chip.recv.res{background:var(--green-f);border:2px solid var(--green);color:var(--ink);font-weight:700}
+@keyframes pop{0%{transform:scale(.88);opacity:0}100%{transform:scale(1);opacity:1}}
+
+.statbox{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 12px 11px}
+.statbox .sh{font-size:12px;font-weight:700;color:var(--sec);margin-bottom:5px}
+.srow{display:flex;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:11.5px;padding:2.5px 0;color:var(--sec)}
+.srow .sl{flex:0 0 auto}
+.srow b{color:var(--ink);font-weight:600;text-align:right}
+.srow b.hit{animation:stamp .5s ease}
+@keyframes stamp{0%{transform:scale(1.25);background:var(--green-f);border-radius:4px}100%{transform:scale(1)}}
+#loop-turn.hit2{animation:stamp .5s ease}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-caller.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-engine.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-loop.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-disk.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.prompt{background:#EDEBFA;border:1.5px solid #6250d6;color:#3d2f9e;font-weight:700;padding:6px 13px}
+.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
+.flight.mv{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.io{background:#f4f4f2;border:1.5px solid var(--sec)}
+.flight.res{background:var(--green-f);border:2px solid var(--green);font-weight:700}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:170px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+.brow.memo{color:var(--sec);font-size:12px;border-top:1px dashed var(--hair);padding-top:7px}
+#break-panel .rec{width:300px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+.legend{margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:14px;font-size:11px;color:var(--mut);line-height:1.7;max-width:1120px}
+footer b{color:var(--sec)}
+#selftest-result{display:none}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>QueryEngine SDK 回合播放器：submitMessage → query → SDK 消息流 → result</h1>
+  <div class="sub">一条 prompt 提交进引擎：<b>状态清零 → 系统提示组装 → 用户消息先落盘</b> → system/init → query() 回合循环（流式 → 工具 → 下一回合）→ SDK 消息回流调用方 → <b>result 终态</b> —— 会话账本跨轮延续；同目录 architecture.html 讲组件结构，本页讲一条 SDK 回合怎么一步步发生</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第一轮 · 回合 1（提问 → 工具调用）</span>
+  <span class="p1" data-ph="1">第一轮 · 回合 2（tool_result 回传 → 作答）</span>
+  <span class="p2" data-ph="2">终态 · result 消息</span>
+  <span class="p3" data-ph="3">第二轮 submitMessage（账本延续）</span>
+  <span class="p4" data-ph="4">结束</span>
+</div>
+
+<div id="transport">
+  <div class="row">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-brk" class="danger" title="中断演示 (B)">⚡ 中断演示</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪 · 点击 ▶ 播放</div>
+  </div>
+  <div id="caption">就绪 · 点击 ▶ 播放</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-caller">
+    <div class="h" id="h-caller">👤 SDK 调用方 <span class="tag">客户端</span><small>无头 -p / ACP / 桌面 cowork</small></div>
+    <div class="desc">发 prompt · 收 SDKMessage 流与 result 终态</div>
+    <div class="feed" id="feed-caller"></div>
+  </div>
+  <div class="lane" id="lane-engine">
+    <div class="h" id="h-engine">🧩 QueryEngine.submitMessage <span class="tag">每会话一实例</span><small>翻译 + 记账</small></div>
+    <div class="desc">把内部消息翻译成 SDK 消息 · 维护 mutableMessages / totalUsage / 权限拒绝账本</div>
+    <div class="feed" id="feed-engine"></div>
+    <div class="statbox">
+      <div class="sh">🧾 会话账本（跨轮延续）</div>
+      <div class="srow"><span class="sl">mutableMessages</span><b id="st-msgs">0 条</b></div>
+      <div class="srow"><span class="sl">turnCount（本回合）</span><b id="st-turns">—</b></div>
+      <div class="srow"><span class="sl">totalUsage</span><b id="st-usage">in 0 · out 0</b></div>
+      <div class="srow"><span class="sl">lastStopReason</span><b id="st-stop">—</b></div>
+      <div class="srow"><span class="sl">permissionDenials</span><b id="st-denials">0 条</b></div>
+    </div>
+  </div>
+  <div class="lane" id="lane-loop">
+    <div class="h" id="h-loop">🔁 query() 回合循环 <span class="tag">while(true)</span><small id="loop-turn">turn —</small></div>
+    <div class="desc">迭代准备 → API 流式 → 工具执行 → Continue 下一回合 → Terminal；内部细节见 02 目录 turn-loop.html</div>
+    <div class="feed" id="feed-loop"></div>
+  </div>
+  <div class="lane" id="lane-disk">
+    <div class="h" id="h-disk">💾 会话 JSONL <span class="tag">磁盘</span><small>resume 依据</small></div>
+    <div class="desc">用户消息 await 先写 · assistant 消息 fire-and-forget · 写队列保序（enqueueWrite）</div>
+    <div class="feed" id="feed-disk"></div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 中断现场<small>进程在第 1 次 API 请求中途被杀（桌面端 Stop / kill）</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>会话 JSONL</b><span>用户消息已预写落盘 → --resume 找得回「这句话刚发出」的状态</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>流式中的 assistant 响应</b><span>尚未 yield，随进程蒸发，不可恢复</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>内存账本</b><span>mutableMessages / totalUsage / 权限拒绝记录 —— 进程内状态全部丢失</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>result 消息</b><span>调用方永远等不到（生成器死在 for-await 中途）</span></div>
+    <div class="brow memo">assistant 消息本是 fire-and-forget 异步写盘：「没等到写 = 没写」；用户消息之所以 await 先写，正是为了这一刻</div>
+  </div>
+  <div class="rec">
+    <div class="rt">恢复路径</div>
+    <ul>
+      <li><b>claude --resume sessionId</b>：从 JSONL 重建 initialMessages</li>
+      <li>新进程、新引擎、干净的 abort 信号</li>
+      <li>丢失的模型响应：重新提交，让模型重看上下文</li>
+    </ul>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:#EDEBFA;border-color:#6250d6"></span>prompt 提交</span>
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>发起 / 请求 / 记账</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>query() 内部事件</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>SDK 消息回调用方 / 落效</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--sec)"></span>磁盘写</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 中断演示</div>
+<footer>
+  依据 claude-code 仓库实读：src/QueryEngine.ts —— submitMessage 开场（:217-281 清账本 + 包装 canUseTool）· fetchSystemPromptParts（:298-335）· processUserInput（:420-438）· 用户消息预写 transcript（:441-473，注释言明为 resume 兜底）· system/init（:551-562）· for-await switch 各分支（:688-1020）· usage 累计与 lastStopReason（:813-860）· 预算两道闸（:1022-1101）· result 组装（:1111-1214）· ask() 包装与 readFileCache 回写（:1256-1365）；isResultSuccessful 见 src/utils/queryHelpers.ts:63-103；system/init 字段见 src/utils/messages/systemInit.ts。<br>
+  数值为演示示意，字段名与判定逻辑照源码。配套：同目录 architecture.html（组件结构）· 02-query-turn-loop/turn-loop.html（query() 内部）· 03-compaction/autocompact.html（compact_boundary 截断）。<br>
+  注意：交互 REPL 不走 QueryEngine（src/screens/REPL.tsx:3513 直调 query()），本页讲 SDK / 无头 -p / ACP 侧；一次性 ask() 每次新建实例并把消息数组带回复用（:1319-1355）。未展开的 switch 分支（progress / attachment 的 max_turns_reached 与 queued_command / api_retry / tool_use_summary）各有源码依据，此页从简。
+</footer>
+</div>
+<pre id="selftest-result"></pre>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var feeds={caller:$('feed-caller'),engine:$('feed-engine'),loop:$('feed-loop'),disk:$('feed-disk')};
+var lanes={caller:$('lane-caller'),engine:$('lane-engine'),loop:$('lane-loop'),disk:$('lane-disk')};
+var heads={caller:$('h-caller'),engine:$('h-engine'),loop:$('h-loop'),disk:$('h-disk')};
+var flightsEl=$('flights'), barEl=$('bar'), readout=$('readout'), captionEl=$('caption');
+var activeAnims=[]; var breakMode=false; var dl=0;
+
+window.__errors=[];
+window.onerror=function(m,s,l,c){window.__errors.push(String(m)+' @'+l+':'+c);return false};
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function chip(lane,cls,txt){var c=el('chip '+(cls||''),feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function bubble(txt){var d=el('bubble',feeds.caller,txt);feeds.caller.scrollTop=feeds.caller.scrollHeight;return d}
+function recv(txt,cls){return chip('caller','recv '+(cls||'sys'),txt)}
+function dline(txt){dl++;return chip('disk','io','L'+dl+' '+txt)}
+function note(txt){return chip('engine','note','ℹ '+txt)}
+function stat(id,val){var n=$(id);n.textContent=val;n.classList.remove('hit');void n.offsetWidth;n.classList.add('hit')}
+function setTurn(n){var t=$('loop-turn');t.textContent='turn '+n;t.classList.remove('hit2');void t.offsetWidth;t.classList.add('hit2')}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function fly(from,to,label,cls,dur){
+  var a=lanes[from].getBoundingClientRect(), b=lanes[to].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+(cls||'mv'); f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(to);
+}
+function setFocus(s){
+  var stage=$('stage');
+  ['caller','engine','loop','disk'].forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  ['caller','engine','loop','disk'].forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+}
+
+// ---------- 36 步剧本：第一轮完整（2 回合）→ result → 第二轮（简短）→ 结束 ----------
+var steps=[
+ // ── 第一轮 · 回合 1：提问 → 准备 → 工具调用 ──
+ {id:'r1-in',ph:0,dur:900,focus:'caller',lab:'调用方发话：为这个会话提交一条 prompt',state:function(){
+   bubble('修复 login.tsx 里的空指针，并解释原因');
+ },live:function(){fly('caller','engine','prompt：修复 login.tsx…','prompt',700)}},
+ {id:'qe-clear',ph:0,dur:800,focus:'engine',lab:'submitMessage 开场：清掉上回合技能发现与权限拒绝账本',state:function(){
+   chip('engine','act','清空 per-turn 状态 · 计时开始'); stat('st-denials','0 条');
+ }},
+ {id:'qe-wrap',ph:0,dur:800,focus:'engine',lab:'权限回调包一层：工具被拒就记一条 permission_denial',state:function(){
+   chip('engine','act','包装 canUseTool → 拒绝时记账');
+ }},
+ {id:'qe-sys',ph:0,dur:900,focus:'engine',lab:'组装三段上下文：默认提示 + git/CLAUDE.md + systemContext',state:function(){
+   chip('engine','req','fetchSystemPromptParts · system prompt 就绪');
+ }},
+ {id:'qe-pui',ph:0,dur:850,focus:'engine',lab:'processUserInput：非斜杠命令 → 一条用户消息，shouldQuery=true',state:function(){
+   chip('engine','act','processUserInput ✓ · shouldQuery=true');
+ }},
+ {id:'qe-push',ph:0,dur:750,focus:'engine',lab:'用户消息进 mutableMessages：会话数组 0 → 1 条',state:function(){
+   stat('st-msgs','1 条'); stat('st-turns','1'); chip('engine','act','mutableMessages.push(用户消息)');
+ }},
+ {id:'qe-pre',ph:0,dur:1000,focus:'engine',lab:'关键一步：用户消息先写盘（await）——进程死在这轮也能 resume',state:function(){
+   dline('user    修复 login.tsx…（await 写盘）'); chip('engine','act','recordTranscript 预写 ✓');
+ },live:function(){fly('engine','disk','用户消息预写 JSONL','io',750)}},
+ {id:'qe-sk',ph:0,dur:700,focus:'engine',lab:'并行预取 skills 与插件清单（只读本地缓存，不等网络）',state:function(){
+   chip('engine','act','skills + plugins 预取 ✓');
+ }},
+ {id:'qe-init',ph:0,dur:950,focus:'engine',lab:'yield system/init：工具/MCP/模型/skills 全清单告知调用方',state:function(){
+   recv('system/init · 11 tools · 2 mcp · claude-sonnet-4-5','sys');
+ },live:function(){fly('engine','caller','system/init（工具/MCP/模型清单）','back',800)}},
+ {id:'qe-branch',ph:0,dur:850,focus:'engine',lab:'岔路：本地斜杠命令直出输出 + result success，不进 query()',state:function(){
+   note('shouldQuery=false 分支：本地命令直出；本流程走真查询主路');
+ }},
+ {id:'q-enter',ph:0,dur:850,focus:'loop',lab:'query() 回合循环启动：while(true)，本回合 turn 1',state:function(){
+   chip('loop','turn','turn 1 开始'); setTurn(1);
+ },live:function(){fly('engine','loop','query(messages, systemPrompt, canUseTool…)','req',750)}},
+ {id:'q-prep',ph:0,dur:850,focus:'loop',lab:'迭代准备：边界切片 + 预压缩链（默认构建大多 no-op）',state:function(){
+   chip('loop','','迭代准备 · 预压缩链过一遍');
+ }},
+ {id:'q-api',ph:0,dur:950,focus:'loop',lab:'第 1 次 API 请求：消息 + 提示 + 工具 schema + abort 信号',state:function(){
+   chip('loop','req','POST /v1/messages #1');
+ }},
+ {id:'q-mst',ph:0,dur:750,focus:'engine',lab:'流事件记账：message_start → 本条消息 usage 归零重计',state:function(){
+   chip('engine','req','message_start · 本条 usage 清零');
+ }},
+ {id:'q-a1',ph:0,dur:900,focus:'loop',lab:'模型输出定型：yield 一条 assistant（带 tool_use：Read）',state:function(){
+   chip('loop','act','yield assistant · tool_use: Read(login.tsx)');
+ },live:function(){fly('loop','engine','assistant 消息','mv',700)}},
+ {id:'qe-a1',ph:0,dur:1000,focus:'engine',lab:'落效：push + 转 SDK 消息外发；写盘 fire-and-forget',state:function(){
+   stat('st-msgs','2 条'); recv('assistant：我先读一下 login.tsx','a');
+   dline('assistant tool_use:Read（异步写）'); chip('engine','act','assistant 分支 · 转发 + 异步写盘');
+ },live:function(){fly('engine','caller','SDK assistant 消息','back',750)}},
+ {id:'q-delta',ph:0,dur:800,focus:'engine',lab:'message_delta：stop_reason = tool_use —— 要调工具了',state:function(){
+   stat('st-stop','tool_use'); chip('engine','req','lastStopReason ← tool_use');
+ }},
+ {id:'q-tool',ph:0,dur:900,focus:'loop',lab:'回合循环执行工具：Read(login.tsx)，权限走包装回调',state:function(){
+   chip('loop','act','执行 Read(login.tsx) · 权限检查 ✓');
+ }},
+ {id:'q-tr',ph:0,dur:850,focus:'loop',lab:'工具完成：产出 tool_result 用户消息，yield 给引擎',state:function(){
+   chip('loop','act','yield user · tool_result（87 行 · 2 处可疑）');
+ },live:function(){fly('loop','engine','tool_result 消息','mv',700)}},
+ {id:'qe-u1',ph:0,dur:1000,focus:'engine',lab:'user 分支落效：push + 外发 + 这次写盘 await；turn 1→2',state:function(){
+   stat('st-msgs','3 条'); stat('st-turns','2'); recv('user：tool_result（87 行）','u');
+   dline('user    tool_result（await 写盘）'); chip('engine','act','user 分支 · 转发 + await 写盘');
+ },live:function(){fly('engine','caller','SDK user（tool_result）','back',750)}},
+
+ // ── 第一轮 · 回合 2：循环语义 + 作答 ──
+ {id:'q-cont',ph:1,dur:1000,focus:'loop',lab:'Continue 站点：产出拼回 messages —— 循环体第 2 圈',state:function(){
+   chip('loop','turn','↻ Continue · 回到迭代准备');
+ }},
+ {id:'q-api2',ph:1,dur:850,focus:'loop',lab:'第 2 次 API 请求：上下文已带上 tool_result',state:function(){
+   chip('loop','req','POST /v1/messages #2（含 tool_result）');
+ }},
+ {id:'q-a2',ph:1,dur:900,focus:'loop',lab:'模型给出最终文字回答 → yield assistant（text 块）',state:function(){
+   chip('loop','act','yield assistant · text');
+ },live:function(){fly('loop','engine','assistant 消息','mv',700)}},
+ {id:'qe-a2',ph:1,dur:1000,focus:'engine',lab:'assistant 分支再落效：push + 外发 + 异步写盘',state:function(){
+   stat('st-msgs','4 条'); recv('assistant：空指针在 42 行，因为…','a');
+   dline('assistant text（异步写）'); chip('engine','act','assistant 分支 · 转发 + 异步写盘');
+ },live:function(){fly('engine','caller','SDK assistant 消息','back',750)}},
+ {id:'q-end',ph:1,dur:800,focus:'engine',lab:'message_delta：stop_reason = end_turn —— 模型说完话',state:function(){
+   stat('st-stop','end_turn'); chip('engine','req','lastStopReason ← end_turn');
+ }},
+ {id:'q-mstop',ph:1,dur:800,focus:'engine',lab:'message_stop：本条 usage 并进会话累计（每回合一次）',state:function(){
+   stat('st-usage','in 3,610 · out 214'); chip('engine','req','totalUsage 累计 ✓');
+ }},
+ {id:'q-budget',ph:1,dur:750,focus:'engine',lab:'两道闸：USD 预算未超、结构化输出重试未超上限',state:function(){
+   chip('engine','act','预算检查 ✓ · 结构化输出重试 ✓');
+ }},
+ {id:'q-term',ph:1,dur:950,focus:'loop',lab:'无新 tool_use → 不再 Continue；Terminal(completed)：循环出口',state:function(){
+   chip('loop','turn','Terminal: completed ▸ 退出循环');
+ }},
+
+ // ── 终态：result 消息 ──
+ {id:'qe-judge',ph:2,dur:900,focus:'engine',lab:'for-await 结束：找最后一条 assistant/user，判定成功',state:function(){
+   chip('engine','act','isResultSuccessful(最后一条 assistant) → true');
+ }},
+ {id:'qe-asm',ph:2,dur:850,focus:'engine',lab:'汇总 result 字段：num_turns=2 · 耗时 · 成本 · usage',state:function(){
+   chip('engine','req','result 字段组装 ✓（result / stop_reason / usage…）');
+ }},
+ {id:'qe-res',ph:2,dur:1000,focus:'engine',lab:'yield result(success) 后 return —— 第一轮 submitMessage 结束',state:function(){
+   recv('result: success · 2 turns · $0.0184','res');
+ },live:function(){fly('engine','caller','result（subtype: success）','res',800)}},
+
+ // ── 第二轮 submitMessage（简短）：会话账本延续 ──
+ {id:'r2-in',ph:3,dur:900,focus:'caller',lab:'第二轮 submitMessage：同一会话再来一条 prompt',state:function(){
+   bubble('顺手把测试补上');
+ },live:function(){fly('caller','engine','prompt：补测试…','prompt',700)}},
+ {id:'r2-st',ph:3,dur:900,focus:'engine',lab:'per-turn 账本清零，会话状态全保留 —— 跨轮延续',state:function(){
+   stat('st-turns','1'); chip('engine','act','per-turn 清零 · 4 条消息与累计 usage 保留');
+ }},
+ {id:'r2-q',ph:3,dur:900,focus:'loop',lab:'（快进）同一条回路：一次请求、无工具、end_turn 收束',state:function(){
+   setTurn(1); chip('loop','turn','turn 1 · 无 tool_use → end_turn');
+ }},
+ {id:'r2-res',ph:3,dur:950,focus:'engine',lab:'第二条 result：num_turns=1，账本继续累计',state:function(){
+   stat('st-msgs','6 条'); stat('st-usage','in 5,080 · out 296'); stat('st-stop','end_turn');
+   recv('result: success · 1 turn（累计续涨）','res');
+ },live:function(){fly('engine','caller','result（subtype: success）','res',800)}},
+
+ // ── 结束 ──
+ {id:'end',ph:4,dur:1200,focus:'engine',lab:'流程结束：生成器交还控制权，账本留在实例里等下一条',state:function(){
+   chip('engine','act','return · 会话状态留存');
+ }}
+];
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='q-api')return i}return 12})();
+
+// ---------- 确定性回放引擎 ----------
+var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  ['caller','engine','loop','disk'].forEach(function(k){feeds[k].innerHTML=''});
+  dl=0;
+  $('st-msgs').textContent='0 条'; $('st-turns').textContent='—'; $('st-usage').textContent='in 0 · out 0';
+  $('st-stop').textContent='—'; $('st-denials').textContent='0 条'; $('loop-turn').textContent='turn —';
+}
+function applyStep(i){var s=steps[i]; if(s.state)s.state();}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length, segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  captionEl.classList.remove('brk');
+  if(idx<0){captionEl.textContent='就绪 · 点击 ▶ 播放'; readout.textContent='就绪 · 点击 ▶ 播放'}
+  else if(idx>=n-1){captionEl.textContent='现在：'+steps[idx].lab; readout.innerHTML='<span class="fin">✓ 播放完毕</span> · 步骤 '+(idx+1)+'/'+n}
+  else{captionEl.textContent='现在：'+steps[idx].lab; readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · 空格暂停，←→ 单步'}
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  stepT0=Date.now(); remaining=delay;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true; $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false; clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- 中断演示：进程死在第 1 次 API 请求中途 ----------
+function breakDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  var segs=barEl.children;
+  for(var k=BREAK_AT+1;k<steps.length;k++)segs[k].classList.add('lost');
+  captionEl.textContent='⚡ 中断演示：进程死在第 1 次 API 请求中途（用户消息已落盘，可 --resume）';
+  captionEl.classList.add('brk');
+  readout.innerHTML='<b style="color:var(--red)">⚡ 中断现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意键恢复';
+}
+function exitBreak(){
+  breakMode=false;
+  $('break-panel').classList.remove('on');
+  var segs=barEl.children;
+  for(var k=0;k<segs.length;k++)segs[k].classList.remove('lost');
+  updateUI();
+}
+
+// ---------- 控制条接线 ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div'); s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// 测试钩子
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+
+renderTo(-1);
+
+// ---------- ?selftest=1 轻量自检（只断言状态，不依赖动画） ----------
+function runSelfTest(){
+  var pre=$('selftest-result'); var out=[]; var pass=0, fail=0;
+  function T(name,cond){ out.push((cond?'PASS ':'FAIL ')+name); if(cond)pass++; else fail++; }
+  try{
+    T('steps>0（共 '+steps.length+' 步）', steps.length>0);
+    var captions=[]; var threw=false;
+    for(var i=0;i<steps.length;i++){
+      try{ var r=window.__goto(i); if(r!==i)threw=true; captions.push(captionEl.textContent); }
+      catch(e){ threw=true; captions.push('EXC:'+e.message); }
+    }
+    T('逐步 __goto(0..'+(steps.length-1)+') 无异常且返回正确下标', !threw);
+    var distinct=[]; for(var j=0;j<captions.length;j++) if(distinct.indexOf(captions[j])<0)distinct.push(captions[j]);
+    T('字幕文本随步变化（'+distinct.length+' 种字幕）', distinct.length>1);
+    if(steps.length>1) T('第 0/1 步字幕不同', captions[0]!==captions[1]);
+    T('末步字幕含「流程结束」', captions.length>0 && /流程结束/.test(captions[captions.length-1]));
+    window.__goto(-1);
+    T('__goto(-1) 字幕回到就绪空态', /就绪/.test(captionEl.textContent));
+    var empty=feeds.caller.children.length===0 && feeds.engine.children.length===0 && feeds.loop.children.length===0 && feeds.disk.children.length===0;
+    var segDone=0; var segs=barEl.children;
+    for(var k=0;k<segs.length;k++) if(segs[k].classList.contains('done'))segDone++;
+    T('__goto(-1) 泳道清空且进度归零（done 段='+segDone+'）', empty && segDone===0);
+    T('window.onerror 无错误'+(window.__errors.length?'（'+window.__errors.join('; ')+'）':''), window.__errors.length===0);
+  }catch(e){
+    out.push('FAIL 自检自身异常: '+e.message); fail++;
+  }
+  pre.textContent=out.join('\n');
+}
+if(/(?:\?|&)selftest=1(?:&|$|=)/.test(location.search)){
+  setTimeout(runSelfTest,50);
+}
+})();
+</script>
+</body>
+</html>

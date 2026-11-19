@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>进程退出收尾播放器：/exit → 最终 flush → 元数据回写 → process.exit</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c; --ser:#ec835a;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:var(--purple-f);border-color:var(--purple)}
+
+#stage{display:grid;grid-template-columns:148px 262px 232px 1fr 248px;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:760px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-width:0}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;min-height:0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+#lane-sig .h{border-bottom:2px solid var(--mut)}
+#lane-orch .h{border-bottom:2px solid var(--blue)}
+#lane-reg .h{border-bottom:2px solid var(--green)}
+#lane-disk .h{border-bottom:2px solid var(--orange)}
+#lane-misc .h{border-bottom:2px solid var(--purple)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+.chip{font-family:var(--mono);font-size:11.8px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.4;word-break:break-all}
+.chip.req{background:var(--blue-f);border-color:var(--blue);color:var(--ink);font-weight:600}
+.chip.wr{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.ok{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.fin{background:var(--green-f);border-color:var(--good);color:var(--ink);font-weight:700}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+
+.mem{flex:0 0 auto;height:388px;border-top:2px dashed var(--hair);background:#faf9f6;padding:10px 12px;display:flex;flex-direction:column;gap:8px;transition:border-color .3s ease,box-shadow .3s ease}
+.mem.glow{border-color:var(--orange);box-shadow:0 0 0 2px rgba(235,104,52,.28)}
+.mem-h{font-size:12px;font-weight:700;color:var(--sec);line-height:1.45}
+.mem-sub{font-size:11.5px;font-weight:700;color:var(--sec)}
+.mem-sub small{font-weight:400;color:var(--mut);margin-left:6px;font-size:10.5px}
+#tail{flex:1 1 0;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.tl{font-family:var(--mono);font-size:11.2px;white-space:pre-wrap;word-break:break-all;padding:4px 8px;border-radius:6px;background:var(--white);border:1px solid var(--hair);border-left-width:3px;border-left-style:solid;animation:pop .35s ease;line-height:1.45}
+.tl.seed{background:transparent;border:1px dashed var(--hair);border-left-width:1px;color:var(--mut)}
+.tl.msg{border-left-color:var(--sec);color:var(--sec)}
+.tl.meta{border-left-color:var(--orange);border-color:var(--orange-l);background:var(--orange-f);color:var(--ink)}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-sig.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-orch.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-reg.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-disk.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-misc.hot{box-shadow:0 0 0 2px var(--purple),0 10px 30px rgba(98,80,214,.25)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.ctrl{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.wr{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:200px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:340px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:172px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px;word-break:break-all}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.act .ev{color:var(--blue)}
+#lines .ln.mech .ev{color:var(--purple)}
+#lines .ln.sys{color:var(--mut);font-style:italic}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost,#lines .ln.lost .ev{color:#b3b2ad}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:var(--purple-f);border-color:var(--purple)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:300px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+
+#selftest-result{display:none;margin-top:14px;background:var(--white);border:1px solid var(--hair);border-radius:12px;padding:12px 16px;font-family:var(--mono);font-size:12.5px;white-space:pre-wrap;color:var(--sec)}
+#selftest-result.on{display:block}
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:16px;font-size:11px;color:var(--mut);line-height:1.6}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>进程退出收尾播放器：/exit → 最终 flush → 元数据回写 → process.exit</h1>
+  <div class="sub">用户 /exit → <b>gracefulShutdown 编排</b> → <b>清理注册表并发执行</b> → <b>会话 JSONL 最终 flush + 元数据尾部重追加</b> → hooks / 遥测 → forceExit —— <b>元数据留在 64KB 尾窗口内，--resume 才认得出这个会话；failsafe 定时器保证进程永不挂死</b></div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 幕 · 退出触发（/exit · 信号）</span>
+  <span class="p1" data-ph="1">第 2 幕 · 会话落盘优先（2s 竞速）</span>
+  <span class="p2" data-ph="2">第 3 幕 · hooks 与遥测收尾</span>
+  <span class="p3" data-ph="3">第 4 幕 · 强制退出（forceExit）</span>
+</div>
+
+<div id="transport">
+  <div class="btns">
+    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+    <button id="b-brk" class="danger" title="kill -9 现场演示 (B)">⚡ kill -9 演示</button>
+    <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+  </div>
+  <div id="bar"></div>
+  <div id="speed">
+    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+  </div>
+  <div id="readout">就绪 · 点击 ▶ 播放</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-sig">
+    <div class="h" id="h-sig">🔔 退出扳机 <small>用户 / 终端 / OS</small></div>
+    <div class="feed" id="feed-sig"></div>
+    <div class="lane-foot"><b>谁能扣扳机</b>：/exit、Ctrl+D（REPL 正常退出）· Ctrl+C=SIGINT · kill=SIGTERM · 终端断开=SIGHUP<br>print 模式（-p）有自己的 SIGINT 处理，不让位</div>
+  </div>
+  <div class="lane" id="lane-orch">
+    <div class="h" id="h-orch">🧭 退出编排 <span class="tag">gracefulShutdown.ts</span></div>
+    <div class="feed" id="feed-orch"></div>
+    <div class="lane-foot"><b>一条编排线</b>：防重入 → hook 预算 → failsafe → exitCode → 终端复位+提示 → <b>2s cleanup 竞速</b> → hooks → 遥测(≤500ms) → forceExit</div>
+  </div>
+  <div class="lane" id="lane-reg">
+    <div class="h" id="h-reg">🧹 清理注册表 <span class="tag">cleanupRegistry.ts</span></div>
+    <div class="feed" id="feed-reg"></div>
+    <div class="lane-foot"><b>注册制</b>：模块在运行期把清理函数塞进全局 Set，退出时 <b>Promise.all 并发</b>执行 —— 谁注册谁善后</div>
+  </div>
+  <div class="lane" id="lane-disk">
+    <div class="h" id="h-disk">💾 会话 JSONL <span class="tag">sessionStorage · Project</span></div>
+    <div class="feed" id="feed-disk"></div>
+    <div class="mem" id="tail-win">
+      <div class="mem-h">📄 ~/.claude/projects/&lt;sanitizePath(cwd)&gt;/&lt;sessionId&gt;.jsonl —— 尾部 64KB 窗口</div>
+      <div class="mem-sub">readLiteMetadata 只读这段<small>--resume 列表靠窗口内的元数据认会话</small></div>
+      <div id="tail"></div>
+    </div>
+  </div>
+  <div class="lane" id="lane-misc">
+    <div class="h" id="h-misc">📎 挂尾收尾 <small>history · hooks · 遥测</small></div>
+    <div class="feed" id="feed-misc"></div>
+    <div class="lane-foot"><b>都排在会话落盘之后</b>：提示历史 flush、SessionEnd hooks（≤1.5s）、遥测（≤500ms）—— 各有硬时限，超时就放弃</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ kill -9 / 断电现场<small>SIGKILL 无法被捕获 —— 下方灰显的退出流程一行都没有执行</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>完整：会话消息主体</b><span>运行期 100ms 批量写早已落盘 · append-only 旧内容不损</span></div>
+    <div class="brow"><span class="d" style="background:var(--ser)"></span><b>部分：最后 ≤100ms 的队列尾巴</b><span>攒在内存里没来得及 appendFile —— 最坏半行 JSON</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>缺失：元数据尾部重追加</b><span>custom-title / tag / last-prompt 没回到 64KB 尾窗口 → --resume 列表退回 firstPrompt</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>缺失：终端复位 + resume 提示</b><span>终端可能残留 alt screen 脏状态</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">怎么恢复 / 兜底</div>
+    <ul>
+      <li><b>claude --resume &lt;sessionId&gt;</b>：消息照常恢复（append-only 的好处）</li>
+      <li>标题丢了 → <b>/rename</b> 重设；终端脏 → <b>reset</b> 重开</li>
+      <li>就算不是 kill -9：cleanup 挂死也有 <b>failsafe max(5s, hook 预算+3.5s)</b> 强退 —— 「挂死的退出」不存在</li>
+      <li>对比：远程持久化失败是<b>硬失败</b> → gracefulShutdownSync(1)（sessionStorage.ts:1376-1379）</li>
+    </ul>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤日志 · 每步一行（蓝 = 实际动作 · 紫 = 机制说明）<span class="lg">灰显 = kill -9 现场中未执行的步骤</span></div>
+  <div id="lines"></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>控制 / 编排动作</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>磁盘写入（元数据条目）</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>注册 / 完成</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>机制说明（不可直接观测）</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red)"></span>kill -9 故障演示</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = kill -9 现场 · 0.5–4× 倍速</div>
+
+<pre id="selftest-result"></pre>
+
+<footer>依据 claude-code 仓库源码实读考据（只读取证）：src/utils/gracefulShutdown.ts · src/utils/cleanupRegistry.ts · src/utils/sessionStorage.ts · src/utils/history.ts · src/utils/hooks.ts · src/interactiveHelpers.tsx:127-128 —— 每步日志附 file:line。与同目录《jsonl-persist 播放器》配套：那一页讲运行期消息怎么持续落盘，这一页讲进程退出时怎么把尾巴收干净。</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.onerror=function(msg,src,line,col){window.__errors.push(String(msg)+' @'+line+':'+col);return false};
+
+var $=function(id){return document.getElementById(id)};
+var LANES=['sig','orch','reg','disk','misc'];
+var feeds={},lanes={},heads={};
+for(var li=0;li<LANES.length;li++){
+  var k0=LANES[li];
+  feeds[k0]=$('feed-'+k0);lanes[k0]=$('lane-'+k0);heads[k0]=$('h-'+k0);
+}
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout');
+var tailEl=$('tail'), tailWin=$('tail-win');
+var activeAnims=[]; var breakMode=false;
+var focusMode=true;
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function tailLine(o){var d=el('tl '+o.cls,tailEl,o.txt);tailEl.scrollTop=tailEl.scrollHeight;return d}
+function addLog(kind,text){
+  var d=document.createElement('div'); d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('——');
+    if(i>0){
+      var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+2).trim()));
+    }else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s)}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur'); for(var q=0;q<cur.length;q++)cur[q].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight; return d;
+}
+function fly(fromLane,toLane,label,cls,dur){
+  var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(toLane);
+}
+function setFocus(s){
+  var stage=document.getElementById('stage');
+  LANES.forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(tailWin)tailWin.classList.remove('glow');
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  LANES.forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+}
+
+// ---------- 步骤工厂：chip 追加 + 可选尾窗行追加 / 高亮 ----------
+function mk(o){
+  return {
+    id:o.id,ph:o.ph,dur:o.dur||850,focus:o.focus,lab:o.lab,
+    log:o.log||null,logKind:o.logKind||'sys',
+    state:function(){
+      chip(o.lane,o.chipCls,o.chipTxt);
+      if(o.tail){for(var k=0;k<o.tail.length;k++)tailLine(o.tail[k]);tailEl.scrollTop=tailEl.scrollHeight}
+      if(o.window)tailWin.classList.add('glow');
+    },
+    live:o.live||null
+  };
+}
+
+var steps=[].concat(
+ // ── 第 1 幕：退出触发 ──
+ mk({id:'sig-a',ph:0,dur:820,focus:'sig',lab:'用户敲下 /exit（或 Ctrl+D）—— REPL 收摊',
+   log:'用户退出 —— /exit 或 Ctrl+D，REPL 正常退出',logKind:'act',
+   lane:'sig',chipCls:'act',chipTxt:'/exit · Ctrl+D'}),
+ mk({id:'sig-b',ph:0,dur:880,focus:'sig',lab:'别的扳机也通向同一出口：Ctrl+C→0 · kill→143 · 断终端→129',
+   log:'信号扳机 —— SIGINT→exit 0 · SIGTERM→143 · SIGHUP→129，全部汇入 gracefulShutdown（gracefulShutdown.ts:251-271）',logKind:'mech',
+   lane:'sig',chipCls:'act',chipTxt:'SIGINT 0 · SIGTERM 143 · SIGHUP 129'}),
+ mk({id:'gs-in',ph:0,dur:850,focus:'orch',lab:'gracefulShutdown(0) 被调用，先置「正在退出」防重入',
+   log:'gracefulShutdown(0) —— shutdownInProgress=true，退出中二次触发直接返回（:396-399）',logKind:'act',
+   lane:'orch',chipCls:'req',chipTxt:'gracefulShutdown(0)',
+   live:function(){fly('sig','orch','gracefulShutdown(0)','ctrl',720)}}),
+ mk({id:'gs-budget',ph:0,dur:880,focus:'orch',lab:'先问 SessionEnd hooks 要多少预算（默认 1500ms）',
+   log:'hook 预算 —— SessionEnd hooks 默认 1500ms，CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS 可调（hooks.ts:176-183）',logKind:'mech',
+   lane:'orch',chipCls:'act',chipTxt:'hooks 预算 = 1500ms'}),
+ mk({id:'gs-failsafe',ph:0,dur:950,focus:'orch',lab:'武装失败安全定时器：max(5s, 预算+3.5s) —— 无论如何都会退',
+   log:'failsafe 定时器 —— max(5000, 预算+3500)ms 且 unref；到点还没退干净就复位终端+提示+强退（:409-421）',logKind:'mech',
+   lane:'orch',chipCls:'req',chipTxt:'failsafe ⏱ max(5s,+3.5s)'}),
+ mk({id:'gs-code',ph:0,dur:750,focus:'orch',lab:'process.exitCode = 0 先定下来（自然退出也用这个码）',
+   log:'process.exitCode = 0 —— 先定型，哪怕后续异常也能带码退出（:424）',logKind:'act',
+   lane:'orch',chipCls:'act',chipTxt:'exitCode = 0'}),
+ mk({id:'gs-term',ph:0,dur:900,focus:'orch',lab:'立刻复位终端：退 alt screen、关鼠标/键盘增强、显示光标',
+   log:'cleanupTerminalModes() —— 退 alt screen、关鼠标跟踪/键盘增强、显示光标；先于一切异步，防清理被杀时终端留在脏状态（:56-133）',logKind:'act',
+   lane:'orch',chipCls:'ok',chipTxt:'终端复位 ✓'}),
+ mk({id:'gs-hint',ph:0,dur:900,focus:'orch',lab:'同步打印 resume 提示 —— 哪怕随后被 SIGKILL，用户也看得到怎么恢复',
+   log:'printResumeHint() —— 「Resume this session with: ccb --resume <id>」；TTY+交互+会话文件存在才打印（:141-179）',logKind:'act',
+   lane:'orch',chipCls:'ok',chipTxt:'resume 提示 ✓'}),
+
+ // ── 第 2 幕：会话落盘优先（2s 竞速） ──
+ mk({id:'race-arm',ph:1,dur:950,focus:'orch',lab:'会话落盘包进 2 秒竞速 —— 最关键的清理必须最先、且有兜底',
+   log:'2s 竞速 —— 终端已死（SIGHUP）时 hooks/遥测会挂在死 TTY 的 I/O 上吃光预算；会话持久化必须先完成（:434-462）',logKind:'mech',
+   lane:'orch',chipCls:'req',chipTxt:'2s 竞速 ⏱ Promise.race'}),
+ mk({id:'rcf',ph:1,dur:880,focus:'reg',lab:'runCleanupFunctions()：注册表里的清理函数并发开跑（Promise.all）',
+   log:'runCleanupFunctions() —— cleanupFunctions Set 全量 Promise.all 并发（cleanupRegistry.ts:23-25）',logKind:'act',
+   lane:'reg',chipCls:'req',chipTxt:'Promise.all（注册表）',
+   live:function(){fly('orch','reg','runCleanupFunctions()','ctrl',700)}}),
+ mk({id:'reg-1',ph:1,dur:860,focus:'reg',lab:'注册者①：sessionStorage 的 Project 单例（首条消息落盘时注册的）',
+   log:'注册者① Project —— getProject() 首次调用时注册：先 flush() 再 reAppendSessionMetadata()（sessionStorage.ts:449-465）',logKind:'mech',
+   lane:'reg',chipCls:'act',chipTxt:'① Project · 会话 JSONL'}),
+ mk({id:'reg-2',ph:1,dur:860,focus:'reg',lab:'注册者②：prompt history（第一次记录用户输入时注册的）',
+   log:'注册者② history —— addToHistory 首次调用时注册（history.ts:419-431）',logKind:'mech',
+   lane:'reg',chipCls:'act',chipTxt:'② history · 提示历史'}),
+ mk({id:'fl-timer',ph:1,dur:840,focus:'disk',lab:'Project.flush() 第 1 步：取消 100ms 批量定时器',
+   log:'flush()① —— clearTimeout(flushTimer)：平时消息是每 100ms 一批攒着写的（sessionStorage.ts:864-868）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'flush① 取消 100ms 定时器',
+   live:function(){fly('reg','disk','project.flush()','wr',680)}}),
+ mk({id:'fl-drain',ph:1,dur:980,focus:'disk',lab:'第 2 步：清空写队列 —— 攒着的最后几行一次 appendFile（0600）落盘',
+   log:'flush()② —— 等在途 drain → 清空队列，把 ≤100ms 的尾巴补上；目录缺失先 mkdir 0700（sessionStorage.ts:648-700 · 869-874）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'flush② 清队列 → 落盘',
+   tail:[{cls:'msg',txt:'{"type":"user","message":{ … }}'},{cls:'msg',txt:'{"type":"assistant","message":{ … }}'}]}),
+ mk({id:'fl-pending',ph:1,dur:840,focus:'disk',lab:'第 3 步：等队列外写入（墓碑删除等）计数归零 —— flush() 返回',
+   log:'flush()③ —— 等非队列写入（removeMessageByUuid 这类 positional write）pendingWriteCount 归零（:876-883）',logKind:'act',
+   lane:'disk',chipCls:'ok',chipTxt:'flush③ pending=0 ✓'}),
+ mk({id:'ra-tail',ph:1,dur:900,focus:'disk',lab:'reAppendSessionMetadata：同步读文件尾 64KB（与渐进加载读同一扇窗口）',
+   log:'readFileTailSync —— 同步读尾部 LITE_READ_BUF_SIZE=65536；读失败返回空串走缓存（sessionStorage.ts:743 · 2631-2653）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'readFileTailSync · 64KB'}),
+ mk({id:'ra-absorb',ph:1,dur:900,focus:'disk',lab:'外部写入检查：SDK 改过的 title/tag 更新鲜？吸收它（外部值权威）',
+   log:'外部写入吸收 —— findLast+startsWith 只认行首条目，防误读消息内嵌的 "type":"tag"（:753-776）',logKind:'mech',
+   lane:'disk',chipCls:'act',chipTxt:'吸收 SDK 外写 title/tag ✓'}),
+ mk({id:'ra-lastprompt',ph:1,dur:880,focus:'disk',lab:'尾部重追加开始：last-prompt 先写（让关键字段更贴近 EOF）',
+   log:'重追加 last-prompt —— appendFileSync 先写 last-prompt，让 title/tag 落在更贴 EOF 的位置（:781-787）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'+ last-prompt',
+   tail:[{cls:'meta',txt:'{"type":"last-prompt","lastPrompt":"把退出流程做成播放器"}'}]}),
+ mk({id:'ra-title',ph:1,dur:880,focus:'disk',lab:'custom-title、tag 追加到 EOF —— --resume 列表靠它们认会话',
+   log:'重追加 custom-title · tag —— 用户起的标题和标签（:788-803）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'+ custom-title · tag',
+   tail:[{cls:'meta',txt:'{"type":"custom-title","customTitle":"exit-flush 播放器"}'},{cls:'meta',txt:'{"type":"tag","tag":"dyn"}'}]}),
+ mk({id:'ra-agent',ph:1,dur:880,focus:'disk',lab:'agent 三件套追加：agent-name / agent-color / agent-setting（有则写）',
+   log:'重追加 agent-name · agent-color · agent-setting —— 有值才写（:804-824）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'+ agent-name/color/setting',
+   tail:[{cls:'meta',txt:'{"type":"agent-name","agentName":"rex"}'},{cls:'meta',txt:'{"type":"agent-color","agentColor":"#2a78d6"}'}]}),
+ mk({id:'ra-rest',ph:1,dur:880,focus:'disk',lab:'剩余元数据追加：mode / goal / worktree-state / pr-link（有则写）',
+   log:'重追加 mode · goal · worktree-state · pr-link —— pr-link 需 prNumber+prUrl+prRepository 齐全（:825-860）',logKind:'act',
+   lane:'disk',chipCls:'wr',chipTxt:'+ mode/goal/worktree/pr',
+   tail:[{cls:'meta',txt:'{"type":"mode","mode":"default"}'},{cls:'meta',txt:'{"type":"worktree-state","worktreeSession":null}'}]}),
+ mk({id:'ra-window',ph:1,dur:950,focus:'disk',lab:'元数据全落在 64KB 尾读窗口内 —— 不会被后续消息顶出去',
+   log:'64KB 尾读窗口 —— 元数据写在 EOF，消息再多也顶不走；readLiteMetadata 渐进加载 / --resume 列表读这段（:707-733 注释）',logKind:'mech',
+   lane:'disk',chipCls:'ok',chipTxt:'64KB 窗口内 ✓',window:true}),
+ mk({id:'hist',ph:1,dur:900,focus:'misc',lab:'注册者②执行：等在途 flush → 残余 pendingEntries 最终写入 history.jsonl',
+   log:'history 最终 flush —— 等在途 flush → pendingEntries 非空则 immediateFlushHistory 写 ~/.claude/history.jsonl（history.ts:421-430）',logKind:'act',
+   lane:'misc',chipCls:'ok',chipTxt:'history.jsonl 最终 flush ✓',
+   live:function(){fly('reg','misc','history cleanup','ctrl',700)}}),
+ mk({id:'race-end',ph:1,dur:880,focus:'orch',lab:'2s 竞速收口：正常完成；就算超时也被静默吞掉（best-effort）',
+   log:'竞速收口 —— cleanup 超时/异常被 catch 静默吞掉，退出清理不追求完美（gracefulShutdown.ts:441-462）',logKind:'mech',
+   lane:'orch',chipCls:'ok',chipTxt:'竞速收口 ✓（best-effort）'}),
+
+ // ── 第 3 幕：hooks 与遥测 ──
+ mk({id:'hooks',ph:2,dur:950,focus:'misc',lab:'SessionEnd hooks 执行 —— 整体预算 1.5s 封顶，挂了就超时放弃',
+   log:'SessionEnd hooks —— AbortSignal.timeout(1500ms) 整体封顶；hook 异常/超时忽略继续（:464-475）',logKind:'act',
+   lane:'misc',chipCls:'act',chipTxt:'SessionEnd hooks ≤1.5s',
+   live:function(){fly('orch','misc','SessionEnd hooks','ctrl',700)}}),
+ mk({id:'profile',ph:2,dur:820,focus:'misc',lab:'启动性能报告 + 「缓存可逐出」提示事件',
+   log:'性能报告 + 缓存逐出提示 —— profileReport() · tengu_cache_eviction_hint，赶在遥测关门前发出（:477-494）',logKind:'act',
+   lane:'misc',chipCls:'act',chipTxt:'profile + eviction hint'}),
+ mk({id:'analytics',ph:2,dur:920,focus:'misc',lab:'遥测 flush：1P / Datadog / Sentry 并发，与 500ms 竞速 —— 慢网络丢就丢',
+   log:'遥测 flush —— shutdown1PEventLogging ‖ shutdownDatadog ‖ closeSentry 与 sleep(500) 竞速：丢遥测可接受，挂死的退出不可接受（:496-510）',logKind:'mech',
+   lane:'misc',chipCls:'ok',chipTxt:'analytics ≤500ms ✓'}),
+
+ // ── 第 4 幕：强制退出 ──
+ mk({id:'final-msg',ph:3,dur:780,focus:'orch',lab:'finalMessage（如有）同步写 stderr',
+   log:'finalMessage —— writeSync(2) 写 stderr；stderr 可能已关（SSH 断开），写失败忽略（:512-519）',logKind:'act',
+   lane:'orch',chipCls:'act',chipTxt:'finalMessage → stderr（可选）'}),
+ mk({id:'fe-timer',ph:3,dur:800,focus:'orch',lab:'forceExit(0)：先摘掉 failsafe 定时器',
+   log:'forceExit① —— clearTimeout(failsafeTimer)（:188-193）',logKind:'act',
+   lane:'orch',chipCls:'req',chipTxt:'forceExit：clear failsafe'}),
+ mk({id:'fe-stdin',ph:3,dur:800,focus:'orch',lab:'最后一次 drain stdin —— 收掉清理这几秒里终端又发来的字节',
+   log:'forceExit② —— 最后 drainStdin：从复位终端到现在有几秒窗口，终端事件可能还在路上（:194-207）',logKind:'mech',
+   lane:'orch',chipCls:'act',chipTxt:'drainStdin 末次'}),
+ mk({id:'fe-exit',ph:3,dur:900,focus:'orch',lab:'process.exit(0) —— 进程以既定退出码收尾',
+   log:'process.exit(0) —— 以既定退出码收尾（:208-209）',logKind:'act',
+   lane:'orch',chipCls:'req',chipTxt:'process.exit(0) ✓',
+   live:function(){fly('orch','sig','退出码 0 ✓','back',760)}}),
+ mk({id:'fe-kill',ph:3,dur:850,focus:'orch',lab:'兜底：终端已死时 exit() 抛 EIO → SIGKILL 自杀（不经过任何 flush）',
+   log:'EIO 兜底 —— 终端已死时 process.exit() 会因 flush 死 PTY 抛错 → process.kill(pid, SIGKILL) 永远有效（:210-218）',logKind:'mech',
+   lane:'orch',chipCls:'act',chipTxt:'EIO → SIGKILL 兜底'}),
+ mk({id:'done',ph:3,dur:900,focus:'orch',lab:'会话数据完整落盘，进程以退出码 0 收尾',
+   log:'流程结束 —— 消息、元数据、提示历史全部落盘；failsafe 未触发',logKind:'sys',
+   lane:'orch',chipCls:'fin',chipTxt:'✓ 退出完成 · 落盘完整'})
+);
+
+// kill -9 断点：落在扳机扣下之后、编排启动之前（SIGKILL 无处理器可走）
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='gs-in')return i-1}return 1})();
+// 元数据进窗步：从这一步起尾窗持续高亮（确定性重建）
+var WIN_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='ra-window')return i}return steps.length})();
+
+// ---------- rebuild / engine ----------
+var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
+
+function tailSeed(){el('tl seed',tailEl,'…… 运行期批量写入的消息行（每 100ms 一批 · appendFile 0600）')}
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  LANES.forEach(function(k){feeds[k].innerHTML=''});
+  linesEl.innerHTML='';
+  tailEl.innerHTML='';tailSeed();
+  tailWin.classList.remove('glow');
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  if(idx>=WIN_AT)tailWin.classList.add('glow');
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){readout.innerHTML='就绪 · 点击 ▶ 播放'}
+  else if(idx>=n-1){readout.innerHTML='<span class="fin">✓ 流程结束</span> · 现在：'+steps[idx].lab}
+  else{readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · 现在：'+steps[idx].lab}
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  stepT0=Date.now(); remaining=delay;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  if(idx>=WIN_AT)tailWin.classList.add('glow');
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true; $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- kill -9 故障演示 ----------
+function killDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ SIGKILL —— 无法捕获，以下退出流程全部未执行 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ kill -9 现场</b> · 退出流程未执行 —— 状态盘点与恢复路径见红色面板';
+}
+function exitBreak(){
+  breakMode=false; $('break-panel').classList.remove('on'); renderTo(idx);
+}
+
+// ---------- transport wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():killDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():killDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest (?selftest=1) ----------
+function runSelfTest(){
+  var pre=$('selftest-result'), lines=[];
+  function rec(name,ok,detail){lines.push((ok?'PASS':'FAIL')+' '+name+(detail?(' —— '+detail):''))}
+  setTimeout(function(){
+    try{
+      // T1 步数
+      rec('steps > 0', steps.length>0, 'steps='+steps.length);
+      // T2 逐步 __goto 无异常且 idx 归位
+      var ok2=true, det='';
+      try{
+        for(var i=0;i<steps.length;i++){window.__goto(i);if(idx!==i){ok2=false;det='idx mismatch @'+i;break}}
+      }catch(e){ok2=false;det=String(e&&e.message||e)}
+      rec('stepwise __goto(0..n-1) no exception', ok2, det||('n='+steps.length));
+      // T3 字幕随步变化（取「现在：」后的人话文本，应每步都不同）
+      var labSet={};
+      for(var j=0;j<steps.length;j++){
+        window.__goto(j);
+        var t=readout.textContent.split('现在：');
+        var lab=(t.length>1?t[1]:('('+j+' no caption)'));
+        labSet[lab]=1;
+      }
+      var distinct=0;for(var kk in labSet)distinct++;
+      rec('subtitle text varies with step', distinct===steps.length, distinct+'/'+steps.length+' distinct');
+      // T4 __goto(-1) 重置回空态
+      window.__goto(-1);
+      var feedsEmpty=true;
+      LANES.forEach(function(k){if(feeds[k].children.length>0)feedsEmpty=false});
+      var tailClean=tailEl.querySelectorAll('.tl:not(.seed)').length===0;
+      var capInit=readout.textContent.indexOf('就绪')>=0;
+      rec('__goto(-1) resets to empty state', feedsEmpty&&tailClean&&capInit,
+        'feeds='+(feedsEmpty?'empty':'dirty')+' tail='+(tailClean?'seed-only':'dirty')+' cap='+readout.textContent);
+      // T5 window.onerror 为空
+      rec('window.onerror empty', window.__errors.length===0, window.__errors.join(' ; '));
+      // T6 终态字幕明确「流程结束」
+      window.__goto(steps.length-1);
+      rec('final subtitle says flow ended', readout.textContent.indexOf('流程结束')>=0, readout.textContent);
+      window.__goto(-1);
+    }catch(e){
+      rec('selftest harness', false, String(e&&e.message||e));
+    }
+    pre.textContent=lines.join('\n')||'FAIL selftest produced no results';
+    pre.classList.add('on');
+    window.__selftestResult=lines;
+  },80);
+}
+if(location.search.indexOf('selftest=1')>=0){runSelfTest()}
+else if(location.search.indexOf('break=1')>=0){killDemo()}
+else{
+  var mInit=location.search.match(/step=(\d+)/);
+  if(mInit)renderTo(parseInt(mInit[1],10)-1);
+  else renderTo(-1);
+}
+})();
+</script>
+</body>
+</html>

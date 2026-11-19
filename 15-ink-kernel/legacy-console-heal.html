@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Windows 老控制台 legacy 自愈流播放器：检测 → 每帧 gate → 周期性全量重绘</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1460px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px;max-width:1100px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:#EDEBFA;border-color:#6250d6}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;flex-direction:column;gap:7px}
+#transport .trow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#caption{font-size:13.5px;font-weight:600;color:var(--ink);background:var(--white);border:1px solid var(--line);border-radius:9px;padding:7px 12px;min-height:36px;line-height:1.5}
+#caption.fin{border-color:var(--good);color:var(--good)}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f);color:var(--red)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:#EDEBFA;border-color:#6250d6}
+#bar .seg:hover{transform:scaleY(1.5)}
+#bar .seg.lost{opacity:.35;border-style:dashed}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:280px;flex:0 1 auto}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+
+#stage{display:grid;grid-template-columns:236px 1fr 1.05fr 404px;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:678px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;transition:box-shadow .35s ease,filter .3s ease,opacity .3s ease}
+#stage.spot .lane.dim{filter:grayscale(.8);opacity:.45}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right;font-family:var(--mono)}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane-foot code{font-family:var(--mono);font-size:10.5px;color:var(--sec)}
+#lane-detect{border-bottom:2px solid var(--mut)}
+#lane-render{border-bottom:2px solid var(--sec)}
+#lane-diff{border-bottom:2px solid var(--blue)}
+#lane-term{border-bottom:2px solid var(--orange)}
+.lane.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.22)}
+#lane-detect.hot{box-shadow:0 0 0 2px var(--mut),0 10px 30px rgba(11,11,11,.14)}
+#lane-render.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.14)}
+#lane-term.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.entry{border:1px solid var(--hair);border-radius:8px;padding:6px 9px;background:var(--white);animation:pop .3s ease}
+.entry code{font-family:var(--mono);font-size:11.5px;color:var(--ink);display:block;word-break:break-all}
+.entry span{font-size:11px;color:var(--mut);display:block;margin-top:2px;line-height:1.45}
+
+.timer{flex:0 0 auto;padding:9px 12px;border-bottom:1px dashed var(--hair);background:#faf9f6}
+.timer .t-row{display:flex;justify-content:space-between;font-size:11px;color:var(--sec);margin-bottom:5px}
+.timer .t-row b{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.timer .t-bar{height:10px;border:1px solid var(--line);border-radius:5px;background:var(--white);overflow:hidden}
+.timer .t-bar div{height:100%;width:0;background:var(--blue);transition:width .35s ease,background .35s ease}
+.timer .t-bar div.warn{background:var(--orange)}
+.timer .t-bar div.hit{background:var(--red)}
+
+#scr-wrap{flex:0 0 auto;padding:9px 12px 7px;border-bottom:1px dashed var(--hair);background:#faf9f6}
+#scr-cap{font-size:11px;font-weight:700;color:var(--sec);margin-bottom:6px}
+#scr{display:grid;grid-template-columns:repeat(16,1fr);gap:2px;background:var(--white);border:1px solid var(--line);border-radius:8px;padding:5px}
+#scr .c{height:21px;line-height:21px;text-align:center;font-family:var(--mono);font-size:11px;border-radius:3px;color:var(--ink);white-space:nowrap;overflow:hidden}
+#scr .c.ok{background:#eef0ec}
+#scr .c.bad{background:var(--orange-f);border:1px solid var(--orange);color:var(--red);font-weight:700}
+#scr .c.miss{border:1.5px dashed var(--line);color:var(--mut)}
+#scr .c.forb{background:repeating-linear-gradient(45deg,#faf9f6 0 4px,#efeee8 4px 8px)}
+#scr .c.bad.forb{background:var(--orange-f);border:1px solid var(--orange);color:var(--red)}
+#scr .c.vc{box-shadow:inset 0 -3px 0 var(--blue)}
+#scr .c.pc{background:var(--red);color:#fff;font-weight:700}
+#scr .c.new{animation:cellnew .6s ease}
+@keyframes cellnew{0%{background:var(--blue-f);transform:scale(1.25)}100%{transform:scale(1)}}
+#scr.flick{animation:flick .55s ease}
+@keyframes flick{0%{filter:brightness(1.9) saturate(.2)}40%{filter:brightness(.75)}100%{filter:none}}
+#scr-note{font-size:10.5px;color:var(--mut);margin-top:6px;line-height:1.5}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.mv{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.inc{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.heal{background:var(--green-f);border:1.5px solid var(--green);font-weight:700}
+
+#notes{margin-top:12px;border:1px solid var(--line);border-radius:14px;background:var(--white);padding:13px 16px;display:flex;gap:20px}
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:14.5px;width:220px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px;line-height:1.5}
+#break-panel .rows{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:350px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px;line-height:1.55}
+#notes .nc{flex:1;min-width:0}
+#notes .nt{font-weight:700;color:var(--ink);font-size:13px;margin-bottom:7px}
+#notes .nt small{display:block;color:var(--mut);font-weight:400;font-size:11px;margin-top:2px}
+#notes li{margin-left:16px;margin-bottom:5px;font-size:12px;color:var(--sec);line-height:1.55}
+#notes li b{color:var(--ink)}
+#notes code{font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+
+.legend{margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:12px;font-size:11px;color:var(--mut);line-height:1.7}
+footer code{font-family:var(--mono);font-size:10.5px;color:var(--sec)}
+#selftest-result{margin-top:10px;font-family:var(--mono);font-size:11.5px;background:var(--white);border:1px dashed var(--line);border-radius:8px;padding:8px 12px;white-space:pre-wrap;color:var(--sec);max-height:220px;overflow-y:auto}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>Windows 老控制台 legacy 自愈流播放器：启动检测 → 每帧 gate → 周期性全量重绘</h1>
+  <div class="sub">没有 ConPTY 的老 Windows（build 低于 17763）上，conhost 处理增量刷新会漂。claude-code 的对策是两道防线：<b>渲染宽度缩一列</b>（绕开 pending-wrap bug 的触发条件）+ <b>每约 1 秒一次全量重绘</b>替换增量 diff（把积累的残影一次清零）——「短暂劣化换长期正确」。</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">① 启动检测 · 两道防线上膛</span>
+  <span class="p1" data-ph="1">② 增量帧循环 · 漂移悄悄积累</span>
+  <span class="p2" data-ph="2">③ 到点自愈 · 全量重绘替换增量 diff</span>
+  <span class="p3" data-ph="3">④ 第二轮 &amp; 退出 · 循环语义</span>
+</div>
+
+<div id="transport">
+  <div class="trow">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-brk" class="danger" title="断链演示 (B)">⚡ 断链演示</button>
+      <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪</div>
+  </div>
+  <div id="caption">就绪 · 点击 ▶ 播放（空格）· ← → 单步 · R 重置 · B 断链演示</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-detect">
+    <div class="h" id="h-detect">🧭 启动检测 <span class="tag">legacyConsole.ts</span><small>一次判定 · 模块级缓存</small></div>
+    <div class="feed" id="feed-detect"></div>
+    <div class="lane-foot">build 低于 17763 = Windows 10 1809（ConPTY 随它发布）之前的 conhost。判定结果缓存在<b>模块级变量</b>，进程存续期内不再变；环境变量覆盖只在首次求值时读一次。</div>
+  </div>
+  <div class="lane" id="lane-render">
+    <div class="h" id="h-render">🖼 渲染管线 <span class="tag">Ink · renderer</span><small id="fr">帧 —</small></div>
+    <div class="feed" id="feed-render"></div>
+    <div class="lane-foot">16ms 节流把一批 setState 合成一帧；yoga 布局 → renderer 产出新帧 → 前后帧<b>双缓冲交换</b>。布局宽度永远按<b>缩过的 79 列</b>算（构造器 / handleResize / onRender 三处同源）。</div>
+  </div>
+  <div class="lane" id="lane-diff">
+    <div class="h" id="h-diff">🔀 diff 引擎 <span class="tag">LogUpdate</span><small>每帧 gate：增量 or 全量</small></div>
+    <div class="timer">
+      <div class="t-row"><span>距上次全量重绘（periodic 周期）</span><b id="t-txt">— / 1000 ms</b></div>
+      <div class="t-bar"><div id="t-fill"></div></div>
+    </div>
+    <div class="feed" id="feed-diff"></div>
+    <div class="lane-foot"><b>gate 伪码</b>：<code>if (isLegacyWindowsConsole() &amp;&amp; (mode==='always' || now−lastLegacyReset ≥ 1000)) diff = fullReset(next,'clear') else diff = diffEach(prev,next)</code></div>
+  </div>
+  <div class="lane" id="lane-term">
+    <div class="h" id="h-term">🖥 老 conhost <span class="tag">物理终端</span><small id="dr">漂移 —</small></div>
+    <div id="scr-wrap">
+      <div id="scr-cap">物理屏幕（conhost 实际显示 · 16 列 × 8 行示意）</div>
+      <div id="scr"></div>
+      <div id="scr-note"><b>ok</b>=落位正确 · <b>橙</b>=错位/残影 · <b>虚框</b>=该有没落 · <b>斜纹列</b>=禁区(第16列) · <b>蓝底线</b>=虚拟光标(渲染器以为) · <b>红块</b>=物理光标(conhost 实际)。横向偏移是漂移的<b>示意</b>（实际故障多为行错位/残影）。</div>
+    </div>
+    <div class="feed" id="feed-term"></div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 断链现场<small>周期到点、gate 已判定翻转，但「全量重绘替换增量 diff」这一步没有发生</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>完整 · legacyConsole 模块缓存</b><span>cachedMode='periodic' / 1000ms 的检测与配置不受影响——问题出在门之后的执行，不在检测</span></div>
+    <div class="brow"><span class="d" style="background:#ec835a"></span><b>部分 · LogUpdate 内部状态</b><span>gate 每帧照常判「到期」，但替换不再落笔——lastLegacyReset 不再前进，计时器卡死在到点状态</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>缺失 · 终端屏幕</b><span>增量 diff 继续落屏：漂移与残影持续积累，永远等不到那次整屏重写——屏幕不再自愈</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>另一种「断」</b><span>与它无关的兜底：resize / 视口收缩触发 reason 'resize' 的全量重置——先于 legacy 门判定，永远可用</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">恢复 / 兜底路径</div>
+    <ul>
+      <li><b>拖一下终端窗口</b>：resize → 无条件 fullResetSequence('resize')（log-update.ts:150-155，先于 legacy 门）→ 立即整屏重画</li>
+      <li><b>重启进程</b>：模块缓存重建；prev 是空屏 → 首帧 diff 天然全量打底</li>
+      <li><b>坏得快的机器</b>：设 CLAUDE_CODE_LEGACY_CONSOLE=2（always）每帧全量重绘，重启后生效</li>
+    </ul>
+  </div>
+</div>
+
+<div id="notes">
+  <div class="nc">
+    <div class="nt">两道防线<small>为什么是「缩一列 + 周期重绘」</small></div>
+    <ul>
+      <li><b>防线① 渲染宽度缩一列</b>：<code>effectiveColumns = cols−1</code>，满宽行永不触碰最后一列 → pending-wrap（写最后一列立即换行、物理光标多走一行）的触发条件被绕开——增量 diff 和全量重绘都不再因它多漂。</li>
+      <li><b>防线② 周期性全量重绘</b>：每 ~1000ms 用「<code>clearTerminal</code> + 从 (0,0) 起整屏重写」<b>替换</b>本帧的增量 diff，把窗口期内积累的残影/错位一次清零。</li>
+    </ul>
+  </div>
+  <div class="nc">
+    <div class="nt">三种模式<small>CLAUDE_CODE_LEGACY_CONSOLE</small></div>
+    <ul>
+      <li><b>periodic</b>（win32 且 build 低于 17763 时自动）：每 interval 全量一次。</li>
+      <li><b>always</b>（<code>=2</code>）：每帧全量——给「每个增量 diff 都立刻花屏」的机器；最大闪烁、最大正确。</li>
+      <li><b>off</b>（<code>=0</code>，或非 win32 / build ≥ 17763）：gate 关闭，此路径完全不存在。</li>
+    </ul>
+  </div>
+  <div class="nc">
+    <div class="nt">边界与代价</div>
+    <ul>
+      <li><code>RESET_MS</code> 被 clamp 到 [100,10000]，防误配置。</li>
+      <li>每次全量重绘 = 一次闪烁：reason <code>'clear'</code> 计入 flicker 事件，两次闪烁间隔 &lt; 1 秒（连发）才上报 <code>tengu_flicker</code>；reason 'resize' 的闪烁跳过上报；支持 DEC 2026 原子输出的终端整体跳过。窗口变窄/变宽也触发全量（reason <code>'resize'</code>），共用同一条 fullResetSequence。</li>
+      <li>考据分歧：子系统档案把 flicker 上报描述为「1 秒去重」，与实码相反（<code>interactiveHelpers.tsx:356</code> 是 <code>间隔 &lt; 1000 才上报</code>，即连发检测）；本页以实码为准。</li>
+      <li>强制 <code>=1</code> 跑在现代终端上：白损一列宽（缩列与 gate 同门控制）。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>帧 / 元数据</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>增量 patch</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>整屏重写（自愈）</span>
+  <span class="k"><span class="sw" style="background:#eef0ec;border-color:var(--line)"></span>落位正确</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>错位/残影</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 断链演示 · 🔦 聚焦开关 · 循环类流程：完整一轮（F1→F7 自愈）+ 简短第二轮（F8→F10）+ 进程退出收尾</div>
+<footer>
+证据（claude-code 仓库实读）：<code>packages/@ant/ink/src/core/legacyConsole.ts:27-93</code>（build 判定 / 0-1-2 覆盖 / 间隔 clamp / effectiveColumns）·
+<code>packages/@ant/ink/src/core/log-update.ts:52,157-172</code>（每帧 gate 与 lastLegacyReset）·
+<code>packages/@ant/ink/src/core/log-update.ts:528-538</code>（fullResetSequence_CAUSES_FLICKER = clearTerminal + (0,0) 全帧重写）·
+<code>packages/@ant/ink/src/core/ink.tsx:251,400,526</code>（effectiveColumns 三处消费）·
+<code>packages/@ant/ink/src/core/ink.tsx:681-694,704-723,826-830</code>（log.render → optimize → writeDiffToTerminal、flicker 收集）·
+<code>src/interactiveHelpers.tsx:346-364</code>（tengu_flicker：连发 &lt;1s 才上报、resize 跳过、DEC 2026 同步输出终端免报）·
+<code>CLAUDE.md:144</code>。屏幕内容为教学示意，非真实终端输出。
+</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__err=[];
+window.onerror=function(m){var s=String(m);if(window.__err.indexOf(s)<0)window.__err.push(s)};
+window.addEventListener('error',function(e){var s=String((e&&e.message)||'error');if(window.__err.indexOf(s)<0)window.__err.push(s)});
+
+var $=function(id){return document.getElementById(id)};
+var feeds={detect:$('feed-detect'),render:$('feed-render'),diff:$('feed-diff'),term:$('feed-term')};
+var lanes={detect:$('lane-detect'),render:$('lane-render'),diff:$('lane-diff'),term:$('lane-term')};
+var flightsEl=$('flights'), barEl=$('bar'), readout=$('readout'), captionEl=$('caption'), scrEl=$('scr');
+var activeAnims=[];
+var breakMode=false, focusMode=true;
+
+function entry(lane,code,sub){
+  var d=document.createElement('div');d.className='entry';
+  var c=document.createElement('code');c.textContent=code;d.appendChild(c);
+  if(sub){var s=document.createElement('span');s.textContent=sub;d.appendChild(s)}
+  feeds[lane].appendChild(d);feeds[lane].scrollTop=feeds[lane].scrollHeight;return d;
+}
+function fly(from,to,label,cls,dur){
+  try{
+    var a=lanes[from].getBoundingClientRect(), b=lanes[to].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+    var f=document.createElement('div'); f.className='flight '+(cls||'mv'); f.textContent=label;
+    var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+    f.style.left=x0+'px'; f.style.top=y0+'px';
+    flightsEl.appendChild(f);
+    var dx=x1-x0;
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},
+      {transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},
+      {transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],
+      {duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){/* 动画不可用时静默：状态不受影响 */}
+}
+function flick(){scrEl.classList.remove('flick');void scrEl.offsetWidth;scrEl.classList.add('flick')}
+
+// ---------- 屏幕模拟（物理 conhost）----------
+var ROWSN=8, COLSN=16, W=15; // 可写列 0..14；第 16 列（下标 15）= 禁区
+var F=[
+  {id:'F1', t:0,    full:true, rows:['› fix the drift','','⠋ working…','','','','›','']},
+  {id:'F2', t:180,  drift:1,   rows:['› fix the drift','','⠙ working…','old conhost','','','›','']},
+  {id:'F3', t:400,  drift:1,   rows:['› fix the drift','','⠹ working…','old conhost VT','','','›','']},
+  {id:'F4', t:620,  drift:2,   rows:['› fix the drift','','⠸ working…','old conhost VT','parser drifts','','› f','']},
+  {id:'F5', t:840,  drift:2,   rows:['› fix the drift','','⠼ working…','old conhost VT','parser drifts…','','› fi','']},
+  {id:'F6', t:990,  drift:3,   rows:['› fix the drift','','⠴ working…','old conhost VT','parser drifts…','','› fix','']},
+  {id:'F7', t:1060, full:true, rows:['› fix the drift','','⠦ working…','old conhost VT','parser drifts…','healed ✓','› fix','']},
+  {id:'F8', t:1230, drift:1,   rows:['› fix the drift','','⠧ working…','old conhost VT','parser drifts…','still healing','› fix t','']},
+  {id:'F9', t:1450, drift:1,   rows:['› fix the drift','','⠇ working…','old conhost VT','parser drifts…','still healing…','› fix t','']},
+  {id:'F10',t:2150, full:true, rows:['› fix the drift','','⠏ done ✓','old conhost VT','parser drifts…','still healing…','› fix t_','']}
+];
+var sim={vk:-1,pk:-1,forbidden:false,stats:null};
+
+function rowOf(fr,y){var s=fr.rows[y]||'';var a=[];for(var x=0;x<W;x++)a.push(x<s.length?s.charAt(x):' ');return a}
+function diffCells(a,b){var out=[];for(var y=0;y<ROWSN;y++){var ra=rowOf(F[a],y),rb=rowOf(F[b],y);
+  for(var x=0;x<W;x++){if(ra[x]!==rb[x])out.push({x:x,y:y,ch:rb[x]})}}return out}
+function patchSize(k){return diffCells(k-1,k).length}
+function physSize(k){var n=0;for(var y=0;y<ROWSN;y++){var r=rowOf(F[k],y);for(var x=0;x<W;x++)if(r[x]!==' ')n++}return n}
+
+function computePhys(k){
+  var phys=[];for(var y=0;y<ROWSN;y++){phys.push([]);for(var x=0;x<COLSN;x++)phys[y].push(null)}
+  var lastWrites=[];
+  for(var f=0;f<=k;f++){
+    var fr=F[f]; lastWrites=[];
+    if(fr.full){
+      // clearTerminal 先清整屏，再全帧重写：漂移期写歪的旧字符一并抹掉（自愈语义）
+      for(var y0=0;y0<ROWSN;y0++)for(var x0=0;x0<COLSN;x0++)phys[y0][x0]=null;
+      for(var y2=0;y2<ROWSN;y2++){var r=rowOf(fr,y2);
+        for(var x2=0;x2<W;x2++){if(r[x2]!==' '){phys[y2][x2]=r[x2];lastWrites.push({x:x2,y:y2})}}}
+    }else{
+      var cells=f>0?diffCells(f-1,f):[];
+      for(var i=0;i<cells.length;i++){var c=cells[i];var lx=c.x+(fr.drift||0);if(lx>15)lx=15;
+        if(c.ch!==' '){phys[c.y][lx]=c.ch;lastWrites.push({x:lx,y:c.y})}}
+    }
+  }
+  var V=F[k], bad=0, miss=0;
+  var cls=[];
+  for(var y3=0;y3<ROWSN;y3++){var rv=rowOf(V,y3);
+    for(var x3=0;x3<COLSN;x3++){
+      var vch=x3<W?rv[x3]:' ';
+      var pch=phys[y3][x3];
+      var st='';
+      if(pch!=null){if(pch===vch)st='ok';else{st='bad';bad++}}
+      else if(vch!==' '){st='miss';miss++}
+      cls.push(st);
+    }}
+  var vCur=null,pCur=null;
+  if(F[k].full){vCur={x:2,y:7};pCur={x:2,y:7}}
+  else if(lastWrites.length){
+    var cells2=diffCells(k-1,k);var lc=cells2[cells2.length-1];
+    vCur={x:Math.min(lc.x+1,15),y:lc.y};
+    var lw=lastWrites[lastWrites.length-1];
+    pCur={x:Math.min(lw.x+1,15),y:lw.y};
+  }
+  return {phys:phys,cls:cls,bad:bad,miss:miss,vCur:vCur,pCur:pCur,lastWrites:lastWrites};
+}
+function buildCells(cls,phys,vk){
+  scrEl.innerHTML='';
+  for(var y=0;y<ROWSN;y++)for(var x=0;x<COLSN;x++){
+    var d=document.createElement('div'); d.className='c';
+    var st=cls?cls[y*COLSN+x]:'';
+    if(st)d.classList.add(st);
+    if(sim.forbidden&&x===15)d.classList.add('forb');
+    if(phys){
+      var pch=phys[y][x];
+      if(pch!=null&&st!=='miss')d.textContent=pch;
+      else if(st==='miss'){var vc=rowOf(F[vk],y)[x];if(vc)d.textContent=vc}
+      else d.textContent='';
+    }else d.textContent='';
+    scrEl.appendChild(d);
+  }
+}
+function renderBlank(){buildCells(null,null,-1);$('dr').textContent='漂移 —'}
+function renderScreen(k){
+  var r=computePhys(k); sim.stats=r;
+  buildCells(r.cls,r.phys,k);
+  var cells=scrEl.children;
+  for(var w=0;w<r.lastWrites.length;w++){
+    var idx=r.lastWrites[w].y*COLSN+r.lastWrites[w].x;
+    if(cells[idx])cells[idx].classList.add('new');
+  }
+  if(r.vCur){var vi=r.vCur.y*COLSN+r.vCur.x;if(cells[vi])cells[vi].classList.add('vc')}
+  if(r.pCur){var pi=r.pCur.y*COLSN+r.pCur.x;if(cells[pi])cells[pi].classList.add('pc')}
+  $('dr').textContent='漂移 '+(F[k].full?0:(F[k].drift||0))+' 格 · 残影 '+r.bad+' · 缺失 '+r.miss;
+}
+function setVirtual(k){sim.vk=k;$('fr').textContent='帧 '+F[k].id+' · t=+'+F[k].t+'ms'}
+function landFrame(k){sim.pk=k;renderScreen(k)}
+function setTimer(delta){
+  var f=$('t-fill'),t=$('t-txt');
+  if(delta==null){t.textContent='— / 1000 ms';f.style.width='0%';f.className='';return}
+  if(delta>=1000){f.style.width='100%';f.className='hit';t.textContent=delta+' / 1000 ms · 到点'}
+  else{f.style.width=Math.min(100,delta/10)+'%';f.className=delta>=800?'warn':'';t.textContent=delta+' / 1000 ms'}
+}
+
+// ---------- 步骤脚本 ----------
+var steps=[].concat(
+ // ① 启动检测
+ {id:'boot',ph:0,lane:'detect',dur:900,lab:'进程启动：第一次有人调用 legacyConsoleMode()，读系统版本号',
+  state:function(){entry('detect','os.release() → "10.0.16299"','取第三段解析出 build 号（纯函数，可单测）')},live:null},
+ {id:'build',ph:0,lane:'detect',dur:1000,lab:'build 16299 低于 17763：这台机器的 conhost 还没有 ConPTY，增量刷新会漂',
+  state:function(){entry('detect','isLegacyWindowsBuild() → true','win32 自动进入 periodic 模式；cachedMode 模块级缓存——进程存续期内不再判定')},live:null},
+ {id:'env',ph:0,lane:'detect',dur:950,lab:'没人设环境变量：自愈间隔取默认 1000ms（写入时被夹在 [100, 10000]）',
+  state:function(){entry('detect','RESET_MS 未设 → cachedResetMs = 1000','CLAUDE_CODE_LEGACY_CONSOLE=0 / 1 / 2(=always) 可强制覆盖')},live:null},
+ {id:'cols',ph:0,lane:'render',dur:1000,lab:'Ink 构造器量宽度：effectiveColumns(80) = 79 —— 防线①上膛，渲染宽度永久缩一列',
+  state:function(){entry('render','init · terminalColumns = 79','布局按 79 列算（构造器 / handleResize / onRender 三处同源）')},
+  live:function(){fly('detect','render','effectiveColumns(80) → 79','mv')}},
+ {id:'zone',ph:0,lane:'term',dur:1000,lab:'最后一列被划成禁区：渲染字节永不写它 → pending-wrap bug 的触发条件被绕开',
+  state:function(){sim.forbidden=true;if(sim.pk>=0)renderScreen(sim.pk);else renderBlank();
+    entry('term','禁区生效（第 16 列）','满宽行不碰最后一列，物理光标不会被多推一行')},live:null},
+
+ // 首帧 F1
+ {id:'f1a',ph:1,lane:'render',dur:900,lab:'首帧：React 挂载完成 → yoga 布局 → 产出帧 F1（t=+0ms）',
+  state:function(){setVirtual(0)},live:null},
+ {id:'f1b',ph:1,lane:'diff',dur:950,lab:'LogUpdate.render：prev 是空屏 → diff 天然覆盖整屏（首帧=全量打底）；lastLegacyReset 还是初始值 0',
+  state:function(){entry('diff','F1 · 整屏 diff（prev 空屏）','lastLegacyReset 初始为 0（log-update.ts:52）；此后每帧先过 gate');
+    setTimer(0)},
+  live:function(){fly('render','diff','prev=空屏 → next=F1','mv')}},
+ {id:'f1c',ph:1,lane:'term',dur:950,lab:'整屏字节落进 conhost：界面出现——物理光标与渲染器的虚拟光标重合，漂移 0',
+  state:function(){landFrame(0);entry('term','落屏 ✓ 整帧 '+(sim.stats?sim.stats.lastWrites.length:0)+' 格','此刻物理光标 ≡ 虚拟光标（红块骑在蓝底线上）')},
+  live:function(){fly('diff','term','整屏字节流（全帧重写）','heal',800)}},
+
+ // F2 t=180
+ {id:'f2a',ph:1,lane:'render',dur:850,lab:'流式回复第一个 delta 到达：16ms 节流把 setState 合成一帧 → 帧 F2（t=+180ms）',
+  state:function(){setVirtual(1)},live:null},
+ {id:'f2b',ph:1,lane:'diff',dur:900,lab:'每帧 gate：是老控制台，但 180 − 0 < 1000ms → 还没到点，走增量 diffEach',
+  state:function(){entry('diff','F2 · 增量 patch = '+patchSize(1)+' 格','只挑前后帧里变化的格子');setTimer(180)},live:null},
+ {id:'f2c',ph:1,lane:'term',dur:950,lab:'增量 patch 落屏：内容基本落对了，但老解析器把物理光标多挪 1 格——漂移开始',
+  state:function(){landFrame(1);entry('term','落屏：漂移 +1 格','蓝（渲染器以为）/ 红（conhost 实际）两个光标分开了')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(1)+' 格','inc')}},
+
+ // F3 t=400
+ {id:'f3a',ph:1,lane:'render',dur:800,lab:'回复继续长（又一个 delta）→ 帧 F3（t=+400ms）',
+  state:function(){setVirtual(2)},live:null},
+ {id:'f3b',ph:1,lane:'diff',dur:850,lab:'gate：400 < 1000 → 仍是增量，patch 更小',
+  state:function(){entry('diff','F3 · 增量 patch = '+patchSize(2)+' 格','gate: 400 < 1000 → incremental');setTimer(400)},live:null},
+ {id:'f3c',ph:1,lane:'term',dur:900,lab:'落屏：漂移没人修——字符开始写歪，第一处残影出现（橙格）',
+  state:function(){landFrame(2);entry('term','残影出现','错位字符 + 旧字符残留 = 与虚拟画面开始不一致')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(2)+' 格','inc')}},
+
+ // F4 t=620
+ {id:'f4a',ph:1,lane:'render',dur:800,lab:'delta 继续，用户还顺手敲了几个字 → 帧 F4（t=+620ms）',
+  state:function(){setVirtual(3)},live:null},
+ {id:'f4b',ph:1,lane:'diff',dur:850,lab:'gate：620 < 1000 → 增量（spinner 转一格也算变化）',
+  state:function(){entry('diff','F4 · 增量 patch = '+patchSize(3)+' 格','输入行也在长');setTimer(620)},live:null},
+ {id:'f4c',ph:1,lane:'term',dur:900,lab:'落屏：漂移累计 2 格，残影变多——花屏在悄悄变厚',
+  state:function(){landFrame(3);entry('term','漂移 2 格 · 残影累积中','窗口期内没人修它：设计上允许短暂劣化')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(3)+' 格','inc')}},
+
+ // F5 t=840
+ {id:'f5a',ph:1,lane:'render',dur:750,lab:'流式继续 → 帧 F5（t=+840ms）',
+  state:function(){setVirtual(4)},live:null},
+ {id:'f5b',ph:1,lane:'diff',dur:800,lab:'gate：840 < 1000 → 增量，只改 3 格',
+  state:function(){entry('diff','F5 · 增量 patch = '+patchSize(4)+' 格','小 patch 也照样带偏 2 格');setTimer(840)},live:null},
+ {id:'f5c',ph:1,lane:'term',dur:850,lab:'落屏：小 patch 也会添新残影（每个增量都在累积误差）',
+  state:function(){landFrame(4);entry('term','残影 +','距离到点还剩 160ms')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(4)+' 格','inc')}},
+
+ // F6 t=990
+ {id:'f6a',ph:1,lane:'render',dur:750,lab:'输入行再进一个字符 → 帧 F6（t=+990ms）',
+  state:function(){setVirtual(5)},live:null},
+ {id:'f6b',ph:1,lane:'diff',dur:850,lab:'gate：990 < 1000 → 增量；离自愈只差 10ms',
+  state:function(){entry('diff','F6 · 增量 patch = '+patchSize(5)+' 格','gate: 990 < 1000 → incremental（差一点）');setTimer(990)},live:null},
+ {id:'f6c',ph:1,lane:'term',dur:900,lab:'落屏：漂移 3 格——最后一点窗口期劣化，马上到点',
+  state:function(){landFrame(5);entry('term','漂移 3 格 · 残影最多时','下一帧就是自愈帧')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(5)+' 格','inc')}},
+
+ // 自愈 F7 t=1060
+ {id:'h0',ph:2,lane:'render',dur:850,lab:'帧 F7 产出（t=+1060ms）：diff 引擎拿到前后帧，gate 即将判到点',
+  state:function(){setVirtual(6)},live:null},
+ {id:'h1',ph:2,lane:'diff',dur:950,lab:'gate：1060 − 0 ≥ 1000ms → 到点！本帧不再走增量 diffEach',
+  state:function(){entry('diff','gate 命中：1060 ≥ 1000','mode 是 periodic（若是 always 则每帧都到点）');setTimer(1060)},live:null},
+ {id:'h2',ph:2,lane:'diff',dur:1000,lab:'增量 diff 被整体丢弃，替换为 fullResetSequence_CAUSES_FLICKER：clearTerminal + 从 (0,0) 起整屏重写；lastLegacyReset = 1060（新锚点）',
+  state:function(){entry('diff','diff = [clearTerminal, …整屏重写]','计时器清零，下一个 1000ms 周期开始');setTimer(0)},live:null},
+ {id:'h3',ph:2,lane:'term',dur:1100,lab:'整屏字节流落进 conhost：残影、错位全被正确内容覆盖，物理光标重新对齐——屏幕自愈 ✓',
+  state:function(){landFrame(6);entry('term','整屏重写 ✓ 自愈','物理光标 ≡ 虚拟光标，残影清零')},
+  live:function(){fly('diff','term','CLEAR + 整屏重写（~'+physSize(6)+' 格）','heal',900)}},
+ {id:'h4',ph:2,lane:'term',dur:950,lab:'代价：一次肉眼可见的闪烁——reason "clear" 计入 flicker 事件，连发（间隔 < 1 秒）才上报 tengu_flicker 遥测（刻意用短暂劣化换长期正确）',
+  state:function(){flick();entry('term','flicker ×1（tengu_flicker）','支持 DEC 2026 原子输出的终端可免报，老 conhost 不支持')},live:null},
+
+ // 第二轮 F8..F10
+ {id:'g1',ph:3,lane:'render',dur:900,lab:'第二轮循环开始（同样的 gate、同样的积累）：帧 F8（t=+1230ms）',
+  state:function(){setVirtual(7);entry('render','帧 F8 · t=+1230ms','循环语义：漂移从 0 重新积累')},live:null},
+ {id:'g2',ph:3,lane:'diff',dur:850,lab:'gate：1230 − 1060 = 170 < 1000 → 又走增量；周期重新计时',
+  state:function(){entry('diff','F8 · 增量 patch = '+patchSize(7)+' 格','新锚点 1060；周期重启');setTimer(170)},live:null},
+ {id:'g3',ph:3,lane:'term',dur:900,lab:'落屏：残影又开始出现——窗口期内的「短暂劣化」再现',
+  state:function(){landFrame(7);entry('term','漂移 +1 · 残影再现','第二轮：与第一轮同构')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(7)+' 格','inc')}},
+ {id:'g4',ph:3,lane:'render',dur:800,lab:'帧 F9（t=+1450ms）：流式收尾中',
+  state:function(){setVirtual(8)},live:null},
+ {id:'g5',ph:3,lane:'diff',dur:800,lab:'gate：1450 − 1060 = 390 < 1000 → 增量',
+  state:function(){entry('diff','F9 · 增量 patch = '+patchSize(8)+' 格','gate: 390 < 1000 → incremental');setTimer(390)},live:null},
+ {id:'g6',ph:3,lane:'term',dur:850,lab:'落屏：漂移继续累积（第二轮从简，一轮的缩影）',
+  state:function(){landFrame(8);entry('term','残影累积中','等待下一次到点')},
+  live:function(){fly('diff','term','增量 patch ×'+patchSize(8)+' 格','inc')}},
+ {id:'g7',ph:3,lane:'diff',dur:1000,lab:'帧 F10（t=+2150ms）：2150 − 1060 = 1090 ≥ 1000 → 第二轮到点，又一次全量重绘',
+  state:function(){setVirtual(9);entry('diff','gate 命中：1090 ≥ 1000','替换为 clearTerminal + 整屏重写；lastLegacyReset = 2150');setTimer(1090)},live:null},
+ {id:'g8',ph:3,lane:'term',dur:1000,lab:'第二次自愈 ✓——只要进程活着，「积累 → 自愈」每秒一轮，没有终点',
+  state:function(){landFrame(9);entry('term','整屏重写 ✓ 自愈','周期循环：进程存活期间持续')},
+  live:function(){fly('diff','term','CLEAR + 整屏重写','heal',900)}},
+
+ // 退出
+ {id:'x1',ph:3,lane:'render',dur:950,lab:'用户退出（Ctrl+C / /exit）→ root.unmount()：渲染最后一帧 + writeSync 清理终端态',
+  state:function(){entry('render','unmount · 最后一帧 + writeSync','光标恢复、退出备用屏——常规收尾，与 legacy 无关')},live:null},
+ {id:'x2',ph:3,lane:'detect',dur:1100,lab:'进程退出：cachedMode / cachedResetMs 随进程蒸发——本流程没有内在终态，终点就是进程退出',
+  state:function(){entry('detect','进程退出 · 缓存蒸发','无终态的周期自愈：下次启动重新判定一遍')},live:null}
+);
+
+// ---------- 播放引擎 ----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  for(var k in feeds)feeds[k].innerHTML='';
+  sim={vk:-1,pk:-1,forbidden:false,stats:null};
+  renderBlank();
+  $('fr').textContent='帧 —';
+  setTimer(null);
+}
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='h1')return i}return -1})();
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)s.state();
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function setFocus(s){
+  var stage=$('stage');
+  for(var k in lanes){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')}
+  if(!focusMode||!s||!s.lane){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.lane].classList.add('hot');
+  for(var k2 in lanes)if(k2!==s.lane)lanes[k2].classList.add('dim');
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++){
+    segs[k].classList.toggle('done',k<=idx);
+    segs[k].classList.toggle('lost',breakMode&&k>BREAK_AT);
+  }
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing)$('b-play').textContent='⏸ 暂停';
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(breakMode){
+    captionEl.classList.remove('fin');
+    if(idx>=0)captionEl.textContent='现在：'+steps[idx].lab+'（⚡ 断链：后续步骤未执行）';
+    readout.textContent='⚡ 断链现场 · 步骤 '+(idx+1)+'/'+n+' —— 点 ▶ 或任意控件恢复';
+    return;
+  }
+  if(idx<0){
+    captionEl.classList.remove('fin');
+    captionEl.textContent='就绪 · 点击 ▶ 播放（空格）· ← → 单步 · R 重置 · B 断链演示';
+    readout.textContent='共 '+n+' 步 · 4 条泳道';
+  }else if(idx>=n-1){
+    captionEl.classList.add('fin');
+    captionEl.textContent='流程结束 —— '+steps[idx].lab;
+    readout.textContent='步骤 '+(idx+1)+'/'+n;
+  }else{
+    captionEl.classList.remove('fin');
+    captionEl.textContent='现在：'+steps[idx].lab;
+    readout.textContent='步骤 '+(idx+1)+'/'+n;
+  }
+}
+function breakDemo(){
+  pause();
+  breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  updateUI();
+}
+function exitBreak(){
+  if(!breakMode)return;
+  breakMode=false;
+  $('break-panel').classList.remove('on');
+  renderTo(idx);
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  applyStep(idx);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){exitBreak();pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){e.preventDefault();exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// ---------- 自检钩子 ----------
+window.__goto=function(i){pause();exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+
+renderTo(-1);
+
+// ---------- ?selftest=1 ----------
+if(/[?&]selftest=1\b/.test(location.search)){
+  setTimeout(function(){
+    var pre=$('selftest-result'), pass=0, fail=0;
+    function line(ok,name,detail){
+      var t=(ok?'PASS':'FAIL')+': '+name+(detail?' — '+detail:'');
+      pre.appendChild(document.createTextNode(t+'\n'));
+      if(ok)pass++;else fail++;
+    }
+    function frame(){return new Promise(function(r){setTimeout(r,10)})}
+    (async function(){
+      var texts=[], i, err=null;
+      line(steps.length>0,'步数 > 0',String(steps.length)+' 步');
+      try{
+        for(i=0;i<steps.length;i++){
+          var got=window.__goto(i);
+          if(got!==i)throw new Error('__goto('+i+') 返回 '+got);
+          texts.push(captionEl.textContent);
+          await frame();
+        }
+        line(true,'逐步 __goto(i) 无异常',steps.length+'/'+steps.length);
+      }catch(e){err=e;line(false,'逐步 __goto(i) 无异常',String(e&&e.message||e))}
+      var distinct=[];for(var t=0;t<texts.length;t++)if(distinct.indexOf(texts[t])<0)distinct.push(texts[t]);
+      line(distinct.length>=10,'字幕文本随步变化','不同字幕 '+distinct.length+' 种（字幕行 =「现在：<本步人话>」）');
+      try{
+        window.__goto(steps.length-1);
+        var endText=captionEl.textContent;
+        line(endText.indexOf('流程结束')>=0,'终态字幕明确「流程结束」',endText.slice(0,40));
+        window.__goto(-1);
+        var empty=0;
+        for(var k in feeds)if(feeds[k].children.length===0)empty++;
+        var badCells=0, cells=scrEl.children;
+        for(var c=0;c<cells.length;c++)if(cells[c].classList.contains('ok')||cells[c].classList.contains('bad')||cells[c].classList.contains('miss'))badCells++;
+        var capOk=captionEl.textContent.indexOf('就绪')>=0;
+        line(empty===4&&badCells===0&&capOk,'__goto(-1) 重置回空态','空泳道 '+empty+'/4 · 屏幕残留格 '+badCells+' · 字幕回「就绪」='+(capOk?'是':'否'));
+      }catch(e){line(false,'__goto(-1) 重置回空态',String(e&&e.message||e))}
+      try{
+        var c2=window.__goto(steps.length+50);
+        line(c2===steps.length-1,'__goto 越界安全（clamp 到末步）','__goto(999) → '+c2);
+      }catch(e){line(false,'__goto 越界安全（clamp 到末步）',String(e&&e.message||e))}
+      line(window.__err.length===0,'window.onerror 为空',window.__err.length+' 条错误');
+      pre.appendChild(document.createTextNode('----\nSELFTEST '+(fail===0?'PASS':'FAIL')+' · pass='+pass+' fail='+fail+'\n'));
+    })().catch(function(e){
+      fail++;pre.appendChild(document.createTextNode('FAIL: selftest runner — '+String(e&&e.message||e)+'\n'));
+    });
+  },30);
+}
+})();
+</script>
+</body>
+</html>

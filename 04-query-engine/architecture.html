@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>04-query-engine · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：会话引擎</h1>
+<p class="sub">04-query-engine · 组成模块与调用关系</p>
+<p class="lead">「无界面调用方如何使用核心循环」由本组件承担：入口包装与会话引擎在中间，左边四件支撑，右边打断与限额等分支，主干向下进入核心回合循环；交互界面（REPL）不经本组件。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1000" width="1040" height="1000" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 调用方（外部） -->
+<rect x="145" y="40" width="240" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="265" y="67" class="n-body">无头执行入口</text>
+<text x="265" y="88" class="n-sub">-p / 管道模式 · 组件 01</text>
+
+<rect x="655" y="40" width="240" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="775" y="67" class="n-body">ACP 远程会话入口</text>
+<text x="775" y="88" class="n-sub">组件 20 · 每会话直建引擎实例</text>
+
+<!-- 一次性包装 -->
+<rect x="415" y="130" width="210" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="155" class="n-title">一次性入口包装</text>
+<text x="520" y="174" class="n-sub">同文件导出 · 无状态</text>
+<text x="520" y="194" class="n-body">跑一条输入即弃，回写文件缓存</text>
+
+<!-- 会话引擎 -->
+<rect x="370" y="250" width="300" height="170" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="282" class="n-title">会话引擎（每会话一个实例）</text>
+<text x="520" y="308" class="n-sub">QueryEngine.ts · 1365 行</text>
+<text x="520" y="334" class="n-body">一条输入 → 一串对外消息 + 终态</text>
+<text x="520" y="358" class="n-body">跨回合留存：消息·文件缓存·用量·拒绝</text>
+<text x="520" y="382" class="n-body">压缩边界：截断历史 · 先冲刷落盘</text>
+<text x="520" y="406" class="n-body">用量与停止原因边收边记</text>
+
+<!-- 左翼：四件支撑 -->
+<rect x="60" y="470" width="250" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="495" class="n-title">上下文组装</text>
+<text x="185" y="515" class="n-sub">queryContext.ts</text>
+<text x="185" y="535" class="n-body">三段式：系统提示·用户·环境</text>
+<text x="185" y="551" class="n-body">自定义/追加提示在此合入</text>
+
+<rect x="60" y="578" width="250" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="603" class="n-title">输入预处理</text>
+<text x="185" y="623" class="n-sub">processUserInput.ts</text>
+<text x="185" y="643" class="n-body">斜杠命令·附件·本地命令</text>
+<text x="185" y="659" class="n-body">判定是否真的发起查询</text>
+
+<rect x="60" y="686" width="250" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="711" class="n-title">落盘簿记</text>
+<text x="185" y="731" class="n-sub">sessionStorage.ts</text>
+<text x="185" y="751" class="n-body">用户消息先落盘保可续聊</text>
+<text x="185" y="767" class="n-body">助手异步写 · 边界前先冲刷</text>
+
+<rect x="60" y="794" width="250" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="819" class="n-title">消息翻译</text>
+<text x="185" y="839" class="n-sub">queryHelpers.ts</text>
+<text x="185" y="859" class="n-body">内部消息逐条转对外消息流</text>
+<text x="185" y="875" class="n-body">含命令输出与重试通知</text>
+
+<!-- 主干下游：核心回合循环（外部组件） -->
+<rect x="370" y="470" width="300" height="90" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="520" y="497" class="n-title">核心回合循环</text>
+<text x="520" y="521" class="n-sub">组件 02 · query.ts</text>
+<text x="520" y="545" class="n-body">流式应答 · 工具执行 · 压缩决策</text>
+
+<!-- REPL 旁证 -->
+<rect x="390" y="620" width="260" height="80" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="520" y="645" class="n-title">REPL 交互界面</text>
+<text x="520" y="664" class="n-sub">组件 14 · 不经本组件</text>
+<text x="520" y="684" class="n-body">界面直接调用核心回合循环</text>
+
+<!-- 右翼：分支与收束 -->
+<rect x="710" y="470" width="270" height="88" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="845" y="495" class="n-title">打断控制</text>
+<text x="845" y="515" class="n-sub">每会话一个停止信号</text>
+<text x="845" y="535" class="n-body">外部可随时叫停当前回合</text>
+<text x="845" y="551" class="n-body">下回合开始前须重建信号</text>
+
+<rect x="710" y="578" width="270" height="88" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="845" y="603" class="n-title">限额守卫</text>
+<text x="845" y="623" class="n-sub">cost-tracker.ts 读数</text>
+<text x="845" y="643" class="n-body">花费·回合数·重试次数超限</text>
+<text x="845" y="659" class="n-body">→ 提前收束出终态结果</text>
+
+<rect x="710" y="686" width="270" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="845" y="711" class="n-title">终态裁决</text>
+<text x="845" y="731" class="n-sub">收尾必经的一步</text>
+<text x="845" y="751" class="n-body">从最后的消息提取文本结论</text>
+<text x="845" y="767" class="n-body">成功 / 失败（带当回合日志）</text>
+
+<!-- 底座 -->
+<rect x="60" y="912" width="920" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="938" class="n-title">共享单例底座（被上方所有模块读写）</text>
+<text x="520" y="960" class="n-sub">bootstrap/state.ts 会话身份与持久化开关 ｜ cost-tracker.ts 全程开销统计</text>
+
+<!-- 连线：调用方 → 包装/引擎 -->
+<path class="edge" d="M265,100 V115 H520 V130" marker-end="url(#ah)"/>
+<path class="edge" d="M520,210 V250" marker-end="url(#ah)"/>
+<path class="edge" d="M775,100 V225 H600 V250" marker-end="url(#ah)"/>
+
+<!-- 主干：引擎 → 核心回合循环 -->
+<path class="edge" d="M520,420 V470" marker-end="url(#ah)"/>
+
+<!-- REPL 旁证：直调核心循环 -->
+<path class="edash" d="M520,620 V571" marker-end="url(#ahd)"/>
+
+<!-- 左翼调用总线（引擎 → 四件支撑） -->
+<path class="edge" d="M370,320 H350 V838"/>
+<path class="edge" d="M350,514 L310,514" marker-end="url(#ah)"/>
+<path class="edge" d="M350,622 L310,622" marker-end="url(#ah)"/>
+<path class="edge" d="M350,730 L310,730" marker-end="url(#ah)"/>
+<path class="edge" d="M350,838 L310,838" marker-end="url(#ah)"/>
+
+<!-- 右翼调用总线（引擎 → 打断/限额/终态） -->
+<path class="edge" d="M670,320 H690 V730"/>
+<path class="edge" d="M690,514 L710,514" marker-end="url(#ah)"/>
+<path class="edge" d="M690,622 L710,622" marker-end="url(#ah)"/>
+<path class="edge" d="M690,730 L710,730" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（打断 / 超限提前收束）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件 / 旁证</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/QueryEngine.ts（类 192-1247、ask 包装 1256-1365、打断 1217-1225）；调用方 src/cli/print.ts:91,2210（经 ask）、src/services/acp/agent/createSessionMethod.ts:14,195（直建实例）；支撑件 src/utils/queryContext.ts（fetchSystemPromptParts，QueryEngine.ts:302 调用）、src/utils/processUserInput/processUserInput.ts（:426）、src/utils/sessionStorage.ts（recordTranscript :461/:743/:745）、src/utils/queryHelpers.ts（normalizeMessage :789、isResultSuccessful :1138）；限额守卫 maxBudgetUsd 检查 :1022-1055、结构化输出重试上限 :1057-1101、max_turns 附件 :886-918；终态 result 消息 :1111-1214；跨回合状态 mutableMessages/readFileState/totalUsage/permissionDenials :193-215。</li>
+<li>压缩边界簿记：收到 compact_boundary 即截断 mutableMessages（:957-971）、边界前按保留段尾部先冲刷 transcript（:708-730）；压缩的触发与执行在核心循环（组件 02/03）内部，本组件不做压缩决策。</li>
+<li>考据注记：REPL 不经本组件——src/screens/REPL.tsx:3513 直调 query()，useReplBridge.tsx:327 注释明说 REPL 不走引擎的对外消息层；仓库自述文档「被 REPL screen 使用」与实际不符，类文档自述 REPL 属 future phase（QueryEngine.ts:184-190）。一次性包装 ask() 与引擎同文件导出（:1256-1365），结束时回写文件读缓存（:1362-1364）。</li>
+<li>省略的次要细节：消息筛选器懒加载（MessageSelector）、孤儿权限一次性处理（handleOrphanedPermission :408-418）、协调者模式用户上下文注入、文件历史快照（:653-668）、结构化输出强制钩子注册（:337-343）、snip 回放回调注入（HISTORY_SNIP 默认禁用）、无头性能埋点、模型/主题解析等；消息翻译还用了 messages/mappers.ts 与 systemInit.ts（图上并入消息翻译，锚点从略）。</li>
+<li>落盘写入顺序：用户消息进入查询前先 await 落盘（保证进程被杀后可续聊，:446-473）；助手消息 fire-and-forget 异步写（:742-747）；result 产出前按需强制冲刷（:1126-1136）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

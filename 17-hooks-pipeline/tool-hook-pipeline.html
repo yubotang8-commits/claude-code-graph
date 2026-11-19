@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 工具调用 hook 管道播放器：PreToolUse → 权限 → 执行 → PostToolUse</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --good:#0ca30c; --ser:#ec835a;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:var(--red-f);border-color:var(--red)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 14px 9px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.08);border:1px solid var(--hair)}
+#transport .trow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:var(--red-f);border-color:var(--red)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:120px}
+#readout b{color:var(--ink)}
+#subtitle{margin-top:7px;font-size:14px;font-weight:600;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:8px;padding:6px 12px;min-height:34px}
+#subtitle.wait{color:var(--mut);font-weight:400}
+
+#stage{display:grid;grid-template-columns:270px 400px 330px 1fr;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:640px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-width:0}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative;flex:0 0 auto}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+#lane-q .h{border-bottom:2px solid var(--sec)}
+#lane-x .h{border-bottom:2px solid var(--green)}
+#lane-h .h{border-bottom:2px solid var(--blue)}
+#lane-p .h{border-bottom:2px solid var(--orange)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+.chip{font-family:var(--mono);font-size:11.8px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;word-break:break-all}
+.chip.act{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.req{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.blk{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.ok{background:var(--green-f);border-color:var(--green);color:var(--ink);font-weight:600}
+.chip.brk{background:var(--red-f);border-color:var(--red);color:var(--red);font-weight:700}
+.chip.fin{background:var(--green-f);border-color:var(--good);color:var(--good);font-weight:700}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.t-card{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--white);animation:pop .35s ease;flex:0 0 auto}
+.t-card .t{font-weight:600;font-size:12.8px;display:flex;gap:6px;align-items:center}
+.t-card .b{font-size:11.8px;color:var(--sec);margin-top:4px;line-height:1.5;word-break:break-all}
+.t-card.tool .t::before{content:'🛠';font-size:12px}
+.t-card.query .t::before{content:'🎯';font-size:12px}
+.t-card.done{border-color:var(--good)}
+.t-card.fail{border-color:var(--red);background:var(--red-f)}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:sp 1s linear infinite;flex:0 0 auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+.mini-state{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:8px 12px;font-size:11px;color:var(--sec)}
+.mini-state .ms-title{font-weight:700;color:var(--sec);font-size:11px;margin-bottom:4px}
+.mini-state pre{font-family:var(--mono);font-size:10.8px;white-space:pre-wrap;word-break:break-all;background:var(--white);border:1px solid var(--hair);border-radius:7px;padding:5px 8px;color:var(--ink)}
+.mini-state .ms-row{margin-top:5px}
+.mini-state .ms-row b{color:var(--ink)}
+#agg-outcome{font-family:var(--mono);font-weight:700}
+#agg-outcome.s{color:var(--good)}
+#agg-outcome.b{color:var(--red)}
+.flash{animation:fl .7s ease}
+@keyframes fl{0%{background:var(--orange-f)}100%{background:var(--white)}}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-q.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-x.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-h.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-p.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.mv{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.ev{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
+.flight.brk{background:var(--red-f);border:1.5px solid var(--red);color:var(--red);font-weight:700}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:200px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:360px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:150px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px;word-break:break-all}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.req .ev{color:var(--blue)}
+#lines .ln.blk .ev{color:var(--orange)}
+#lines .ln.tool .ev{color:var(--green)}
+#lines .ln.mech .ev{color:#6250d6}
+#lines .ln.sys{color:var(--mut);font-style:italic}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost{color:#b3b2ad}
+#lines .ln.lost .ev{color:#b3b2ad}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+#notes{margin-top:16px;border:1px solid var(--hair);border-radius:12px;background:var(--white);padding:12px 16px}
+#notes .nt{font-weight:700;font-size:13.5px;color:var(--ink)}
+#notes ol{margin:8px 0 0 20px;font-size:12.3px;color:var(--sec);display:flex;flex-direction:column;gap:6px}
+#notes li b{color:var(--ink)}
+#notes code{font-family:var(--mono);font-size:11.3px;background:var(--panel);border:1px solid var(--hair);border-radius:4px;padding:0 4px}
+#selftest-result{margin-top:12px;font-family:var(--mono);font-size:12px;background:var(--white);border:1px dashed var(--line);border-radius:10px;padding:10px 14px;white-space:pre-wrap;color:var(--sec);min-height:0;max-height:220px;overflow-y:auto;display:none}
+#selftest-result.on{display:block}
+footer{margin-top:16px;font-size:11px;color:var(--mut)}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>Claude 工具调用 hook 管道播放器：PreToolUse → 权限 → 执行 → PostToolUse</h1>
+  <div class="sub">模型说「我要调 <b>Write</b> 工具」之后发生什么：<b>query 回合循环</b>派单 → <b>toolExecution 管道</b>校验输入 → <b>PreToolUse hooks</b> 可以放行/改输入/否决 → <b>权限判定</b> → 工具真跑 → <b>PostToolUse hooks</b> 收尾 —— 最后一切折算成一条 tool_result 消息回给模型</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 轮 · 派活（Write）</span>
+  <span class="p1" data-ph="1">PreToolUse hook 管道</span>
+  <span class="p2" data-ph="2">权限 → 执行 → PostToolUse</span>
+  <span class="p3" data-ph="3">第 2 轮 · Bash 被 hook 阻断</span>
+</div>
+
+<div id="transport">
+  <div class="trow">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-brk" class="danger" title="断点演示 (B)">⚡ 断点演示</button>
+      <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪</div>
+  </div>
+  <div id="subtitle" class="wait">就绪 · 点击 ▶ 播放（空格播放 / ← → 单步 / R 重置）</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-q">
+    <div class="h" id="h-q">🧭 回合循环 <span class="tag">query.ts</span><small>派活与收活</small></div>
+    <div class="feed" id="feed-q"></div>
+    <div class="lane-foot"><b>它是主使者</b>：每轮把 assistant 消息里的 tool_use 块交给执行管道，收回 tool_result 拼进下一轮上下文。</div>
+  </div>
+  <div class="lane" id="lane-x">
+    <div class="h" id="h-x">⚙️ 执行管道 <span class="tag">toolExecution.ts</span><small>校验→hook→权限→执行→收尾</small></div>
+    <div class="feed" id="feed-x"></div>
+    <div class="mini-state">
+      <div class="ms-title">管道内部状态（hook 能改写的部位）</div>
+      <pre id="pi">{ "file_path": "src/app.ts", "content": "…" }</pre>
+      <div class="ms-row">processedInput（<b>PreToolUse 可覆写</b>）· resultingMessages：<b id="rm-count">0</b> 条</div>
+    </div>
+    <div class="lane-foot"><b>checkPermissionsAndCallTool</b>：zod 校验 → PreToolUse hooks → 权限 → tool.call() → PostToolUse hooks → 返回 resultingMessages（整条管道的终止物）。</div>
+  </div>
+  <div class="lane" id="lane-h">
+    <div class="h" id="h-h">🧩 hook 引擎 <span class="tag">utils/hooks.ts</span><small>匹配 · 并发执行 · 聚合</small></div>
+    <div class="feed" id="feed-h"></div>
+    <div class="mini-state">
+      <div class="ms-title">本批 hook 的聚合结果</div>
+      <div class="ms-row">AggregatedHookResult · outcome: <b id="agg-outcome">—</b></div>
+    </div>
+    <div class="lane-foot"><b>executeHooks</b>：先过门（信任/禁用），再 getMatchingHooks 五源匹配，然后<b>所有 hook 并发执行</b>（各自带超时与 abort 信号），最后把 exit code / stdout JSON 折算成一张总成绩单。</div>
+  </div>
+  <div class="lane" id="lane-p">
+    <div class="h" id="h-p">📡 hook 执行体 <span class="tag">command/http/prompt/agent</span><small>真正干活的外部代码</small></div>
+    <div class="feed" id="feed-p"></div>
+    <div class="lane-foot"><b>command 型</b> = spawn 子进程：stdin 收完整 HookInput JSON，用 <b>exit code + stdout JSON</b> 回话。<br><b>exit code 语义</b>（hooksConfigManager.ts）：0=成功 · 2=blocking（stderr 给模型）· 其他=non_blocking_error（stderr 只给用户）。stdout 是合法 JSON 时以 JSON 为准。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 断点现场<small>post-write hook 子进程被杀（超时 / abort）——hook 是逐个独立的，单点死掉不拖垮整批</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>tool_result 消息</b><span>完整已落效——非 MCP 工具在 PostToolUse 之前先落结果，杀 hook 也撤不回它</span></div>
+    <div class="brow"><span class="d" style="background:var(--ser)"></span><b>post-write hook</b><span>部分生效——outcome=cancelled，产出 hook_cancelled 附件；工具已执行，hook 的附言缺失</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>additionalContext 附件 · 第 2 轮阻断演示</b><span>未到达 —— 步骤灰显为「未执行」</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">之后会怎样 / 怎么恢复</div>
+    <ul>
+      <li>单个 hook 失败不影响其他 hook（非 blocking 错误只产生 stderr 消息）</li>
+      <li>对照事件：<b>工具自身</b>执行失败走 PostToolUseFailure（toolExecution.ts:1782）；权限被拒走 PermissionDenied（仅 auto 模式分类器拒绝时，:1115-1143）</li>
+      <li>重跑这条工具调用 = 管道原样重走一遍；once:true 的技能 session hook 只有成功执行才自删（registerSkillHooks.ts:35-43），中途失败则保留</li>
+    </ul>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤日志（每步落效时追加一行）<span class="lg">紫色 = 机制注记（不可观测的系统行为）· 灰字 = 原始证据位置</span></div>
+  <div id="lines"></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>请求 / 消息类单元（HookInput、resultingMessages）</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>hook 输出与 JSON 决策</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>工具动作 / 成功落效</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red)"></span>阻断（exit 2 / blocking）</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 断点演示 · 聚焦模式高亮当前泳道</div>
+
+<div id="notes">
+  <div class="nt">考据注记（源码实读 · claude-code 仓库）</div>
+  <ol>
+    <li><b>src/hooks/ 不是 hook 系统</b>——里面是约 90 个 React UI hooks（useCanUseTool 等）；生命周期 hook 引擎真正在 <code>src/utils/hooks.ts</code>（5190 行）+ 配置侧 <code>src/utils/hooks/</code> + 触发侧 <code>src/services/tools/toolHooks.ts / toolExecution.ts</code>。工具点三个事件的真实位置：PreToolUse <code>toolExecution.ts:842</code>、PostToolUse <code>:1472/:1558</code>、PostToolUseFailure <code>:1782</code>。</li>
+    <li><b>27 个事件的常量表有两份一模一样的定义</b>：<code>agentSdkTypes.js:4-32</code> 与 <code>sdk/coreTypes.ts:25-53</code>（改一处不改另一处会失同步——证据 JSON 同款存疑）。其余事件的触发点：UserPromptSubmit <code>processUserInput.ts:190</code>（blocking 会擦掉用户原输入）、SessionStart <code>sessionStart.ts:132</code>、Stop <code>query/stopHooks.ts:189</code>。</li>
+    <li><b>配置合并优先级有张力</b>：hooks.ts:1852-1854 注释说 Map 去重「last entry wins（最后合并的 scope 胜出）」，而 hooksSettings.ts sortMatchersByPriority 又按 user/project/local 排展示优先级、plugin/builtin 垫底（999）——冲突场景的实际胜者未逐条追踪，本图如实按「五源合并 + 去重」呈现。</li>
+    <li><b>hook 的 allow 不等于免检</b>：resolveHookPermissionDecision（toolHooks.ts:330-344 注释）明说 hook allow 不绕过 settings 的 deny/ask 规则，仍要跑 checkRuleBasedPermissions。</li>
+    <li><b>信任门是安全底线</b>：交互模式下所有 hook 都要求工作区信任（hooks.ts:287-297 shouldSkipHookDueToTrust，注释点名历史漏洞：SessionEnd/SubagentStop 曾在信任前执行）。</li>
+    <li><b>可部分生效的写点</b>：PreToolUse 的 updatedInput 在 passthrough 时立即覆写 processedInput（toolExecution.ts:876-880）——即使之后权限被拒，新 input 已经生效、但工具没执行。</li>
+  </ol>
+</div>
+
+<pre id="selftest-result"></pre>
+
+<footer>流程数据：flow-evidence manifest（17-hooks-pipeline / tool-hook-pipeline）+ claude-code 仓库源码实读（toolExecution.ts · toolHooks.ts · utils/hooks.ts · types/hooks.ts · hooksConfigManager.ts · processUserInput.ts）· 页面形式参照 05-api-request/sse-stream.html（内容另起，模板未改动）</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var feeds={q:$('feed-q'),x:$('feed-x'),h:$('feed-h'),p:$('feed-p')};
+var lanes={q:$('lane-q'),x:$('lane-x'),h:$('lane-h'),p:$('lane-p')};
+var heads={q:$('h-q'),x:$('h-x'),h:$('h-h'),p:$('h-p')};
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout'), subtitle=$('subtitle');
+var PI0='{ "file_path": "src/app.ts", "content": "…" }';
+var activeAnims=[]; var breakMode=false; var cards={};
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function tCard(key,lane,cls,title,body){
+  var d=document.createElement('div');d.className='t-card '+cls;
+  var t=document.createElement('div');t.className='t';t.textContent=title;d.appendChild(t);
+  var sp=document.createElement('span');sp.className='spin';t.appendChild(sp);
+  if(body){var b=document.createElement('div');b.className='b';b.textContent=body;d.appendChild(b);}
+  feeds[lane].appendChild(d);feeds[lane].scrollTop=feeds[lane].scrollHeight;cards[key]=d;return d;
+}
+function tDone(key,cls,title,body){
+  var d=cards[key];if(!d)return;
+  d.className='t-card '+cls;
+  while(d.firstChild)d.removeChild(d.firstChild);
+  var t=document.createElement('div');t.className='t';t.textContent=title;d.appendChild(t);
+  if(body){var b=document.createElement('div');b.className='b';b.textContent=body;d.appendChild(b);}
+}
+function addLog(kind,text){
+  var d=document.createElement('div'); d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('·');
+    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
+    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur'); for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight; return d;
+}
+function fly(fromLane,toLane,label,cls,dur){
+  var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(toLane);
+}
+function setPI(t){var n=$('pi');n.textContent=t;n.classList.remove('flash');void n.offsetWidth;n.classList.add('flash')}
+function setRM(n){$('rm-count').textContent=String(n)}
+function setOutcome(o){var n=$('agg-outcome');n.textContent=o;n.className=o==='blocking'?'b':'s'}
+var focusMode=true;
+function setFocus(s){
+  var stage=$('stage');
+  ['q','x','h','p'].forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  ['q','x','h','p'].forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+}
+
+// ---------- steps ----------
+var steps=[].concat(
+ // ── ph0 · 第 1 轮：派活（Write 工具）──
+ {id:'q1',ph:0,dur:950,focus:'q',lab:'模型回复里出现一个 tool_use 块（Write）',log:'assistant 消息 · content 带 tool_use: Write{file_path, content}',logKind:'mech',state:function(){chip('q','act','tool_use: Write 到达')},live:null},
+ {id:'q2',ph:0,dur:900,focus:'q',lab:'query 循环收集 tool_use，置 needsFollowUp，runTools 派单',log:'toolUseBlocks 收集 · needsFollowUp=true · runTools → runToolUse（toolExecution.ts:366）',logKind:'mech',state:function(){chip('q','act','派单 runToolUse(Write)')},live:function(){fly('q','x','runToolUse(Write)','req',700)}},
+ {id:'x1',ph:0,dur:900,focus:'x',lab:'runToolUse 落效：在工具池里找到 Write 工具',log:'findToolByName(options.tools) 命中 Write（toolExecution.ts:374；未命中回退别名表，再不行直接返回错误 tool_result）',logKind:'mech',state:function(){tCard('tool','x','tool','Write 工具就位','name=Write · 来自本会话工具池')},live:null},
+ {id:'x2',ph:0,dur:900,focus:'x',lab:'zod 校验模型给的参数：通过',log:'inputSchema.safeParse(input) ✓ —— 模型给的参数不一定合法，这是第一道防线（toolExecution.ts:657）',logKind:'mech',state:function(){chip('x','act','zod 校验 ✓')},live:null},
+ {id:'x3',ph:0,dur:900,focus:'x',lab:'processedInput 就绪（浅拷贝，之后 hook 能改写它）',log:'processedInput = 校验后的输入 · backfill 浅拷贝使 hook/权限可见派生字段（toolExecution.ts:803-835）',logKind:'mech',state:function(){chip('x','act','processedInput 就绪')},live:null},
+
+ // ── ph1 · PreToolUse（第 1 轮）──
+ {id:'p1a',ph:1,dur:900,focus:'x',lab:'组装 PreToolUse 的 HookInput（整个工具调用的「快递单」）',log:'HookInput = {hook_event_name:"PreToolUse", tool_name:"Write", tool_input, tool_use_id, session_id, cwd, permission_mode}（hooks.ts:3562-3568）',logKind:'req',state:function(){chip('x','req','PreToolUse HookInput →')},live:function(){fly('x','h','HookInput JSON','mv',700)}},
+ {id:'p1b',ph:1,dur:900,focus:'h',lab:'hook 引擎先过三道门：禁用开关 / 简化模式 / 工作区信任',log:'executeHooks 入口门检 · shouldSkipHookDueToTrust——未信任目录一个 hook 都不跑（防 RCE，hooks.ts:2114-2135 / 287-297）',logKind:'mech',state:function(){chip('h','act','门检 ✓（工作区已信任）')},live:null},
+ {id:'p1c',ph:1,dur:900,focus:'h',lab:'getMatchingHooks：五源合并这个事件的 matchers',log:'settings(user/project/local) + 技能 frontmatter(session hooks) + 插件注册表 · policy 锁 allowManagedHooksOnly 时只留托管源（hooks.ts:1739）',logKind:'mech',state:function(){chip('h','act','五源合并 matchers')},live:null},
+ {id:'p1d',ph:1,dur:900,focus:'h',lab:'matcher 过滤：matchQuery = 工具名 "Write" → 命中 2 个 hook',log:'matcher 模式匹配 + if 条件（如 "Bash(git*)"）· 同名 command 按 Map 去重 last-entry-wins（hooks.ts:1817-1984）',logKind:'mech',state:function(){tCard('hit','h','query','命中 2 个 hook','audit-log（command 型）· lint-check（command 型）')},live:null},
+ {id:'p1e',ph:1,dur:800,focus:'h',lab:'每个 hook 先领一条 progress 消息（UI 上「正在运行」）',log:'先 yield {type:"hook_progress", hookEvent:"PreToolUse", command} 再执行（hooks.ts:2231-2252）',logKind:'mech',state:function(){chip('h','act','yield hook_progress ×2')},live:null},
+ {id:'p1f',ph:1,dur:900,focus:'h',lab:'并发执行：两个 hook 子进程同时 spawn',log:'所有 hook 用 Promise 并发跑 · 各自有超时与 abort 信号（hooks.ts:2278 起）',logKind:'mech',state:function(){chip('h','act','spawn ×2（并发）')},live:function(){fly('h','p','stdin ← HookInput JSON','ev',700)}},
+ {id:'p1g',ph:1,dur:900,focus:'p',lab:'audit-log 收到 stdin 的完整 JSON，开始运行',log:'command 型 hook = spawn 子进程 · stdin 喂完整 HookInput JSON',logKind:'tool',state:function(){tCard('audit','p','tool','audit-log 运行中…','只记录一笔审计日志的 shell 命令')},live:null},
+ {id:'p1h',ph:1,dur:900,focus:'p',lab:'lint-check 同时在跑（两者互不等待）',log:'并发执行 · 单个 hook 失败/超时不影响其他 hook',logKind:'tool',state:function(){tCard('lint','p','tool','lint-check 运行中…','读 tool_input.file_path 做静态检查的脚本')},live:null},
+ {id:'p1i',ph:1,dur:850,focus:'p',lab:'audit-log 退出码 0、stdout 为空 → 无事发生',log:'exit 0 = 成功 · PreToolUse 下 stdout/stderr 不展示（hooksConfigManager.ts:29-33）',logKind:'tool',state:function(){tDone('audit','done','audit-log ✓ exit 0','成功 · 无输出 · 生成 hook_success 附件');chip('p','ok','audit-log exit 0')},live:null},
+ {id:'p1j',ph:1,dur:900,focus:'p',lab:'lint-check 在 stdout 打出一行 JSON：允许执行、但补一个字段',log:'stdout JSON: {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"description":"…"}}}（types/hooks.ts:72-78）',logKind:'blk',state:function(){tDone('lint','done','lint-check ✓ stdout JSON','permissionDecision: "allow" + updatedInput');chip('p','blk','lint-check → JSON 输出')},live:function(){fly('p','h','stdout JSON','ev',650)}},
+ {id:'p1k',ph:1,dur:900,focus:'h',lab:'引擎解析 JSON：zod 校验字段，事件名必须对上 PreToolUse',log:'processHookJSONOutput → {permissionBehavior:"allow", updatedInput}（hooks.ts:569-706）· stdout 是合法 JSON 时优先于 exit code 语义',logKind:'blk',state:function(){tDone('hit','done','JSON 解析 ✓','permissionBehavior = allow · updatedInput = {…补 description 字段}')},live:null},
+ {id:'p1l',ph:1,dur:900,focus:'h',lab:'聚合 AggregatedHookResult（本批 hook 的总成绩单）',log:'outcome: success · 无 blockingErrors · 无 preventContinuation（字段清单见 hooks.ts:343）',logKind:'blk',state:function(){chip('h','act','聚合 outcome=success');setOutcome('success')},live:function(){fly('h','x','AggregatedHookResult','back',700)}},
+ {id:'p1m',ph:1,dur:900,focus:'x',lab:'管道落效：hook 的 allow 记入 hookPermissionResult，updatedInput 立即覆写 processedInput',log:'toolExecution.ts:873-880 —— updatedInput 是「可部分生效」的写点：即使之后权限被拒，新 input 也已生效',logKind:'blk',state:function(){chip('x','blk','hook allow + updatedInput 生效');setPI('{ "file_path": "src/app.ts", "content": "…", "description": "由 lint-check 补上" }')},live:null},
+
+ // ── ph2 · 权限 → 执行 → PostToolUse（第 1 轮）──
+ {id:'p2a',ph:2,dur:1000,focus:'x',lab:'权限判定：hook 的 allow 不绕过 settings 的 deny/ask 规则',log:'resolveHookPermissionDecision · hook allow → 仍跑 checkRuleBasedPermissions · 无规则命中 → allow 成立，跳过交互弹窗（toolHooks.ts:340-413）',logKind:'req',state:function(){chip('x','req','权限 allow（hook 决定，规则无异议）')},live:null},
+ {id:'p2b',ph:2,dur:1000,focus:'x',lab:'tool.call() 真正执行 Write 工具',log:'tool.call(callInput)（toolExecution.ts:1256-1272）· callInput 已收敛到 hook 改写后的输入',logKind:'tool',state:function(){tCard('run','x','tool','Write 执行中…','按 callInput 写入 file_path')},live:null},
+ {id:'p2c',ph:2,dur:900,focus:'x',lab:'工具返回成功；tool_result 消息先落进 resultingMessages',log:'非 MCP 工具：addToolResult 在 PostToolUse 之前先落结果（toolExecution.ts:1552-1554）· 超大结果会落盘截断',logKind:'tool',state:function(){tDone('run','done','Write ✓ 已写入','File created successfully at: src/app.ts');chip('x','ok','tool_result 消息就位');setRM(1)},live:null},
+ {id:'p2d',ph:2,dur:900,focus:'x',lab:'组装 PostToolUse 的 HookInput——这次多带了 tool_response',log:'HookInput 增加 tool_response（工具的输出）（hooks.ts:3604-3611）',logKind:'req',state:function(){chip('x','req','PostToolUse HookInput →')},live:function(){fly('x','h','HookInput（+tool_response）','mv',700)}},
+ {id:'p2e',ph:2,dur:850,focus:'h',lab:'同一套门检 + 匹配：这次只命中 1 个 hook',log:'PostToolUse matcher 过滤 → post-write（command 型）（hooks.ts:3594-3621）',logKind:'mech',state:function(){chip('h','act','命中 1 个 hook：post-write')},live:null},
+ {id:'p2f',ph:2,dur:850,focus:'h',lab:'spawn 执行 post-write',log:'并发 spawn · stdin 喂 HookInput',logKind:'mech',state:function(){chip('h','act','spawn post-write')},live:function(){fly('h','p','stdin ← HookInput','ev',650)}},
+ {id:'p2g',ph:2,dur:900,focus:'p',lab:'post-write 读 tool_response，开始运行',log:'读 tool_response（工具输出）做收尾检查',logKind:'tool',state:function(){tCard('pw','p','tool','post-write 运行中…','对刚写入的文件跑格式化检查')},live:null},
+ {id:'p2h',ph:2,dur:900,focus:'p',lab:'post-write 退出码 0，stdout 打出 JSON：additionalContext（给模型的附言）',log:'stdout JSON: {"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"文件已格式化"}}（types/hooks.ts:101-107）',logKind:'blk',state:function(){tDone('pw','done','post-write ✓ exit 0','stdout JSON：additionalContext');chip('p','blk','stdout JSON')},live:function(){fly('p','h','stdout JSON','ev',650)}},
+ {id:'p2i',ph:2,dur:850,focus:'h',lab:'引擎解析 → additionalContexts 收进聚合结果',log:'processHookJSONOutput · case PostToolUse → result.additionalContext（hooks.ts:726-727）',logKind:'blk',state:function(){chip('h','blk','additionalContext 收到');setOutcome('success')},live:function(){fly('h','x','additionalContext','back',700)}},
+ {id:'p2j',ph:2,dur:900,focus:'x',lab:'管道落效：hook_additional_context 附件追加进 resultingMessages（模型可见）',log:'toolHooks.ts:136-147 → 附件消息追加 · MCP 工具另有 updatedMCPToolOutput 可改写工具输出',logKind:'tool',state:function(){chip('x','ok','附件注入 ✓');setRM(2)},live:null},
+ {id:'p2k',ph:2,dur:900,focus:'x',lab:'checkPermissionsAndCallTool 返回：resultingMessages 交回回合循环',log:'整条管道以 resultingMessages 为终止物 · runToolUse yield 给消费者',logKind:'mech',state:function(){chip('x','act','return resultingMessages')},live:function(){fly('x','q','resultingMessages','back',700)}},
+ {id:'p2l',ph:2,dur:950,focus:'q',lab:'回合循环收下 tool_result，拼进下一轮 API 请求',log:'toolResults → 下一轮 messages concat · 第 1 轮闭环 ✓（query.ts 收尾站点）',logKind:'mech',state:function(){chip('q','ok','tool_result 收到 · 下一轮带上它')},live:null},
+
+ // ── ph3 · 第 2 轮（简短）：Bash 被 PreToolUse hook 阻断 ──
+ {id:'r1',ph:3,dur:850,focus:'q',lab:'循环再来一轮：模型这次调 Bash 工具',log:'tool_use: Bash{command} —— 每一次工具调用都原样走同一条管道（循环语义）',logKind:'mech',state:function(){chip('q','act','tool_use: Bash（第 2 轮）')},live:function(){fly('q','x','runToolUse(Bash)','req',700)}},
+ {id:'r2',ph:3,dur:850,focus:'x',lab:'校验通过，PreToolUse HookInput 交给引擎',log:'zod ✓ → PreToolUse HookInput（tool_name: "Bash"）',logKind:'req',state:function(){chip('x','req','PreToolUse HookInput →')},live:function(){fly('x','h','HookInput JSON','mv',650)}},
+ {id:'r3',ph:3,dur:850,focus:'h',lab:'匹配命中 1 个 hook：bash-guard',log:'matcher "Bash" 命中 bash-guard（command 型）',logKind:'mech',state:function(){chip('h','act','命中 1 个 hook：bash-guard')},live:function(){fly('h','p','stdin ← HookInput','ev',650)}},
+ {id:'r4',ph:3,dur:900,focus:'p',lab:'bash-guard 检查 command：拒绝，退出码 2',log:'exit code 2 = blocking · stderr 会展示给模型（hooksConfigManager.ts:32）',logKind:'tool',state:function(){tCard('bg','p','tool','bash-guard 运行中…','检查 tool_input.command 是否在白名单')},live:null},
+ {id:'r5',ph:3,dur:900,focus:'p',lab:'stderr 带回拒绝原因（exit 2 = blocking 语义）',log:'stderr: "拒绝：rm -rf 不在允许清单"（hooks.ts:2784-2805 → blockingError）',logKind:'blk',state:function(){tDone('bg','fail','bash-guard ✗ exit 2','stderr: 拒绝 · rm -rf 不在允许清单');chip('p','brk','exit 2 → blocking')},live:function(){fly('p','h','stderr · blocking','brk',650)}},
+ {id:'r6',ph:3,dur:900,focus:'h',lab:'聚合 outcome=blocking：blockingError 进 AggregatedHookResult',log:'AggregatedHookResult {outcome:"blocking", blockingErrors:[…]}（hooks.ts:2796-2803）',logKind:'brk',state:function(){chip('h','brk','聚合 outcome=blocking');setOutcome('blocking')},live:function(){fly('h','x','blockingError','brk',700)}},
+ {id:'r7',ph:3,dur:950,focus:'x',lab:'管道落效：blockingError 映射成 deny 权限决策 → 生成 is_error 的 tool_result 直接返回',log:'runPreToolUseHooks 把 blockingError 变 deny（toolHooks.ts:496-513）→ 权限拒绝分支（toolExecution.ts:1037-1113）· 工具不执行、PostToolUse 不再触发 · 另有更硬的 stop 路径直接 return（:890-902）',logKind:'brk',state:function(){chip('x','brk','Bash 被阻断 · tool_result is_error');setRM(3)},live:function(){fly('x','q','阻断 tool_result','brk',750)}},
+ {id:'r8',ph:3,dur:950,focus:'q',lab:'模型收到「被拒绝」的 tool_result，换别的做法',log:'第 2 轮闭环 ✓ · 阻断原因进下一轮上下文，模型据此调整',logKind:'mech',state:function(){chip('q','ok','收到阻断 tool_result · 模型换路')},live:null},
+ {id:'r9',ph:3,dur:900,focus:'q',lab:'流程结束 · 每一次工具调用都会原样再走一遍这条管道',log:'流程结束 —— 两种结局都演示过了：放行（第 1 轮 Write）与阻断（第 2 轮 Bash）',logKind:'sys',state:function(){chip('q','fin','✔ 管道闭环 · 流程结束')},live:null}
+);
+var BREAK_ID='p2g';
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id===BREAK_ID)return i}return 20})();
+
+// ---------- engine ----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.q.innerHTML='';feeds.x.innerHTML='';feeds.h.innerHTML='';feeds.p.innerHTML='';
+  linesEl.innerHTML='';
+  cards={};
+  setPI(PI0); setRM(0);
+  var n=$('agg-outcome'); n.textContent='—'; n.className='';
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)try{s.state()}catch(e){}
+  if(s.log)addLog(s.logKind||'sys',s.log);
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){readout.textContent='就绪';subtitle.textContent='就绪 · 点击 ▶ 播放（空格播放 / ← → 单步 / R 重置）';subtitle.className='wait'}
+  else if(idx>=n-1){readout.innerHTML='<span style="color:var(--good);font-weight:700">✓ 播放完毕</span>';subtitle.textContent='现在：'+steps[idx].lab;subtitle.className=''}
+  else{readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b>';subtitle.textContent='现在：'+steps[idx].lab;subtitle.className=''}
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)try{s.state()}catch(e){}
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- break demo ----------
+function breakDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ 断点：post-write hook 被杀 —— 以下步骤未到达 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 断点现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length;
+  subtitle.textContent='现在：断点演示 —— post-write 被杀，后续步骤未执行';subtitle.className='';
+}
+function exitBreak(){
+  breakMode=false; $('break-panel').classList.remove('on'); renderTo(idx);
+}
+
+// ---------- wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest ----------
+window.__errors=[];
+window.onerror=function(msg){window.__errors.push(String(msg));};
+
+function runSelfTest(){
+  var pre=$('selftest-result');
+  pre.className='on'; pre.textContent='';
+  var lines=[];
+  function line(ok,name){
+    lines.push((ok?'PASS':'FAIL')+' '+name);
+    pre.textContent=lines.join('\n');
+  }
+  function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+  var p=Promise.resolve();
+  p=p.then(function(){
+    line(steps.length>0,'steps>0 (n='+steps.length+')');
+    return sleep(10);
+  }).then(function(){
+    var bad=[];
+    for(var i=0;i<steps.length;i++){
+      try{window.__goto(i)}catch(e){bad.push(i+':'+((e&&e.message)||e))}
+    }
+    line(bad.length===0,'逐 '+steps.length+' 步 __goto(0..'+(steps.length-1)+') 无异常'+(bad.length?' — '+bad.slice(0,3).join('; '):''));
+    return sleep(10);
+  }).then(function(){
+    var texts=[];
+    for(var i=0;i<steps.length;i++){window.__goto(i);texts.push(subtitle.textContent)}
+    var seen={};for(var j=0;j<texts.length;j++)seen[texts[j]]=1;
+    var d=Object.keys(seen).length;
+    line(d>=Math.ceil(steps.length/2),'字幕文本随步变化（'+d+'/'+steps.length+' 种不同字幕，均为「现在：」开头）');
+    return sleep(10);
+  }).then(function(){
+    var ei=window.__idxOf('p1a');
+    window.__goto(ei);
+    var inFlightEmpty=feeds.h.children.length===0;
+    window.__goto(ei+1);
+    var arrived=feeds.h.children.length>0;
+    line(inFlightEmpty&&arrived,'在途反向断言：HookInput 发出时 hook 引擎泳道仍为空，到达下一步才写入');
+    return sleep(10);
+  }).then(function(){
+    window.__goto(-1);
+    var empty=feeds.q.children.length===0&&feeds.x.children.length===0&&feeds.h.children.length===0&&feeds.p.children.length===0&&linesEl.children.length===0;
+    var reset=subtitle.textContent.indexOf('现在：')!==0;
+    line(empty&&reset,'__goto(-1) 重置回空态（泳道/日志清空，字幕回就绪）');
+    return sleep(10);
+  }).then(function(){
+    window.__goto(steps.length-1);
+    line(subtitle.textContent.indexOf('流程结束')>=0,'终态字幕明确「流程结束」');
+    return sleep(10);
+  }).then(function(){
+    line(window.__errors.length===0,'window.onerror 为空'+(window.__errors.length?' — '+window.__errors[0]:''));
+  }).catch(function(e){
+    line(false,'自检执行异常：'+((e&&e.message)||e));
+  });
+}
+if(/selftest=1/.test(location.search)){
+  setTimeout(runSelfTest,80);
+}
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

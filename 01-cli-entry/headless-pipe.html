@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>01-cli-entry · 无头 -p 执行全链路</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>无头 -p 执行全链路</h1>
+<p class="sub">组件 01-cli-entry · 入口与引导</p>
+<p class="lead">从「claude -p 一句话、或 echo … | claude 管道输入」到「stdout 输出结果、进程带退出码退出」之间发生的全部事情：无头判定 → 精简解析与一次性初始化 → 无头状态仓库与 MCP 接入 → 流式执行逐条输出 → 优雅退出。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1790" width="1040" height="1790" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">claude -p / 管道输入</text>
+
+<!-- D1 无头判定 -->
+<polygon points="400,113 520,155 400,197 280,155" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="152" class="n-title">无头模式？</text>
+<text x="400" y="170" class="n-sub">有 -p 或输出非终端</text>
+
+<!-- B1 停用提前按键缓冲 -->
+<rect x="250" y="235" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="264" class="n-title">停用提前按键缓冲</text>
+<text x="400" y="288" class="n-sub">main.tsx · 非交互模式不捕获键入</text>
+
+<!-- B2 精简参数解析 -->
+<rect x="250" y="340" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="369" class="n-title">精简参数解析</text>
+<text x="400" y="393" class="n-sub">main.tsx · 跳过 52 个子命令注册直接解析</text>
+
+<!-- B3 一次性初始化 -->
+<rect x="250" y="445" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="474" class="n-title">一次性全局初始化</text>
+<text x="400" y="498" class="n-sub">init.ts · 配置校验 + 安全环境变量</text>
+
+<!-- B4 收集输入 -->
+<rect x="250" y="550" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="579" class="n-title">收集输入内容</text>
+<text x="400" y="603" class="n-sub">main.tsx · 参数 prompt + stdin 管道文本</text>
+
+<!-- D2 init-only -->
+<polygon points="400,646 520,688 400,730 280,688" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="685" class="n-title">--init-only？</text>
+<text x="400" y="706" class="n-sub">只做初始化就退出</text>
+
+<!-- B5 print 分支环境准备 -->
+<rect x="250" y="765" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="794" class="n-title">print 分支环境准备</text>
+<text x="400" y="818" class="n-sub">main.tsx · 视为已信任，全量应用环境变量</text>
+
+<!-- B6 headlessStore -->
+<rect x="250" y="870" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="899" class="n-title">构建无头状态仓库</text>
+<text x="400" y="923" class="n-sub">main.tsx · headlessStore 状态替身</text>
+
+<!-- B7 MCP 接入 -->
+<rect x="250" y="975" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1004" class="n-title">MCP 服务器逐个接入</text>
+<text x="400" y="1028" class="n-sub">main.tsx · 每台服务器增量写入仓库</text>
+
+<!-- B8 加载执行器 -->
+<rect x="250" y="1080" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1109" class="n-title">加载无头执行器</text>
+<text x="400" y="1133" class="n-sub">main.tsx · 动态加载 print.ts 发起执行</text>
+
+<!-- B9 执行器就绪 -->
+<rect x="250" y="1185" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1214" class="n-title">无头执行器就绪</text>
+<text x="400" y="1238" class="n-sub">print.ts · 载入会话历史与权限管道</text>
+
+<!-- D3 输入校验 -->
+<polygon points="400,1281 520,1323 400,1365 280,1323" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1320" class="n-title">输入校验通过？</text>
+<text x="400" y="1341" class="n-sub">缺输入则报错退出</text>
+
+<!-- B10 流式循环 -->
+<rect x="250" y="1400" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1429" class="n-title">流式执行与输出循环</text>
+<text x="400" y="1453" class="n-sub">print.ts · 逐条消息（内部是主回合循环）</text>
+
+<!-- B11 写出 -->
+<rect x="250" y="1505" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1534" class="n-title">写出结构化输出</text>
+<text x="400" y="1558" class="n-sub">print.ts · structuredIO 逐条写出</text>
+
+<!-- B12 汇总 -->
+<rect x="250" y="1600" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1629" class="n-title">汇总最终结果</text>
+<text x="400" y="1653" class="n-sub">print.ts · 末条 result 按格式输出</text>
+
+<!-- 结束 -->
+<rect x="270" y="1717" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1742" class="n-title">进程退出（0 或 1）</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R0 交互式 -->
+<rect x="640" y="116" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="144" class="n-title">进入交互式会话</text>
+<text x="825" y="168" class="n-body">输出是终端且未用 -p 时，</text>
+<text x="825" y="186" class="n-body">改走交互式 REPL 引导（另一张图）</text>
+
+<!-- R1 init-only 捷径 -->
+<rect x="640" y="648" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="676" class="n-title">--init-only 快速初始化</text>
+<text x="825" y="700" class="n-body">仅应用配置环境变量、运行 init 钩子</text>
+<text x="825" y="718" class="n-body">不加载模型与界面，以退出码 0 结束</text>
+
+<!-- E1 -->
+<rect x="675" y="762" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="787" class="n-title">配置就绪，进程退出</text>
+
+<!-- R2 校验失败 -->
+<rect x="640" y="1283" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="1311" class="n-title">校验失败，报错退出</text>
+<text x="825" y="1335" class="n-body">缺 stdin / prompt 输入、</text>
+<text x="825" y="1353" class="n-body">stream-json 缺 --verbose → 退出码 1</text>
+
+<!-- R3 Ctrl+C -->
+<rect x="640" y="1400" width="370" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="1428" class="n-title">Ctrl+C 打断</text>
+<text x="825" y="1452" class="n-body">中止在飞查询，持久化会话状态后退出</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="230" width="200" height="110" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="260" class="n-title">提前按键不缓冲</text>
+<text x="130" y="284" class="n-body">交互模式会暂存启动期键入，</text>
+<text x="130" y="302" class="n-body">界面就绪后回填输入框；</text>
+<text x="130" y="320" class="n-body">无头模式直接跳过此机制</text>
+
+<rect x="30" y="960" width="200" height="110" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="990" class="n-title">MCP 不整体阻塞</text>
+<text x="130" y="1014" class="n-body">每台服务器独立接入状态仓库，</text>
+<text x="130" y="1032" class="n-body">一台慢或失败不影响其他；</text>
+<text x="130" y="1050" class="n-body">claude.ai 连接最多等 5 秒</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,109" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,155 L634,155" marker-end="url(#ah)"/>
+<text x="560" y="148" class="elab">否</text>
+
+<path class="edge" d="M400,197 L400,231" marker-end="url(#ah)"/>
+<text x="410" y="220" class="elab">是</text>
+
+<path class="edge" d="M400,305 L400,336" marker-end="url(#ah)"/>
+<path class="edge" d="M400,410 L400,441" marker-end="url(#ah)"/>
+<path class="edge" d="M400,515 L400,546" marker-end="url(#ah)"/>
+<path class="edge" d="M400,620 L400,642" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,688 L634,688" marker-end="url(#ah)"/>
+<text x="560" y="680" class="elab">是</text>
+
+<path class="edge" d="M400,730 L400,761" marker-end="url(#ah)"/>
+<text x="410" y="753" class="elab">否</text>
+
+<path class="edge" d="M400,835 L400,866" marker-end="url(#ah)"/>
+<path class="edge" d="M400,940 L400,971" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1045 L400,1076" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1150 L400,1181" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1255 L400,1277" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,1323 L634,1323" marker-end="url(#ah)"/>
+<text x="560" y="1315" class="elab">否</text>
+
+<path class="edge" d="M400,1365 L400,1396" marker-end="url(#ah)"/>
+<text x="410" y="1388" class="elab">是</text>
+
+<path class="edge" d="M400,1470 L400,1501" marker-end="url(#ah)"/>
+
+<!-- 循环回边：B11 → B10 -->
+<path class="edge" d="M250,1540 L195,1540 L195,1435 L244,1435" marker-end="url(#ah)"/>
+<text x="112" y="1494" class="elab">流未结束：取下一条</text>
+
+<!-- B10 → R3（Ctrl+C） -->
+<path class="edge" d="M550,1435 L634,1435" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1575 L400,1596" marker-end="url(#ah)"/>
+
+<!-- R3 汇合点 -->
+<circle cx="400" cy="1695" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,1670 L400,1713" marker-end="url(#ah)"/>
+<path class="edge" d="M825,1470 L825,1695 L408,1695" marker-end="url(#ah)"/>
+
+<path class="edge" d="M825,732 L825,758" marker-end="url(#ah)"/>
+
+<path class="edash" d="M230,285 L246,285" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1010 L246,1010" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/entrypoints/cli.tsx:352-359（默认路径动态加载 main.tsx）、src/utils/earlyInput.ts:31-42（-p/非 TTY 不启动捕获）、src/main.tsx:958-974（无头判定与停止捕获）、src/main.tsx:4603-4610（-p 跳过子命令注册）、src/main.tsx:1087-1097（preAction → init）、src/main.tsx:1030-1064 与 2331（getInputPrompt，非 TTY 时拼接 stdin 管道数据，3 秒无数据则警告放行）、src/main.tsx:3121-3210（--init-only 捷径 / print 分支 / headlessStore 创建）、src/main.tsx:3231-3354（MCP 每服务器增量推送，claude.ai 连接限时 5 秒）、src/main.tsx:3356-3411（动态加载 print.ts 并 void 调用 runHeadless）、src/cli/print.ts:458-578（runHeadless 装配）、src/cli/print.ts:693-806（loadInitialMessages 与输入校验）、src/cli/print.ts:834-848（权限管道与断管兜底）、src/cli/print.ts:877-928（for-await 流式循环）、src/cli/print.ts:930-997（格式化输出与退出码）、src/cli/print.ts:1048-1058（SIGINT 处理）。</li>
+<li>关键数据单元：inputPrompt（argv prompt + stdin 管道文本，拼接后作为首条用户消息进入查询）；SDKMessage 消息流（for-await 逐条产出，stream-json 模式逐条写 stdout）；headlessStore（无 React 树时的 AppState 替身，被 runHeadless 闭包持有，settings 变更与 MCP 接入都写它）。</li>
+<li>runHeadless 是 void 调用（main.tsx:3373）：main.tsx 发起后立即返回，进程收尾由 print.ts 的 gracefulShutdownSync 完成（含 5 秒强杀兜底）；退出码 = 末条 result 的 is_error ? 1 : 0。</li>
+<li>Ctrl+C：print.ts 的 SIGINT handler 只中止在飞查询再优雅退出（main.tsx:766-772 对 -p 模式特意让位）；父进程先死（断管）由 registerProcessOutputErrorHandlers 兜底（print.ts:848）。</li>
+<li>--rewind-files 是独立捷径：把文件恢复到指定用户消息状态后直接退出（print.ts:749-784，目标无效则退出码 1）——图中并入「校验失败」分支。</li>
+<li>输出格式三态（print.ts:930-974）：text 默认打印末条 result 文本；stream-json 逐条 JSONL（要求 --verbose）；json 输出汇总（verbose 时为全量消息数组，否则仅末条）。</li>
+<li>中断后的部分状态：stdout 已流出的行无法撤回；会话 JSONL 已写部分轮次（可用 --resume 恢复）；headlessStore 进程内状态随退出蒸发。恢复路径 = 依赖会话文件重跑。</li>
+<li>流式循环内部（每轮 query、工具执行、maxTurns / maxBudgetUsd 截断）属于 02-query-turn-loop 子系统，本图以「主回合循环」概括。</li>
+<li>考据注记：无头判定实际还含 --sdk-url 与 CLAUDE_CODE_FORCE_INTERACTIVE 反向门（main.tsx:962-965），图中以「有 -p 或输出非终端」概括；SessionStart 钩子与组织限制校验 validateForceLoginOrg（失败即 exit 1，main.tsx:3163-3169）与 MCP 连接并行发生；main.tsx:4595 注释称跳过 52 个子命令（全文件 .command 注册共 58 处，含嵌套与门控项）；main.tsx 行数随提交漂移（现约 5640 行，文档写 ~5674）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

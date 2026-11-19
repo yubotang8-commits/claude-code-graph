@@ -1,38 +1,41 @@
-# claude-code-graph
+# claude-code 图集
 
-Claude 流式链路可交互播放器 —— 单文件 HTML，零依赖，双击即开。
-
-把 Claude Messages API 的完整流式链路做成**可播放、可暂停、可单步**的动画讲解页：
-
-> 用户 → Agent 服务 → 推理服务 → 模型（GPU）
-> 模型自回归采样 token → 推理服务打包成 SSE 事件 → Agent 逐事件拼装 Message → 工具执行 → 第二轮流
+对 [claude-code-best/claude-code](https://github.com/claude-code-best/claude-code)（逆向重打包的 Claude Code CLI）的**全图解**：让不熟悉源码的人一看就懂代码流程与架构组成。
 
 ## 打开方式
 
-- 下载 `index.html`，双击用任意现代浏览器打开（无任何外部依赖）；
-- 或开启 GitHub Pages 直接在线播放。
+双击 `index.html`（总览导航页），或直接进入任一组件文件夹。
 
-## 里面有什么
+## 三个阅读层次 · 三种页面形式
 
-**88 个子步骤，严格逐跳（hop-by-hop）**：每个事件拆成「① 产生/发出 → ② 线上传输 → ③ 到达写入」三段，**接收方内存只在数据包到达后才变化**——没有瞬移。
+| 形式 | 文件 | 讲什么 |
+|---|---|---|
+| 总架构图 | `index.html` | 9 大子系统 · 24 组件的全项目组成地图（组件盒可点击） |
+| 组件架构图 | `<组件>/architecture.html` | 该组件由哪些模块组成、谁调用谁 |
+| 静态流程图 | `<组件>/<流程名>.html` | 整图一眼看全：矩形=步骤、菱形=判定、紫色=替代路径（适合分支型流程） |
+| 动态流程图 | `<组件>/<流程名>.html` | 可播放/可单步：泳道=站点、飞行包=消息、字幕=现在发生什么（适合时序型流程） |
 
-完整还原一轮流式响应的真实结构：
+流程图按性质静态/动态各取所长，逐条指定。
 
-| Message 槽位 | 事件序列 |
-|---|---|
-| `content[0] · thinking` | `thinking_delta` 逐段流式 + 关块前 `signature_delta` 完整性校验 |
-| `content[1] · text` | `text_delta` 逐字追加 |
-| `content[2] · tool_use` | `input_json_delta` 部分 JSON 逐片拼接 → 关块时解析 |
-| 顶层 | `message_delta` 盖最终值（**每条流仅 1 条**）→ `message_stop` 定型 |
+## 数量
 
-## 功能
+- 组件架构图 24 张
+- 流程图 41 张（17 静态 + 24 动态，SSE 事件流由 `05-api-request/sse-stream.html` 专题页覆盖）
+- 根总览 1 张（`index.html`）
 
-- **传输控制**：播放 / 暂停（空格）、单步 ← →、进度条逐段点击跳转、0.5×–4× 倍速、重置
-- **聚光灯模式**（🔦 可开关）：当前节点泳道高亮，其余去饱和
-- **⚡ 断流演示**（按钮或 B 键）：在工具参数传输中途切断连接，展示部分状态（thinking/text 完整、tool_use 的 JSON 拼一半、message_delta 未到达）与分代际恢复策略
-- **机制注解**：prompt token 化 → prefill → decode 每步 1 token → 采样到 EOT（turn 结束标记）后推理服务收尾——以独立视觉类别的日志行呈现，与真实线上事件区分
-- **线报文 console**：官方 tool-use 示例的真实事件逐行照录（可截断、未改写）
+## 内容纪律
 
-## 依据
+- 图面全部人话中文；不放代码、函数名、常量。
+- 源码模块名（如 `main.tsx`）以灰色小字作定位锚点，每图 ≤8 处。
+- 每页底部「深入细节」折叠区：file:line 级证据 + 考据注记（省略/合并/与自述文档的分歧如实记录）。
+- 全部内容基于对仓库源码的逐文件取证；仓库自述文档（CLAUDE.md）仅作索引——已修正其多处漂移（CORE_TOOLS 实为 29 个、`src/hooks/` 并非生命周期 hook 系统、`src/ink.ts` 不存在等）。
 
-事件序列、字段与报文内容依据 [Claude 官方流式文档](https://platform.claude.com/docs/en/build-with-claude/streaming) 整理；本页为讲解用途的可视化，非官方产物。
+## 质量验证
+
+- 静态/架构页：几何校验器（形状重叠 / 文字溢出 / 箭头悬空 / 画布越界）全部 0 失败。
+- 动态页：`node --check` + Edge 无头自检（步进/字幕/确定性回放/重置/零报错断言）全部 PASS。
+- 单文件、零外部依赖，双击即开。
+
+## 说明
+
+- `05-api-request/sse-stream.html`（及其说明 `sse-stream.md`）为图集自带的 SSE 流式链路专题页，依据 Claude 官方流式文档整理。

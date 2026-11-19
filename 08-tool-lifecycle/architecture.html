@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>08-tool-lifecycle · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：工具生命周期</h1>
+<p class="sub">08-tool-lifecycle · 组成模块与调用关系</p>
+<p class="lead">「模型发出一次工具调用，到结果配对回流」由这些模块协作完成：编排器分批调度 → 执行引擎走完查名、校验、钩子、权限、执行五步 → 结果回流消息历史；权限问询与延迟工具是两条旁支。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 880" width="1040" height="880" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行1：上游引用 + 编排入口 -->
+<rect x="60" y="52" width="190" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="155" y="77" class="n-body">回合循环（上游）</text>
+<text x="155" y="97" class="n-sub">组件 02 · 交来整批工具调用</text>
+
+<rect x="390" y="40" width="320" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="550" y="70" class="n-title">执行编排器</text>
+<text x="550" y="92" class="n-sub">toolOrchestration.ts · 只读并发上限 10</text>
+<text x="550" y="114" class="n-body">只读批并发执行 · 写操作逐个串行</text>
+
+<!-- 行2：主执行引擎 + 权限深入引用 -->
+<rect x="350" y="170" width="400" height="140" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="550" y="202" class="n-title">单次执行引擎</text>
+<text x="550" y="226" class="n-sub">toolExecution.ts · 一次调用的完整生命周期</text>
+<text x="550" y="250" class="n-body">查名 → 参数校验 → 前置钩子 → 权限判定</text>
+<text x="550" y="272" class="n-body">通过后调用工具本体并定型结果</text>
+<text x="550" y="294" class="n-body">任何失败都合成配对错误结果，绝不悬挂</text>
+
+<rect x="790" y="202" width="170" height="76" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="875" y="230" class="n-body">权限判定深入</text>
+<text x="875" y="252" class="n-sub">组件 09 · 规则与确认框</text>
+
+<!-- 行3：四件支撑 -->
+<rect x="60" y="370" width="205" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="162" y="402" class="n-title">工具池注册表</text>
+<text x="162" y="424" class="n-sub">src/tools.ts</text>
+<text x="162" y="446" class="n-body">全部工具单一来源，按开关</text>
+<text x="162" y="466" class="n-body">与拒绝规则过滤，合并 MCP</text>
+
+<rect x="305" y="370" width="205" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="407" y="402" class="n-title">前后钩子执行器</text>
+<text x="407" y="424" class="n-sub">toolHooks.ts</text>
+<text x="407" y="446" class="n-body">执行前后可拦截改写，</text>
+<text x="407" y="466" class="n-body">钩子权限决策优先</text>
+
+<rect x="550" y="370" width="205" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="652" y="402" class="n-title">工具契约与内置实现</text>
+<text x="652" y="424" class="n-sub">Tool.ts + builtin-tools 包</text>
+<text x="652" y="446" class="n-body">契约定必备能力，缺省一律</text>
+<text x="652" y="466" class="n-body">失败关闭；60 个工具实现</text>
+
+<rect x="795" y="370" width="205" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="897" y="402" class="n-title">超限结果落盘</text>
+<text x="897" y="424" class="n-sub">toolResultStorage.ts</text>
+<text x="897" y="446" class="n-body">结果过大转存文件，</text>
+<text x="897" y="466" class="n-body">模型只收路径与预览</text>
+
+<!-- 行4：分支路径 -->
+<rect x="60" y="540" width="260" height="120" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="190" y="572" class="n-title">权限问询分支</text>
+<text x="190" y="594" class="n-sub">判定为「先问」时进入</text>
+<text x="190" y="616" class="n-body">规则级联 → AI 分类器 → 用户确认框</text>
+<text x="190" y="638" class="n-body">选择可存为规则 · 深入见组件 09</text>
+
+<rect x="360" y="540" width="260" height="120" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="490" y="572" class="n-title">延迟工具分支</text>
+<text x="490" y="594" class="n-sub">29 个常用工具常驻，其余按需</text>
+<text x="490" y="616" class="n-body">先搜索发现，再经包装器委托执行</text>
+<text x="490" y="638" class="n-body">深入见组件 10</text>
+
+<rect x="660" y="570" width="150" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="735" y="595" class="n-body">Bash 执行深水区</text>
+<text x="735" y="615" class="n-sub">组件 11</text>
+
+<rect x="840" y="570" width="160" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="920" y="595" class="n-body">外部工具接入</text>
+<text x="920" y="615" class="n-sub">组件 16 · MCP 服务器</text>
+
+<!-- 底座 -->
+<rect x="60" y="700" width="940" height="64" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="728" class="n-title">消息历史底座（被上方所有模块读写）</text>
+<text x="530" y="750" class="n-sub">每次执行必有配对结果消息回流 · 执行状态与下一轮素材都记在这里</text>
+
+<!-- 连线 -->
+<path class="edge" d="M250,82 L386,82" marker-end="url(#ah)"/>
+<path class="edge" d="M550,124 L550,166" marker-end="url(#ah)"/>
+<path class="edge" d="M750,240 L786,240" marker-end="url(#ah)"/>
+<path class="edge" d="M380,310 L380,340 L162,340 L162,366" marker-end="url(#ah)"/>
+<path class="edge" d="M470,310 L470,366" marker-end="url(#ah)"/>
+<path class="edge" d="M700,310 L700,340 L897,340 L897,366" marker-end="url(#ah)"/>
+<path class="edge" d="M415,310 L415,355 L285,355 L285,505 L190,505 L190,536" marker-end="url(#ah)"/>
+<path class="edge" d="M530,310 L530,505 L500,505 L500,536" marker-end="url(#ah)"/>
+<path class="edash" d="M610,600 L656,600" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（权限问询 / 延迟加载）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件（虚线小盒 = 另有专页）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/services/tools/toolOrchestration.ts:11-131（并发上限默认 10、只读批/写批分区）、src/services/tools/toolExecution.ts:366-440（runToolUse 入口）、657（zod 校验）、842（前置钩子）、963-973（权限判定）、1472-1610（后置钩子）、src/Tool.ts:373-706（契约）与 759-780（失败关闭默认值）、src/tools.ts:218-284（注册表）与 386-399（稳定排序保缓存）、src/utils/toolResultStorage.ts:59/208（超限落盘与 Infinity 自免）、src/services/tools/toolHooks.ts:128-131（三种钩子）。</li>
+<li>考据注记：完整组成共 18 个模块，本图合并/省略如下——「流式期提前执行」（StreamingToolExecutor，query.ts:760-766 实验开关）并入编排器；「CORE_TOOLS 白名单」（constants/tools.ts:137-179，实测 29 个，CLAUDE.md 称 38 为文档漂移）并入延迟工具分支；「MCP 工具桥接」以虚线盒引用组件 16，规则判定、模式切换、AI 分类器、确认 UI 等权限子模块全部归组件 09 专页；Bash 执行与 Bash 专属权限归组件 11 专页。</li>
+<li>延迟工具两模式（select:/discover:/关键词）、发现集靠消息历史重建、包装器的发现守卫与预校验，见组件 10 专页；本图分支盒只保留「先发现再委托」的主干事实。</li>
+<li>方向修正：考据中发现工具池组装的排序目的是服务端提示缓存（tools.ts:387-390 注释），「60 个工具目录」实测为 60（排除 shared/src/testing 后）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

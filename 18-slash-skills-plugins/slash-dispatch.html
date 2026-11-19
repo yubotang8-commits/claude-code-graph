@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>18-slash-skills-plugins · Slash 命令分发全链路</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>Slash 命令分发全链路</h1>
+<p class="sub">组件 18-slash-skills-plugins · 命令与技能</p>
+<p class="lead">从「敲下一行 /命令」到「变成模型可执行的一轮消息」：识别与解析 → 命令池匹配 → 四路分发（全屏面板 / 本地同步 / 子代理 fork / 技能正文展开）→ 组装消息包 → 提交前钩子把关。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1560" width="1040" height="1560" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">用户输入一行 /命令</text>
+
+<!-- B1 识别 slash -->
+<rect x="250" y="107" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="136" class="n-title">识别 slash 输入</text>
+<text x="400" y="160" class="n-sub">processUserInput · 以 / 开头且未被跳过</text>
+
+<!-- B2 解析 -->
+<rect x="250" y="215" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="244" class="n-title">拆出命令名与参数</text>
+<text x="400" y="268" class="n-sub">parseSlashCommand · 识别 (MCP) 标记</text>
+
+<!-- B3 命令池查找 -->
+<rect x="250" y="323" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="352" class="n-title">在命令池中查找</text>
+<text x="400" y="376" class="n-sub">findCommand · 名字与别名精确匹配</text>
+
+<!-- D1 找到命令？ -->
+<polygon points="400,431 520,469 400,507 280,469" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="463" class="n-title">找到命令？</text>
+<text x="400" y="483" class="n-sub">按名字或别名</text>
+
+<!-- D2 界面型命令？ -->
+<polygon points="400,601 520,639 400,677 280,639" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="633" class="n-title">界面型命令？</text>
+<text x="400" y="653" class="n-sub">local-jsx · 全屏面板</text>
+
+<!-- D3 本地同步命令？ -->
+<polygon points="400,771 520,809 400,847 280,809" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="803" class="n-title">本地同步命令？</text>
+<text x="400" y="823" class="n-sub">local · 无界面</text>
+
+<!-- D4 fork？ -->
+<polygon points="400,941 520,979 400,1017 280,979" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="973" class="n-title">需要 fork？</text>
+<text x="400" y="993" class="n-sub">context: fork</text>
+
+<!-- B4 展开技能正文 -->
+<rect x="250" y="1055" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1084" class="n-title">展开技能正文</text>
+<text x="400" y="1108" class="n-sub">getPromptForCommand · 参数替换与宏展开</text>
+
+<!-- B5 注册钩子与记账 -->
+<rect x="250" y="1163" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1192" class="n-title">注册钩子与调用记账</text>
+<text x="400" y="1216" class="n-sub">registerSkillHooks · addInvokedSkill</text>
+
+<!-- B6 组装消息包 -->
+<rect x="250" y="1271" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1300" class="n-title">组装本轮消息包</text>
+<text x="400" y="1324" class="n-sub">元消息 + isMeta 正文 + 附件 + 权限附件</text>
+
+<!-- B7 UserPromptSubmit -->
+<rect x="250" y="1379" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1408" class="n-title">运行提交前钩子</text>
+<text x="400" y="1432" class="n-sub">UserPromptSubmit · 可拦截或注入上下文</text>
+
+<!-- 结束 -->
+<rect x="270" y="1487" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1512" class="n-title">交给模型回合</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1a 像命令名？ -->
+<polygon points="775,431 885,469 775,507 665,469" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="775" y="463" class="n-title">像命令名？</text>
+<text x="775" y="483" class="n-sub">不是文件路径</text>
+
+<!-- R1b Unknown skill -->
+<rect x="665" y="528" width="290" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="810" y="553" class="n-title">Unknown skill · 本回合结束</text>
+
+<!-- R2 local-jsx -->
+<rect x="655" y="600" width="300" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="805" y="629" class="n-title">打开全屏交互面板</text>
+<text x="805" y="651" class="n-body">local-jsx · setToolJSX 渲染面板</text>
+<text x="805" y="667" class="n-body">完成后自调 onDone(result)</text>
+
+<!-- R2 终点 -->
+<rect x="670" y="698" width="270" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="805" y="723" class="n-title">面板收尾，本回合结束</text>
+
+<!-- R3 local -->
+<rect x="655" y="770" width="300" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="805" y="799" class="n-title">同步执行本地命令</text>
+<text x="805" y="821" class="n-body">local · mod.call() 立即执行</text>
+<text x="805" y="837" class="n-body">返回 value / skip / compact</text>
+
+<!-- R3 终点 -->
+<rect x="670" y="868" width="270" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="805" y="893" class="n-title">stdout 消息 · 本回合结束</text>
+
+<!-- R4 fork -->
+<rect x="655" y="940" width="300" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="805" y="969" class="n-title">子代理独立执行</text>
+<text x="805" y="991" class="n-body">runAgent 后台并行跑完整技能</text>
+<text x="805" y="1007" class="n-body">完成后结果重新排队入列</text>
+
+<!-- R4 终点 -->
+<rect x="670" y="1038" width="270" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="805" y="1063" class="n-title">结果入队，下回合处理</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="107" width="200" height="100" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="137" class="n-title">三种输入来源</text>
+<text x="130" y="161" class="n-body">输入框直接提交 / 消息队列</text>
+<text x="130" y="179" class="n-body">bridge 远程消息默认跳过</text>
+<text x="130" y="197" class="n-body">slash 分发（安全命令除外）</text>
+
+<rect x="30" y="300" width="200" height="112" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="330" class="n-title">命令池的来源</text>
+<text x="130" y="354" class="n-body">内置命令、技能目录五源</text>
+<text x="130" y="372" class="n-body">插件/工作流命令、MCP</text>
+<text x="130" y="390" class="n-body">按 cwd 记忆化缓存</text>
+
+<rect x="30" y="1030" width="200" height="124" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1060" class="n-title">正文展开时做的事</text>
+<text x="130" y="1084" class="n-body">$1 等参数按名替换</text>
+<text x="130" y="1102" class="n-body">${CLAUDE_SKILL_DIR} 宏</text>
+<text x="130" y="1120" class="n-body">!`cmd` 内联 shell 先执行</text>
+<text x="130" y="1138" class="n-body">MCP 技能禁用 shell</text>
+
+<rect x="30" y="1350" width="200" height="104" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1380" class="n-title">钩子能做什么</text>
+<text x="130" y="1404" class="n-body">blocking：撤回原输入</text>
+<text x="130" y="1422" class="n-body">改发一条系统警告消息</text>
+<text x="130" y="1440" class="n-body">另可注入附加上下文</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,103" marker-end="url(#ah)"/>
+<path class="edge" d="M400,177 L400,211" marker-end="url(#ah)"/>
+<path class="edge" d="M400,285 L400,319" marker-end="url(#ah)"/>
+<path class="edge" d="M400,393 L400,427" marker-end="url(#ah)"/>
+
+<!-- D1 否 -> 像命令名 -->
+<path class="edge" d="M520,469 L661,469" marker-end="url(#ah)"/>
+<text x="560" y="463" class="elab">否</text>
+<!-- D1 是 -->
+<path class="edge" d="M400,507 L400,597" marker-end="url(#ah)"/>
+<text x="410" y="556" class="elab">是</text>
+
+<!-- R1a 是 -> Unknown skill -->
+<path class="edge" d="M775,507 L775,524" marker-end="url(#ah)"/>
+<text x="787" y="521" class="elab">是</text>
+<!-- R1a 否 -> 当作普通提示词（长回边汇合） -->
+<path class="edge" d="M885,469 L985,469 L985,1252 L408,1252" marker-end="url(#ah)"/>
+<text x="930" y="459" class="elab">否 · 更像文件路径</text>
+<text x="700" y="1240" class="elab">当作普通提示词，继续查询</text>
+
+<!-- D2 是 -> local-jsx -->
+<path class="edge" d="M520,639 L653,639" marker-end="url(#ah)"/>
+<text x="560" y="633" class="elab">是</text>
+<!-- D2 否 -->
+<path class="edge" d="M400,677 L400,767" marker-end="url(#ah)"/>
+<text x="410" y="726" class="elab">否</text>
+<path class="edge" d="M805,670 L805,694" marker-end="url(#ah)"/>
+
+<!-- D3 是 -> local -->
+<path class="edge" d="M520,809 L653,809" marker-end="url(#ah)"/>
+<text x="560" y="803" class="elab">是</text>
+<!-- D3 否 -->
+<path class="edge" d="M400,847 L400,937" marker-end="url(#ah)"/>
+<text x="410" y="896" class="elab">否</text>
+<path class="edge" d="M805,840 L805,864" marker-end="url(#ah)"/>
+
+<!-- D4 是 -> fork -->
+<path class="edge" d="M520,979 L653,979" marker-end="url(#ah)"/>
+<text x="560" y="973" class="elab">是</text>
+<!-- D4 否 -->
+<path class="edge" d="M400,1017 L400,1051" marker-end="url(#ah)"/>
+<text x="410" y="1040" class="elab">否</text>
+<path class="edge" d="M805,1010 L805,1034" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1125 L400,1159" marker-end="url(#ah)"/>
+
+<!-- 普通提示词汇合点 -->
+<circle cx="400" cy="1252" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,1233 L400,1267" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1341 L400,1375" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1449 L400,1483" marker-end="url(#ah)"/>
+
+<!-- fork 结果回边：重新入队，回到输入 -->
+<path class="edash" d="M940,1057 L1012,1057 L1012,50 L534,50" marker-end="url(#ahd)"/>
+<text x="770" y="40" class="elab">结果作为新输入重新排队</text>
+
+<!-- 旁注虚线 -->
+<path class="edash" d="M230,142 L246,142" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,351 L246,351" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1090 L246,1090" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1414 L246,1414" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制 / 异步回边</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/processUserInput/processUserInput.ts（slash 识别 :151、bridge 安全门 :440-467、分发调用 :548-567、UserPromptSubmit 钩子 :190-273）、src/utils/processUserInput/processSlashCommand.tsx（入口与未知命令 :427-518、按类型分发 :691-1013、fork 子代理 :108-419、prompt 组装 :1084-1212、looksLikeCommand :421-425）、src/utils/slashCommandParsing.ts:25-60、src/commands.ts（loadAllCommands :540-560、findCommand :788-802）、src/skills/loadSkillsDir.ts:344-399（getPromptForCommand）、src/utils/hooks/registerSkillHooks.ts:20-64。</li>
+<li>考据注记：manifest 记 12 站点，本图画主干 13 节点——把「未匹配处理」拆成"找到命令？/ 像命令名？"两级判定，并把 UserPromptSubmit 钩子单列一站。"像命令名"的判定是命令名只含 [a-zA-Z0-9:_-]（looksLikeCommand），含 / 或 . 等字符即按文件路径/普通文本放行，代码还会先 stat 检查该路径是否真实存在（:466-473）。</li>
+<li>userInvocable:false 的技能只能由模型经 Skill 工具调用，用户直敲会得到一条提示消息而非展开（:712-728），本图未单列该分支；COORDINATOR_MODE 主线程同样不装载技能全文，只给协调者一段"交给 worker 执行"的摘要（:1092-1128）。</li>
+<li>local 命令实际返回三型：value（stdout 消息）/ skip（零消息）/ compact（直接产出压缩后消息并重置 microcompact 状态，:871-913），图中胶囊以 stdout 概括。</li>
+<li>已知风险面：local-jsx 若 load()/call() 抛错且 onDone 未被调用，外层 Promise 会永久悬挂、队列卡死在 dispatching——代码注释明说该死锁并以 catch 兜底 resolve（:841-854）；prompt 展开遇 AbortError 显示 Interrupted、其他异常落 local-command-stderr 消息（:961-993）；fork 后台任务用独立 abortController，主线程 ESC 不连带杀死，cron 型任务被杀后下次调度自动重触发（:170-174 注释）。</li>
+<li>回边（图右上虚线长回边）：KAIROS 助手模式下 fork 命令的后台结果以 isMeta 隐藏提示重新入队，skipSlashCommands 防止结果文本以 / 开头被再次解析，等主线程下一轮消费（:188-268）。未知命令的 args 会保留在系统警告里供复制重提交（gh-32591，:490-492），该警告仅 UI 可见、不发给模型。</li>
+<li>状态落点：result.messages[] 由 processSlashCommand 一次性组装（单次 slash 输入是原子单元，无半执行状态）；command_permissions 附件携带 frontmatter allowed-tools，让技能授权的工具在本回合临时放行；技能 frontmatter 钩子注册进 sessionHooks（once:true 成功即自删，registerSkillHooks.ts:35-43）；addInvokedSkill 打标记供 autocompact 保留已调用技能。</li>
+<li>bridge 远程消息默认把 '/' 当纯文本（skipSlashCommands），仅 isBridgeSafeCommand 通过的命令放行执行；已知但不安全的命令短路为一条 stdout 消息，不进模型（:433-467）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

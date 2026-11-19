@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude 会话身份播放器：/clear 换脑与 --resume 原子切换</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px;max-width:1150px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 10px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.08)}
+#transport .row1{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:210px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subtitle{margin-top:8px;font-size:14px;font-weight:600;color:var(--ink);background:var(--white);border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;min-height:38px}
+#subtitle::before{content:'字幕 ';font-weight:400;font-size:11px;color:var(--mut);letter-spacing:2px;margin-right:8px}
+
+#stage{display:grid;grid-template-columns:300px 1fr 345px 345px;gap:15px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:680px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-width:0}
+.lane>.h{padding:9px 12px;font-size:14.5px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-user .h{border-bottom:2px solid var(--sec)}
+#lane-orch .h{border-bottom:2px solid var(--blue)}
+#lane-id .h{border-bottom:2px solid var(--orange)}
+#lane-disk .h{border-bottom:2px solid var(--green)}
+
+.bubble{max-width:92%;font-size:12.5px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-word}
+.bubble.q{align-self:flex-end;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
+.bubble.a{align-self:flex-start;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-bottom-left-radius:4px}
+.bubble.st{align-self:center;background:#f4f4f2;border:1.5px dashed var(--line);color:var(--sec);font-size:11.5px}
+.bubble.fin{border-style:solid;font-weight:600}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+
+.entry{border:1px solid var(--hair);background:var(--white);border-radius:9px;padding:7px 10px;animation:pop .35s ease;font-size:12.5px;line-height:1.5}
+.entry .et{color:var(--ink)}
+.entry .src{margin-top:3px;font-family:var(--mono);font-size:10px;color:var(--mut)}
+.entry.k0{border-color:var(--blue-l);background:var(--blue-f)}
+.entry.k1{border-color:var(--orange-l);background:var(--orange-f)}
+.entry.k2{border-color:#a8dcc5;background:var(--green-f)}
+.entry.kw{border-color:var(--red);background:var(--red-f)}
+.entry.kw .et{color:var(--red)}
+.flash{animation:fl .7s ease}
+@keyframes fl{0%{background:var(--orange-f)}100%{background:var(--white)}}
+
+.tcard,.scard,.fcard{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--white);animation:pop .35s ease;font-size:12.5px;color:var(--sec)}
+.tcard .tt,.scard .tt{font-weight:700;font-size:12.5px;color:var(--ink);margin-bottom:6px}
+.tcard .tr{padding:3px 0}
+.tcard .tr.warn{color:var(--red)}
+.tcard .tr.ok{color:var(--good)}
+.scard .li{padding:2.5px 0}
+.fcard{border-color:var(--line);background:var(--panel);color:var(--sec);border-style:dashed}
+.fcard b{color:var(--ink)}
+
+.mem{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.mem-h{font-size:12px;font-weight:700;color:var(--sec)}
+.idcard{border:1px solid var(--line);border-radius:10px;background:var(--white);padding:6px 11px;display:flex;flex-direction:column}
+.idcard .row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;font-size:11.5px;border-bottom:1px dashed var(--hair);align-items:baseline}
+.idcard .row:last-child{border-bottom:none}
+.idcard .row span{color:var(--mut);flex:0 0 auto}
+.idcard .row b{font-family:var(--mono);font-weight:600;color:var(--ink);text-align:right;word-break:break-all}
+.idcard .row b.flash{animation:fl .7s ease}
+
+.file{border:1.5px solid var(--line);border-radius:10px;padding:8px 11px;background:var(--white);animation:pop .35s ease}
+.file .fn{font-family:var(--mono);font-size:12px;font-weight:700;display:flex;gap:6px;align-items:center;min-width:0}
+.file .fn .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .fs{margin-top:4px;font-size:11px;color:var(--sec);line-height:1.5}
+.badge{margin-left:auto;font-size:10px;font-weight:700;border-radius:5px;padding:1px 6px;border:1px solid;flex:0 0 auto}
+.badge.bb{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.badge.bo{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.badge.bg{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.badge.bgy{background:#f4f4f2;border-color:var(--line);color:var(--sec)}
+.file.pending{border-style:dashed;opacity:.9}
+.file.born{border-color:var(--orange);background:var(--orange-f)}
+.file.adopted{border-color:var(--good);background:var(--green-f)}
+.file.appending{border-color:var(--blue)}
+.file.sealed{border-color:var(--mut);opacity:.85}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-user.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-orch.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-id.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-disk.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.cmd{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.stt{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.msg{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.warn{background:var(--red-f);border:1.5px solid var(--red);color:var(--red)}
+
+#selftest-result{display:none;margin-top:12px;background:var(--white);border:1px solid var(--line);border-radius:10px;font-family:var(--mono);font-size:12px;padding:10px 13px;white-space:pre-wrap;color:var(--ink)}
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:16px;font-size:11px;color:var(--mut);line-height:1.6}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>Claude 会话身份播放器：/clear 换脑与 --resume 原子切换</h1>
+  <div class="sub">敲 <b>/clear</b> 不是"删聊天记录"，而是给进程换一个<b>全新 sessionId</b>（旧的转为 parent 血缘）—— 磁盘上的旧 JSONL 一行不动、仍可 --resume；新文件等<b>首条消息</b>才懒物化。 <b>--resume</b> 则用 switchSession 把"脑"原子换回旧会话。两个方向共用同一句话：<b>STATE 指向谁，磁盘上哪个 .jsonl 就被继续追加</b></div>
+</header>
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 幕 · /clear 换新脑（旧会话退役 → 新身份待命）</span>
+  <span class="p1" data-ph="1">第 2 幕 · 新会话诞生（首条消息 → 懒物化新 JSONL）</span>
+  <span class="p2" data-ph="2">第 3 幕 · 反向换脑（--resume → switchSession 原子切回）</span>
+</div>
+
+<div id="transport">
+  <div class="row1">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-spot" title="聚焦模式：高亮当前泳道、其余置灰">🔦 聚焦开</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪 · 点击 ▶ 播放</div>
+  </div>
+  <div id="subtitle">就绪 —— 点击 ▶ 播放，看 /clear 怎么给进程换一个会话身份</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-user">
+    <div class="h" id="h-user">👤 用户 · REPL <span class="tag">Ink 屏幕</span><small>命令 · 消息数组</small></div>
+    <div class="feed" id="feed-user"></div>
+    <div class="lane-foot"><b>怎么读</b>：用户看得见的一切 —— 命令气泡 = REPL 的 messages 数组。setMessages 换数组，屏幕就换内容</div>
+  </div>
+  <div class="lane" id="lane-orch">
+    <div class="h" id="h-orch">🧹 清场编排 <span class="tag">clearConversation</span><small>hooks · 清扫 · 任务分区</small></div>
+    <div class="feed" id="feed-orch"></div>
+    <div class="lane-foot"><b>总指挥</b>：先送旧（SessionEnd hooks）→ 清场（缓存 / STATE / AppState / 元数据）→ 换脑（regenerateSessionId）→ 迎新（SessionStart hooks）</div>
+  </div>
+  <div class="lane" id="lane-id">
+    <div class="h" id="h-id">🪪 会话身份 <span class="tag">bootstrap STATE</span><small>sessionId · 血缘 · 指针</small></div>
+    <div class="feed" id="feed-id"></div>
+    <div class="mem">
+      <div class="mem-h">🪪 会话身份卡 —— STATE 单例（bootstrap/state.ts）</div>
+      <div class="idcard">
+        <div class="row"><span>sessionId</span><b id="v-sid">—</b></div>
+        <div class="row"><span>parentSessionId</span><b id="v-parent">—</b></div>
+        <div class="row"><span>sessionProjectDir</span><b id="v-pdir">—</b></div>
+        <div class="row"><span>sessionFile 指针</span><b id="v-sfile">—</b></div>
+        <div class="row"><span>REPL 消息数组</span><b id="v-msgs">—</b></div>
+        <div class="row"><span>元数据缓存</span><b id="v-meta">—</b></div>
+      </div>
+    </div>
+  </div>
+  <div class="lane" id="lane-disk">
+    <div class="h" id="h-disk">💾 磁盘 JSONL <span class="tag">~/.claude/projects</span><small>封存 · 懒物化 · adopt</small></div>
+    <div class="feed" id="feed-disk"></div>
+    <div class="mem">
+      <div class="mem-h">💾 磁盘现场 —— ~/.claude/projects/&lt;项目&gt;/</div>
+      <div class="file" id="f-old" style="display:none">
+        <div class="fn">📄 <span class="nm">8f3a21c4….jsonl</span><span class="badge" id="f-old-b"></span></div>
+        <div class="fs" id="f-old-st"></div>
+      </div>
+      <div class="file" id="f-new" style="display:none">
+        <div class="fn">🆕 <span class="nm">b7e92d60….jsonl</span><span class="badge" id="f-new-b"></span></div>
+        <div class="fs" id="f-new-st"></div>
+      </div>
+    </div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<pre id="selftest-result"></pre>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>第 1 幕 /clear 换新脑</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>第 2 幕 新会话诞生</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>第 3 幕 --resume 反向换脑</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red)"></span>处决 / 危险动作</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · R = 重置 · 点击进度条跳转 · 倍速 0.5–4× · 加 ?selftest=1 跑页面自检</div>
+<footer>依据 claude-code 仓库源码实读整理：src/commands/clear/conversation.ts · src/bootstrap/state.ts · src/utils/sessionStorage.ts · src/utils/concurrentSessions.ts · src/screens/REPL.tsx（计划模式退出的 clearContext 复用同一 clearConversation）。本页为流程讲解，非官方文档</footer>
+<script>
+(function(){
+'use strict';
+var errLog=[];
+window.onerror=function(msg){errLog.push(String(msg));return false};
+var $=function(id){return document.getElementById(id)};
+var feeds={user:$('feed-user'),orch:$('feed-orch'),id:$('feed-id'),disk:$('feed-disk')};
+var lanes={user:$('lane-user'),orch:$('lane-orch'),id:$('lane-id'),disk:$('lane-disk')};
+var heads={user:$('h-user'),orch:$('h-orch'),id:$('h-id'),disk:$('h-disk')};
+var flightsEl=$('flights'), barEl=$('bar'), readout=$('readout'), subtitleEl=$('subtitle');
+var activeAnims=[]; var focusMode=true;
+var LANEKEYS=['user','orch','id','disk'];
+
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function entry(lane,kind,text,src){
+  var d=document.createElement('div');d.className='entry '+kind;
+  var t=document.createElement('div');t.className='et';t.textContent=text;d.appendChild(t);
+  if(src){var s=document.createElement('div');s.className='src';s.textContent=src;d.appendChild(s)}
+  feeds[lane].appendChild(d);feeds[lane].scrollTop=feeds[lane].scrollHeight;return d;
+}
+function bubble(kind,text){
+  var d=document.createElement('div');d.className='bubble '+kind;d.textContent=text;
+  feeds.user.appendChild(d);feeds.user.scrollTop=feeds.user.scrollHeight;return d;
+}
+function fly(fromLane,toLane,label,cls,dur){
+  var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+(cls||'msg'); f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0, dy=y1-y0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},
+      {transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(dy*0.5)+'px))',offset:.5},
+      {transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+dy+'px))'}],
+      {duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(toLane);
+}
+function flash(node){if(!node)return;node.classList.remove('flash');void node.offsetWidth;node.classList.add('flash')}
+function setV(id,text){var n=$(id);if(n.textContent!==text){n.textContent=text;flash(n)}}
+function fileShow(id,cls){var n=$(id);n.style.display='';n.className='file'+(cls?' '+cls:'')}
+function fileCls(id,cls){var n=$(id);n.className='file'+(cls?' '+cls:'')}
+function badge(id,txt,cls){var n=$(id);n.textContent=txt;n.className='badge '+cls}
+function setFocus(s){
+  var stage=$('stage');
+  LANEKEYS.forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  LANEKEYS.forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+}
+var INIT_SUB='就绪 —— 点击 ▶ 播放，看 /clear 怎么给进程换一个会话身份';
+
+// ---------- 步骤脚本（37 步 · 依据源码实读翻译） ----------
+var steps=[
+// ── 第 1 幕 · /clear 换新脑 ──
+{id:'s01',ph:0,dur:1000,focus:'user',lab:'开场：一个会话聊了半天 —— 屏幕上 6 条消息，磁盘上 8f3a21c4….jsonl 一直在追加',
+ state:function(){
+   bubble('q','帮我把这段代码改成 async');
+   bubble('a','已改完，3 处 await 补上');
+   bubble('q','再跑一下测试');
+   bubble('a','测试通过 12/12');
+   bubble('q','顺手把 README 更新一下');
+   bubble('a','README 已更新');
+   setV('v-sid','8f3a21c4-3d7e…');
+   setV('v-parent','—（起点会话）');
+   setV('v-pdir','null（当前项目）');
+   setV('v-sfile','…/8f3a21c4….jsonl');
+   setV('v-msgs','6 条');
+   setV('v-meta','在缓存（title 等 12 项）');
+   fileShow('f-old','appending');badge('f-old-b','追加中','bb');
+   $('f-old-st').textContent='~/.claude/projects/本项目/ · 6 行消息 · 100ms 批量追加';
+ },live:null},
+{id:'s02',ph:0,dur:800,focus:'user',lab:'用户敲下 /clear 回车：想要一个干净的上下文从头开始',
+ state:function(){bubble('st','/clear（用户命令）')},live:null},
+{id:'s03',ph:0,dur:850,focus:'orch',lab:'命令命中：/clear 是本地命令（别名 reset / new），实现懒加载，进入 clearConversation 总指挥',
+ state:function(){
+   entry('orch','k0','命中本地命令 /clear（别名 reset、new）—— 实现按需懒加载。/clear 之外，压缩后重建、计划模式退出的 clearContext 也走这同一个函数','commands/clear/index.ts:10-17 · conversation.ts:71');
+ },live:function(){fly('user','orch','/clear 命令','cmd',700)}},
+{id:'s04',ph:0,dur:900,focus:'orch',lab:'先送旧：SessionEnd hooks 执行 —— 旧会话的告别仪式（单个钩子超时上限默认 1.5 秒）',
+ state:function(){
+   entry('orch','k0','执行 SessionEnd hooks（来源 clear）—— 旧会话的告别仪式；超时上限防一个慢钩子拖住清场','conversation.ts:88-96');
+ },live:null},
+{id:'s05',ph:0,dur:800,focus:'orch',lab:'给推理侧递条子：上报缓存逐出提示 —— 这段对话的 prompt 缓存可以弃了',
+ state:function(){
+   entry('orch','k0','logEvent(tengu_cache_eviction_hint) 携带最后一次请求 id —— 告诉推理侧旧对话的缓存可以逐出','conversation.ts:98-107');
+ },live:null},
+{id:'s06',ph:0,dur:900,focus:'orch',lab:'盘点任务：前台任务将被处决，后台 / 主会话任务保留 —— 它们写独立 transcript，不怕换 ID',
+ state:function(){
+   var d=document.createElement('div');d.className='tcard';
+   d.innerHTML='<div class="tt">任务盘点（动手前先分区）</div>'+
+     '<div class="tr warn" id="task-fg">前台 shell 任务 ×1 —— 将被处决</div>'+
+     '<div class="tr ok">后台 agent 任务 ×2 —— 保留（写独立的 per-agent transcript）</div>';
+   feeds.orch.appendChild(d);feeds.orch.scrollTop=feeds.orch.scrollHeight;
+   entry('orch','k0','isBackgrounded=false 的前台任务将被处决；后台/主会话任务保留 —— 换 sessionId 伤不到它们','conversation.ts:109-129');
+ },live:null},
+{id:'s07',ph:0,dur:900,focus:'user',lab:'setMessages(() => []) —— 屏幕瞬间清空：消息数组整个换成空数组，不是一条条删',
+ state:function(){
+   feeds.user.innerHTML='';
+   bubble('st','（屏幕已清空 —— setMessages(() => [])）');
+   setV('v-msgs','0 条');
+   entry('orch','k0','setMessages(() => []) —— REPL 消息数组整体换成空数组，一次 setState 完成','conversation.ts:131');
+ },live:function(){fly('orch','user','setMessages(() => [])','stt',700)}},
+{id:'s08',ph:0,dur:750,focus:'orch',lab:'远端同步：若有 bridge / 远控连接，广播 conversation_cleared —— 远端知道 transcript 已重置',
+ state:function(){
+   entry('orch','k0','notifyRemoteConversationCleared：markTranscriptReset + status 消息 conversation_cleared 发给远端','conversation.ts:56-69 · 132');
+ },live:null},
+{id:'s09',ph:0,dur:900,focus:'orch',lab:'处决前台任务：kill 子进程、abort 控制器、注销清理回调、清任务输出文件',
+ state:function(){
+   var fg=$('task-fg');
+   if(fg){fg.textContent='前台 shell 任务 ×1 —— 已终止';fg.className='tr ok'}
+   entry('orch','kw','处决前台任务：shellCommand.kill() / abortController.abort() / unregisterCleanup / evictTaskOutput —— 失败只记日志，不中断清场','conversation.ts:172-203');
+ },live:null},
+{id:'s10',ph:0,dur:850,focus:'orch',lab:'缓存大扫除：已调技能、权限回调、dump 状态、cache-break 计数全清 —— 后台 agent 的那份保留',
+ state:function(){
+   entry('orch','k0','clearSessionCaches(preservedAgentIds)：会话级缓存全清，保留后台 agent 的每 agent 状态','conversation.ts:150 · clear/caches.ts');
+ },live:null},
+{id:'s11',ph:0,dur:850,focus:'orch',lab:'STATE 里的大物件清空：完整对话快照（可达数百 KB–MB）置 null，成本与 token 统计清零',
+ state:function(){
+   entry('orch','k0','setLastAPIRequest / setLastAPIRequestMessages / 分类器请求置 null；resetCostState() 清 token 与成本；CacheSafeParams 快照丢弃释放内存','conversation.ts:152-164');
+ },live:null},
+{id:'s12',ph:0,dur:800,focus:'orch',lab:'目录与小缓存复位：cwd 回到启动目录，文件已读状态、发现的技能、嵌套 memory 全清',
+ state:function(){
+   entry('orch','k0','setCwd(getOriginalCwd()) 复位工作目录；readFileState / discoveredSkillNames / loadedNestedMemoryPaths 全清','conversation.ts:166-169');
+ },live:null},
+{id:'s13',ph:0,dur:900,focus:'orch',lab:'AppState 大扫除：归因复位、文件历史快照清零、MCP 状态复位触发重连、旧会话的 agent 徽章摘掉',
+ state:function(){
+   entry('orch','k0','setAppState：attribution 复位、fileHistory 快照清零、mcp 状态复位（触发重连）、standaloneAgentContext 摘牌','conversation.ts:172-228');
+ },live:null},
+{id:'s14',ph:0,dur:900,focus:'id',lab:'清 plan-slug 与 12 项会话元数据：标题 / 标签 / agent 名色 / 模式 / worktree / PR —— 新会话不继承旧名牌',
+ state:function(){
+   entry('id','k0','clearAllPlanSlugs() + clearSessionMetadata()：currentSessionTitle/Tag/AgentName/AgentColor/AgentSetting/Mode/Goal/Worktree/Pr* 共 12 项缓存清空','conversation.ts:232-236 · sessionStorage.ts:2875-2889');
+   setV('v-meta','已清空（12 项）');
+ },live:function(){fly('orch','id','clearSessionMetadata()','stt',700)}},
+{id:'s15',ph:0,dur:950,focus:'id',lab:'换脑第一步 · 血缘登记：parentSessionId = 旧 id —— 旧会话成了父会话，血缘留给归因分析',
+ state:function(){
+   entry('id','k0','regenerateSessionId 第 1 步：STATE.parentSessionId = 旧 sessionId —— 新会话是旧会话的孩子（analytics 血缘追踪）','bootstrap/state.ts:432-434');
+   setV('v-parent','8f3a21c4…（旧）');
+ },live:null},
+{id:'s16',ph:0,dur:1000,focus:'id',lab:'换脑第二步 · 身份换新：sessionId = 全新 randomUUID，sessionProjectDir 复位 null —— 回到当前项目',
+ state:function(){
+   entry('id','k0','regenerateSessionId 第 2 步：sessionId = randomUUID()；sessionProjectDir = null —— 新会话属于当前项目（getTranscriptPath 由 originalCwd 推导）','bootstrap/state.ts:438-443');
+   setV('v-sid','b7e92d60-a1f3…（新）');
+   setV('v-pdir','null（当前项目）');
+   fileShow('f-new','pending');badge('f-new-b','待物化','bgy');
+   $('f-new-st').textContent='新文件还不存在 —— 首条 user/assistant 消息时才创建';
+ },live:null},
+{id:'s17',ph:0,dur:750,focus:'orch',lab:'环境变量同步：CLAUDE_CODE_SESSION_ID 换成新值 —— 之后 spawn 的子进程都拿新身份',
+ state:function(){
+   entry('orch','k0','process.env.CLAUDE_CODE_SESSION_ID = getSessionId() —— 子进程跟着用新会话身份（ant 内部路径）','conversation.ts:242-244');
+ },live:null},
+{id:'s18',ph:0,dur:900,focus:'id',lab:'文件指针悬空：resetSessionFilePointer() —— sessionFile = null、pendingEntries = []，新文件此刻还不存在',
+ state:function(){
+   entry('id','k0','resetSessionFilePointer()：Project.sessionFile = null、pendingEntries = [] —— 落盘引擎从此刻起"无家可归"，直到懒物化','sessionStorage.ts:702-705 · 1542-1544');
+   setV('v-sfile','null（懒物化）');
+ },live:function(){fly('orch','id','resetSessionFilePointer()','stt',700)}},
+{id:'s19',ph:0,dur:850,focus:'orch',lab:'保留的后台任务重新接线：TaskOutput 符号链接重指向新会话目录 —— 否则永远读换脑前的冻结快照',
+ state:function(){
+   entry('orch','k0','运行中的保留任务：initTaskOutputAsSymlink 重指 getAgentTranscriptPath —— transcript 写已落在新会话目录，符号链接必须跟上（只重接运行中的）','conversation.ts:247-261');
+ },live:null},
+{id:'s20',ph:0,dur:800,focus:'orch',lab:'补录出生证明：当前模式与 worktree 状态重新存盘 —— 未来的 --resume 得知新会话是什么模式',
+ state:function(){
+   entry('orch','k0','saveMode / saveWorktreeState 重新落盘 —— 元数据缓存刚被清空，但进程还处于同一模式与 worktree，补写回去','conversation.ts:263-279');
+ },live:null},
+{id:'s21',ph:0,dur:900,focus:'orch',lab:'迎新：SessionStart hooks（clear）开跑 —— 钩子产出的消息将成为新数组第一批（本次为空）',
+ state:function(){
+   entry('orch','k0','processSessionStartHooks(clear)：新会话的开场钩子；hookMessages 非空则 setMessages(hookMessages)（本次为空，数组保持空）','conversation.ts:282-287');
+ },live:null},
+{id:'s22',ph:0,dur:1200,focus:'disk',lab:'中场盘点：屏幕空、身份新、成本清零 —— 而旧 8f3a….jsonl 一行未动，append-only 封存，--resume 随时找回',
+ state:function(){
+   fileCls('f-old','sealed');badge('f-old-b','封存','bgy');
+   $('f-old-st').textContent='append-only 一行未动 · 6 行 · --resume 可独立恢复';
+   var d=document.createElement('div');d.className='scard';
+   d.innerHTML='<div class="tt">换脑完成 · 中场盘点</div>'+
+     '<div class="li">屏幕消息：0 条 ✓（数组整体换空）</div>'+
+     '<div class="li">会话身份：b7e92d60…（新）✓ 血缘：parent = 8f3a21c4…</div>'+
+     '<div class="li">成本与 token 统计：已清零 ✓</div>'+
+     '<div class="li">旧文件 8f3a….jsonl：完好封存 ✓</div>'+
+     '<div class="li">新文件：尚未诞生（等首条消息）✓</div>';
+   feeds.disk.appendChild(d);feeds.disk.scrollTop=feeds.disk.scrollHeight;
+ },live:null},
+// ── 第 2 幕 · 新会话诞生 ──
+{id:'s23',ph:1,dur:850,focus:'user',lab:'第 2 幕开始：用户在新会话里发出第一条消息 —— 新话题，与旧对话无关',
+ state:function(){
+   bubble('q','新话题：帮我重构 parser.ts 的错误处理');
+   setV('v-msgs','1 条');
+ },live:null},
+{id:'s24',ph:1,dur:900,focus:'disk',lab:'useLogMessages 捕捉消息尾部增量，交给 recordTranscript —— 落盘引擎收到新会话的第一条消息',
+ state:function(){
+   entry('disk','k1','useLogMessages 捕捉消息数组尾部增量 → recordTranscript（fire-and-forget，UI 不阻塞）','useLogMessages.ts:59-79 · sessionStorage.ts:1445');
+ },live:function(){fly('user','disk','首条消息 → recordTranscript','msg',750)}},
+{id:'s25',ph:1,dur:950,focus:'disk',lab:'发现文件指针是 null，触发 materializeSessionFile() —— 新会话文件这一刻才真正诞生（懒物化）',
+ state:function(){
+   entry('disk','k1','appendEntry 发现 sessionFile === null → materializeSessionFile()：新会话文件此刻才创建 —— /clear 后到首条消息之间崩溃，新文件根本不存在（无害）','sessionStorage.ts:998-1013');
+   fileCls('f-new','born');badge('f-new-b','已诞生','bo');
+ },live:null},
+{id:'s26',ph:1,dur:900,focus:'disk',lab:'路径推导 getTranscriptPath()：项目目录 + 新 sessionId 拼出文件名 —— 目录 0700、文件 0600',
+ state:function(){
+   entry('disk','k1','getTranscriptPath() = projects/&lt;sanitize(originalCwd)&gt;/&lt;sessionId&gt;.jsonl —— ensureCurrentSessionFile 物化路径；目录 0700 / 文件 0600','sessionStorage.ts:203-206 · 1298-1304 · 648-657');
+   setV('v-sfile','…/b7e92d60….jsonl');
+ },live:function(){fly('id','disk','getTranscriptPath()','stt',700)}},
+{id:'s27',ph:1,dur:900,focus:'disk',lab:'先写启动元数据，再把缓冲队列 pendingEntries 逐条刷入 —— 第一行消息真正落盘',
+ state:function(){
+   entry('disk','k1','reAppendSessionMetadata 写 mode/agent 等启动元数据 → pendingEntries 逐条 appendEntry 刷入','sessionStorage.ts:1003-1012');
+   badge('f-new-b','1 行','bo');
+   $('f-new-st').textContent='启动元数据 + 首条消息已落盘';
+ },live:null},
+{id:'s28',ph:1,dur:1000,focus:'user',lab:'新会话独立生长：回答流出、后续消息持续追加进新 JSONL —— 与旧文件再无瓜葛',
+ state:function(){
+   bubble('a','开始重构 —— 先梳理调用方…');
+   bubble('q','顺便加个类型守卫');
+   bubble('a','已加');
+   setV('v-msgs','3 条');
+   badge('f-new-b','追加中','bb');fileCls('f-new','appending');
+   $('f-new-st').textContent='3 行 · 新会话独立生长';
+ },live:null},
+// ── 第 3 幕 · 反向换脑（--resume / /resume） ──
+{id:'s29',ph:2,dur:850,focus:'user',lab:'第 3 幕 · 反向换脑：另一个终端 claude --resume 8f3a21c4 —— 想把旧会话接回来',
+ state:function(){
+   bubble('st','另一终端：claude --resume 8f3a21c4');
+   entry('user','k2','--resume 指定旧会话 id（或会话内 /resume 从列表挑一个）—— 这次方向反过来：换回旧脑','commands/resume/resume.tsx:121-164');
+ },live:null},
+{id:'s30',ph:2,dur:950,focus:'disk',lab:'读取旧 JSONL：定位最新非 sidechain 叶节点，沿 parentUuid 链回溯重建整棵消息树',
+ state:function(){
+   entry('disk','k2','loadConversationForResume：找最新非 sidechain 叶 → buildConversationChain 沿 parentUuid 回溯；未配对 tool_use / 孤 thinking 被过滤','conversationRecovery.ts:485-630');
+   badge('f-old-b','读取中','bb');fileCls('f-old','appending');
+   $('f-old-st').textContent='沿 parentUuid 链重建消息树（6 条）';
+ },live:function(){fly('user','disk','--resume 8f3a21c4','msg',750)}},
+{id:'s31',ph:2,dur:1000,focus:'id',lab:'switchSession(旧id, 旧项目目录) —— 反方向原子换脑：sessionId 换回旧值，sessionProjectDir 指向旧文件目录',
+ state:function(){
+   entry('id','k2','switchSession(旧id, dirname(transcriptPath))：删当前 plan-slug 条目 → sessionId = 旧值 → sessionProjectDir = 旧文件目录；parentSessionId 不动 —— 血缘只在"生出新会话"时登记','bootstrap/state.ts:462-473');
+   setV('v-sid','8f3a21c4…（换回）');
+   setV('v-pdir','resume 项目目录');
+ },live:function(){fly('disk','id','switchSession(旧id, dir)','stt',750)}},
+{id:'s32',ph:2,dur:900,focus:'id',lab:'同变性保障：sessionId 与 sessionProjectDir 没有各自的 setter，只能一起换 —— 两值永不漂移（CC-34）',
+ state:function(){
+   entry('id','k2','CC-34：两者无独立 setter，不可能一个换了另一个没换 —— 钩子拿到的 transcript_path 因此不会指向错目录','bootstrap/state.ts:450-461');
+ },live:null},
+{id:'s33',ph:2,dur:850,focus:'disk',lab:'sessionSwitched 信号发出，PID 文件同步更新 —— claude ps 的 sparkline 不会读错 transcript',
+ state:function(){
+   entry('disk','k2','onSessionSwitch → updatePidFile({sessionId})：~/.claude/sessions/&lt;pid&gt;.json 里的会话 id 跟上换脑','concurrentSessions.ts:98-103');
+ },live:function(){fly('id','disk','updatePidFile({sessionId})','msg',700)}},
+{id:'s34',ph:2,dur:900,focus:'id',lab:'adopt 旧文件：sessionFile 直接指向旧 JSONL，不等懒物化 —— 退出时的元数据重追加因此能跑，标题不丢',
+ state:function(){
+   entry('id','k2','adoptResumedSessionFile：sessionFile = getTranscriptPath() 直接指向旧文件（旧文件已存在，不会造出孤儿文件）','sessionStorage.ts:1546-1571');
+   setV('v-sfile','…/8f3a21c4….jsonl');
+   fileCls('f-old','adopted');badge('f-old-b','adopt','bg');
+   $('f-old-st').textContent='sessionFile 直接指向此文件 · 继续追加';
+ },live:null},
+{id:'s35',ph:2,dur:1000,focus:'user',lab:'setMessages(恢复的消息) —— 旧对话 6 条原样重现屏幕，时间线接上，仿佛从未离开',
+ state:function(){
+   bubble('q','帮我把这段代码改成 async');
+   bubble('a','已改完，3 处 await 补上');
+   bubble('q','再跑一下测试');
+   bubble('a','测试通过 12/12');
+   bubble('q','顺手把 README 更新一下');
+   bubble('a','README 已更新');
+   setV('v-msgs','6 条（已恢复）');
+   entry('user','k2','setMessages(() => messages)：恢复的消息数组整棵挂进 REPL —— 恢复后第一屏就是旧对话','REPL.tsx:2326');
+ },live:function(){fly('disk','user','setMessages(恢复的消息)','msg',800)}},
+{id:'s36',ph:2,dur:950,focus:'user',lab:'对话继续：新消息追加进被 adopt 的旧 JSONL —— 磁盘上哪个文件被追加，由 STATE.sessionId 一锤定音',
+ state:function(){
+   bubble('q','继续：把错误处理也补上');
+   bubble('a','已补');
+   setV('v-msgs','8 条');
+   badge('f-old-b','追加中','bb');fileCls('f-old','appending');
+   $('f-old-st').textContent='7 行 · 会话继续（claude ps 也指着它）';
+   entry('disk','k2','新消息经同一条 recordTranscript 链路追加 —— sessionId 是谁，就追加谁的 .jsonl','sessionStorage.ts:203-206');
+ },live:null},
+{id:'s37',ph:2,dur:1400,focus:'user',lab:'流程结束 —— /clear 生新脑、--resume 换旧脑，同一枚硬币的两面：sessionId 换了，被追加的 .jsonl 就换了；再敲 /clear 则从头循环',
+ state:function(){
+   var d=document.createElement('div');d.className='fcard';
+   d.innerHTML='<b>流程结束</b> —— /clear 与 --resume 是同一个换脑机制的两个方向：<b>STATE.sessionId 指向谁，磁盘上那个 .jsonl 就被继续追加</b>。旧文件永远 append-only 不动；再敲一次 /clear，本流程从第 1 幕从头循环。';
+   feeds.user.appendChild(d);feeds.user.scrollTop=feeds.user.scrollHeight;
+ },live:null}
+];
+// ---------- 引擎：重建 / 播放 / 单步 ----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  LANEKEYS.forEach(function(k){feeds[k].innerHTML=''});
+  $('v-sid').textContent='—';$('v-parent').textContent='—';$('v-pdir').textContent='—';
+  $('v-sfile').textContent='—';$('v-msgs').textContent='—';$('v-meta').textContent='—';
+  $('f-old').style.display='none';$('f-new').style.display='none';
+  $('f-old-b').textContent='';$('f-new-b').textContent='';
+  $('f-old-st').textContent='';$('f-new-st').textContent='';
+}
+function applyStep(i){var s=steps[i];if(s.state)s.state()}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length, segs=barEl.children, k;
+  for(k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(k=0;k<ph.length;k++)ph[k].classList.toggle('on',idx>=0&&k===cur);
+  $('b-play').textContent=playing?'⏸ 暂停':(idx>=n-1?'↻ 重播':'▶ 播放');
+  if(idx<0){
+    readout.textContent='就绪 · 点击 ▶ 播放';
+    subtitleEl.textContent=INIT_SUB;
+  }else{
+    readout.innerHTML=(idx>=n-1?'<span class="fin">✓ 播放完毕</span> · ':'')+'步骤 <b>'+(idx+1)+'/'+n+'</b>';
+    subtitleEl.textContent='现在：'+steps[idx].lab;
+  }
+}
+function schedule(delay){clearTimeout(timer);if(!playing)return;timer=setTimeout(next,delay)}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.live){try{s.live()}catch(e){}}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;$('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++){try{activeAnims[k].play()}catch(e){}}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=0&&idx>=steps.length-1)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++){try{activeAnims[k].pause()}catch(e){}}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- 控制条接线 ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){pause();renderTo(-1)};
+$('b-prev').onclick=function(){pause();renderTo(idx-1)};
+$('b-next').onclick=function(){pause();renderTo(idx+1)};
+$('b-end').onclick=function(){pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){toggle()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();toggle()}
+  else if(e.key==='ArrowRight'){pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){pause();renderTo(-1)}
+});
+
+// 调试 / 自检钩子
+window.__goto=function(i){pause();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+
+// ---------- 轻量自检（?selftest=1） ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  var lines=[];
+  function rec(name,ok){lines.push((ok?'PASS ':'FAIL ')+name)}
+  try{
+    rec('步数 > 0（'+steps.length+' 步）',steps.length>0);
+    var errs=[],i;
+    for(i=0;i<steps.length;i++){
+      try{window.__goto(i)}catch(e){errs.push(i+':'+((e&&e.message)||e))}
+    }
+    rec('逐步 __goto(0..'+(steps.length-1)+') 无异常',errs.length===0);
+    var texts=[];
+    for(i=0;i<steps.length;i++){window.__goto(i);texts.push(subtitleEl.textContent)}
+    var uniq=texts.filter(function(t,j){return texts.indexOf(t)===j});
+    rec('字幕文本随步变化（'+uniq.length+'/'+texts.length+' 个不同文本）',texts.length>0&&uniq.length===texts.length);
+    window.__goto(-1);
+    var emptyOk=feeds.user.children.length===0&&feeds.orch.children.length===0
+      &&feeds.id.children.length===0&&feeds.disk.children.length===0
+      &&subtitleEl.textContent===INIT_SUB
+      &&$('v-sid').textContent==='—'
+      &&getComputedStyle($('f-old')).display==='none'
+      &&getComputedStyle($('f-new')).display==='none';
+    rec('__goto(-1) 重置回空态（泳道清空 / 字幕复位 / 文件卡隐藏）',emptyOk);
+    rec('window.onerror 为空（'+errLog.length+' 条）',errLog.length===0);
+  }catch(e){
+    rec('selftest 自身异常：'+((e&&e.message)||e),false);
+  }
+  pre.textContent=lines.join('\n');
+  window.__selftestResult={
+    pass:lines.filter(function(l){return l.indexOf('PASS ')===0}).length,
+    fail:lines.filter(function(l){return l.indexOf('FAIL ')===0}).length
+  };
+}
+if(/[?&]selftest=1\b/.test(location.search)){
+  $('selftest-result').style.display='block';
+  setTimeout(runSelfTest,60);
+}
+
+renderTo(-1);
+})();
+</script></div>
+</body>
+</html>

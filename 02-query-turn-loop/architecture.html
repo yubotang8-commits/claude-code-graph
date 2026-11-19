@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>02-query-turn-loop · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：核心回合循环</h1>
+<p class="sub">02-query-turn-loop · 组成模块与调用关系</p>
+<p class="lead">「一条用户输入如何变成多回合的智能体行为」由这些模块协作完成：入口编排 → 回合主循环 → 每回合调用模型与工具 → 上下文将满时压缩瘦身 → 循环收敛后返回终态。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 780" width="1040" height="780" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部组件：REPL 直调 -->
+<rect x="64" y="46" width="230" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="179" y="70" class="n-body">REPL 交互界面</text>
+<text x="179" y="90" class="n-sub">组件 14 · 界面直调循环</text>
+
+<!-- 入口编排层 -->
+<rect x="560" y="40" width="410" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="765" y="72" class="n-title">无头 / SDK 编排器</text>
+<text x="765" y="94" class="n-sub">QueryEngine.ts · 每会话一个实例</text>
+<text x="765" y="118" class="n-body">无头执行（01）与 ACP（20）用它驱动回合</text>
+<text x="765" y="136" class="n-body">把内部消息翻译成 SDK 消息，产出终态</text>
+
+<!-- 主引擎 -->
+<rect x="300" y="176" width="460" height="150" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="530" y="208" class="n-title">回合循环主引擎</text>
+<text x="530" y="230" class="n-sub">query.ts · 一条输入驱动的循环</text>
+<text x="530" y="256" class="n-body">每回合：调模型 → 收回答 → 执行工具 → 收尾</text>
+<text x="530" y="278" class="n-body">跨回合维护消息状态，边产出边推送</text>
+<text x="530" y="300" class="n-body">结束时返回十种终态（完成 / 打断 / 超回合…）</text>
+
+<!-- 左翼：支撑件 -->
+<rect x="50" y="190" width="220" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="160" y="222" class="n-title">回合循环支撑件</text>
+<text x="160" y="244" class="n-sub">配置快照 · 依赖插口 · 收尾钩子</text>
+<text x="160" y="266" class="n-body">模型 / 压缩等依赖整体可替换</text>
+<text x="160" y="288" class="n-body">回合收尾钩子 · 预算续跑决策</text>
+
+<!-- 右翼：命令队列 -->
+<rect x="790" y="190" width="230" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="905" y="222" class="n-title">命令队列管理</text>
+<text x="905" y="244" class="n-sub">排队命令 · 回合中分流</text>
+<text x="905" y="266" class="n-body">回合间隙把排队命令注入上下文</text>
+<text x="905" y="288" class="n-body">任务通知按会话归属转发</text>
+
+<!-- 行3：每回合协作者 -->
+<rect x="60" y="376" width="280" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="408" class="n-title">自动压缩判断</text>
+<text x="200" y="430" class="n-sub">autoCompact.ts</text>
+<text x="200" y="452" class="n-body">上下文将满时触发摘要压缩</text>
+<text x="200" y="472" class="n-body">连续失败 3 次即熔断停手</text>
+
+<rect x="380" y="376" width="280" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="408" class="n-title">流式 API 客户端</text>
+<text x="520" y="430" class="n-sub">services/api/claude.ts</text>
+<text x="520" y="452" class="n-body">组装流式请求，边收流边拼助手消息</text>
+<text x="520" y="472" class="n-body">带重试、模型回退与非流式回退</text>
+
+<rect x="700" y="376" width="280" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="840" y="408" class="n-title">工具执行编排</text>
+<text x="840" y="430" class="n-sub">StreamingToolExecutor.ts</text>
+<text x="840" y="452" class="n-body">执行助手点名的工具：读并行 · 写串行</text>
+<text x="840" y="472" class="n-body">权限把关，产出工具结果消息</text>
+
+<!-- 行4：压缩链与禁用分支 -->
+<rect x="60" y="560" width="280" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="200" y="592" class="n-title">摘要压缩执行</text>
+<text x="200" y="614" class="n-sub">compact.ts</text>
+<text x="200" y="636" class="n-body">把历史压成摘要，重建附件与计划</text>
+<text x="200" y="656" class="n-body">产出压缩边界消息替换上下文</text>
+
+<rect x="380" y="560" width="280" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="592" class="n-title">Fork 子代理执行器</text>
+<text x="520" y="614" class="n-sub">forkedAgent.ts</text>
+<text x="520" y="636" class="n-body">隔离上下文跑嵌套循环生成摘要</text>
+<text x="520" y="656" class="n-body">复用主线程缓存，写旁路会话</text>
+
+<rect x="700" y="560" width="280" height="104" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="840" y="592" class="n-title">默认关闭的瘦身分支</text>
+<text x="840" y="614" class="n-sub">默认构建已编译剔除</text>
+<text x="840" y="636" class="n-body">微压缩 · 裁剪重放 · 超长急救压缩</text>
+<text x="840" y="656" class="n-body">实验开关开启才参与流程</text>
+
+<!-- 底座 -->
+<rect x="60" y="704" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="730" class="n-title">消息构造与边界工具（被上方模块共用）</text>
+<text x="530" y="752" class="n-sub">utils/messages.ts · 压缩边界消息构造与切片 · 消息规范化</text>
+
+<!-- 连线 -->
+<path class="edge" d="M179,110 L179,148 L420,148 L420,172" marker-end="url(#ah)"/>
+<path class="edge" d="M765,144 L765,158 L640,158 L640,172" marker-end="url(#ah)"/>
+<path class="edge" d="M300,245 L274,245" marker-end="url(#ah)"/>
+<path class="edge" d="M760,245 L786,245" marker-end="url(#ah)"/>
+<path class="edge" d="M330,326 L330,352 L200,352 L200,372" marker-end="url(#ah)"/>
+<path class="edge" d="M530,326 L530,372" marker-end="url(#ah)"/>
+<path class="edge" d="M710,326 L710,344 L840,344 L840,372" marker-end="url(#ah)"/>
+<path class="edash" d="M680,326 L680,528 L840,528 L840,556" marker-end="url(#ahd)"/>
+<path class="edge" d="M200,480 L200,556" marker-end="url(#ah)"/>
+<path class="edge" d="M340,612 L376,612" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（默认关闭，虚线箭头 = 平时不开）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（仓库 claude-code-best）：src/query.ts:276（query() 为嵌套 async 生成器）、src/query.ts:393,460（queryLoop 的 while-true 主循环）、src/query/transitions.ts:1-21（十种终态 Terminal）、src/QueryEngine.ts:217,688（submitMessage 包住 query()）、src/screens/REPL.tsx:3513（REPL 直调 query()，不经 QueryEngine）、src/cli/print.ts:91 与 src/services/acp/agent/createSessionMethod.ts:14（QueryEngine 的两个实际使用方）、src/query/deps.ts:33-39（callModel/microcompact/autocompact 依赖插口）、src/services/api/claude.ts:774（queryModelWithStreaming）、src/services/tools/StreamingToolExecutor.ts:42,90,480（边流边执行工具）、src/services/compact/autoCompact.ts:270-294（触发判断与 3 次熔断）、src/services/compact/compact.ts:411-515（compactConversation 摘要压缩）、src/utils/forkedAgent.ts:508（runForkedAgent）、src/utils/messageQueueManager.ts:128（排队命令）、src/utils/messages.ts:5083（getMessagesAfterCompactBoundary）。</li>
+<li>考据注记：完整组成共 13 个模块，本图合并/省略了——「回合循环支撑件」一个盒子收拢了 src/query/ 的 config.ts、deps.ts、stopHooks.ts、tokenBudget.ts 四个文件；「默认关闭的瘦身分支」一个盒子收拢了 microCompact.ts、snipCompact.ts、reactiveCompact.ts（scripts/defines.ts:39-101 证实 HISTORY_SNIP、CONTEXT_COLLAPSE、REACTIVE_COMPACT、CACHED_MICROCOMPACT 均不在默认构建特性里）。</li>
+<li>调用关系简化：主引擎实际经支撑件的「依赖插口」间接调用 API 客户端与压缩模块（便于测试注入），图中画为直接箭头；摘要压缩的兜底路径会直连 API 客户端生成摘要（fork 失败时回退），箭头省略；支撑件里的收尾钩子与后台簿记也会调用 Fork 执行器，箭头省略；消息队列与 REPL 侧的队列处理器协作关系属 REPL 子系统，未画。</li>
+<li>协议级词汇说明：终态十种 reason（completed/aborted_streaming/max_turns 等）是流程概念，收在主引擎盒子与 transitions.ts 证据中，不铺图面；「压缩边界消息」是消费者整体替换消息数组的锚点，切片逻辑在底座模块。</li>
+<li>关联图：压缩家族细节见「03-compaction」；API 请求组装与重试回退细节见「05/07」；工具本体生命周期见「08」；REPL 侧消费见「14」；transcript 落盘见「22」。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>20-acp · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：远程控制 / ACP / 后台常驻</h1>
+<p class="sub">20-acp · 组成模块与调用关系</p>
+<p class="lead">「让远处的你操控这台机器上的 Claude」由这些模块协作完成：入口把远程相关命令分流 → 客户端主体向服务器注册并领工 → 拉起会话子进程干活、消息经服务器中转 → 浏览器面板是人的落脚点；ACP 代理一族与界面内嵌是两条旁路，守护进程让这一切常驻后台。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 780" width="1040" height="780" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行0：入口 -->
+<rect x="330" y="40" width="380" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="70" class="n-title">统一入口与模式分发</text>
+<text x="520" y="90" class="n-sub">cli.tsx</text>
+<text x="520" y="112" class="n-body">远程命令不加载完整 CLI，直接分流下方</text>
+
+<!-- 行1：左=守护进程，中=客户端主体（主干），右=ACP智能体 -->
+<rect x="50" y="164" width="230" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="165" y="196" class="n-title">守护进程管理</text>
+<text x="165" y="218" class="n-sub">daemon/</text>
+<text x="165" y="242" class="n-body">常驻看护远程控制工人</text>
+<text x="165" y="264" class="n-body">崩溃指数退避重启 · 顽疾停车</text>
+<text x="165" y="286" class="n-body">ps/logs 等子命令转后台会话</text>
+
+<rect x="330" y="164" width="380" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="196" class="n-title">远程控制客户端主体</text>
+<text x="520" y="218" class="n-sub">bridgeMain.ts</text>
+<text x="520" y="242" class="n-body">向服务器注册本机环境 · 长轮询领工单</text>
+<text x="520" y="264" class="n-body">拉起会话子进程 · 心跳与令牌刷新</text>
+<text x="520" y="286" class="n-body">超时看门狗 · 优雅停机</text>
+
+<rect x="750" y="164" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="196" class="n-title">ACP 智能体实现</text>
+<text x="875" y="218" class="n-sub">claude --acp 启动</text>
+<text x="875" y="242" class="n-body">把编辑器协议翻译成内部查询</text>
+<text x="875" y="264" class="n-body">流式产出转成会话更新通知</text>
+<text x="875" y="286" class="n-body">工具权限交给客户端批准</text>
+
+<!-- 行2：左=后台会话，中=会话子进程（主干），右=ACP代理 -->
+<rect x="50" y="336" width="230" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="165" y="368" class="n-title">后台会话管理</text>
+<text x="165" y="390" class="n-sub">cli/bg/</text>
+<text x="165" y="414" class="n-body">tmux 或脱离终端跑长任务</text>
+<text x="165" y="436" class="n-body">会话自注册到本机目录</text>
+<text x="165" y="458" class="n-body">查日志 / 接入 / 终止</text>
+
+<rect x="330" y="336" width="380" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="368" class="n-title">被拉起的会话子进程</text>
+<text x="520" y="390" class="n-sub">remoteIO.ts</text>
+<text x="520" y="414" class="n-body">把远程消息当作用户输入来执行</text>
+<text x="520" y="436" class="n-body">输出与权限请求回推服务器</text>
+<text x="520" y="458" class="n-body">无界面版的核心会话（组件 02 驱动）</text>
+
+<rect x="750" y="336" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="368" class="n-title">ACP 代理服务器</text>
+<text x="875" y="390" class="n-sub">acp-link/</text>
+<text x="875" y="414" class="n-body">网页与本地连接的落地网关</text>
+<text x="875" y="436" class="n-body">拉起智能体子进程并对接</text>
+<text x="875" y="458" class="n-body">可选上行注册到远程服务器</text>
+
+<!-- 行3：左=界面内嵌（分支），中=自托管服务器（主干），右=网页面板 -->
+<rect x="50" y="508" width="230" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="165" y="540" class="n-title">界面内嵌远程控制</text>
+<text x="165" y="562" class="n-sub">replBridge.ts</text>
+<text x="165" y="586" class="n-body">由界面内命令触发（组件 14）</text>
+<text x="165" y="608" class="n-body">无需另起进程即可远程收发</text>
+<text x="165" y="630" class="n-body">断线恢复 · 崩溃自动重连</text>
+
+<rect x="330" y="508" width="380" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="540" class="n-title">自托管远程控制服务器</text>
+<text x="520" y="562" class="n-sub">remote-control-server/</text>
+<text x="520" y="586" class="n-body">环境注册 · 工单派发 · 事件总线（纯内存）</text>
+<text x="520" y="608" class="n-body">收客户端轮询 / 会话通道 / 代理接入</text>
+<text x="520" y="630" class="n-body">静态托管网页面板</text>
+
+<rect x="750" y="508" width="250" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="875" y="540" class="n-title">网页控制面板</text>
+<text x="875" y="562" class="n-sub">浏览器访问 · 由服务器托管</text>
+<text x="875" y="586" class="n-body">看会话流 · 发消息 · 批权限</text>
+<text x="875" y="608" class="n-body">经服务器中转连 ACP 代理</text>
+
+<!-- 底座 -->
+<rect x="60" y="680" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="708" class="n-title">核心引擎与权限系统底座</text>
+<text x="530" y="730" class="n-sub">被 ACP 智能体 · 会话子进程 · 后台会话调用（见组件 02 / 09）</text>
+
+<!-- 连线 -->
+<path class="edge" d="M520,124 L520,160" marker-end="url(#ah)"/>
+<path class="edge" d="M330,78 L165,78 L165,160" marker-end="url(#ah)"/>
+<path class="edge" d="M710,78 L875,78 L875,160" marker-end="url(#ah)"/>
+<path class="edash" d="M280,222 L326,222" marker-end="url(#ahd)"/>
+<path class="edge" d="M165,292 L165,332" marker-end="url(#ah)"/>
+<path class="edge" d="M440,292 L440,332" marker-end="url(#ah)"/>
+<path class="edge" d="M460,464 L460,504" marker-end="url(#ah)"/>
+<path class="edge" d="M330,250 L305,250 L305,600 L326,600" marker-end="url(#ah)"/>
+<path class="edge" d="M875,336 L875,296" marker-end="url(#ah)"/>
+<path class="edge" d="M875,464 L875,488 L560,488 L560,504" marker-end="url(#ah)"/>
+<path class="edge" d="M710,570 L746,570" marker-end="url(#ah)"/>
+<path class="edge" d="M165,636 L165,658 L400,658 L400,642" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（ACP 代理一族 / 界面内嵌）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>复用关系（虚线箭头）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（仓库 claude-code，只读取证）：src/entrypoints/cli.tsx:124-129（--acp 快速路径 → runAcpAgent）、cli.tsx:182-226（remote-control/rc/remote/sync/bridge 五别名 → bridgeMain）、cli.tsx:230-242（daemon → daemonMain）、cli.tsx:265-294（--bg → handleBgStart；ps/logs/attach/kill → daemonMain，ps 重映射为 status 并提示 deprecated）；src/bridge/bridgeMain.ts:2001（bridgeMain 主体）、:140（runBridgeLoop 轮询循环）、:2810（runBridgeHeadless 无头入口）；src/cli/remoteIO.ts:35,88（RemoteIO 继承结构化 IO，按地址选传输）；packages/remote-control-server/src/index.ts:33（Hono 服务、纯内存存储）、src/routes/acp/index.ts:147,186（代理接入与中转端点）；packages/acp-link/src/server/start-server.ts:112（/ws 端点与令牌校验）、src/server/handlers-agent.ts:82（拉起智能体子进程并建立协议连接）；src/services/acp/entry.ts:27-74（stdio 上的智能体连接）、src/services/acp/agent/createSessionMethod.ts:135-195（每会话新建查询引擎）；src/daemon/main.ts:52,230,330,385-403（子命令分发、监督循环、拉起工人、退出码 78 与连崩 5 次即停车）；src/cli/bg.ts:279-338（后台会话启动）；src/utils/concurrentSessions.ts:59-109（会话自注册）。</li>
+<li>箭头语义：入口→客户端主体（remote-control 命令族）；入口→守护进程（daemon 命令）；入口→ACP 智能体（--acp）；守护进程⇢客户端主体（工人子进程无头复用同一套轮询循环）；守护进程→后台会话（bg/attach/logs/kill 子命令）；客户端主体→会话子进程（按工单拉起）；会话子进程→服务器（会话通道连回：收消息、回推输出与权限请求）；客户端主体→服务器（左侧绕行线：注册环境、领工、心跳、归档）；代理服务器→ACP 智能体（拉起并对接）；代理服务器→服务器（两步上行注册，可选）；服务器→网页面板（静态托管与事件流）；界面内嵌→服务器（直接收发远程消息）。</li>
+<li>考据注记：本组件完整组成共 10 个模块，全部上图、无整块省略；但每个盒子内部都合并了大量文件——「客户端主体」实为 src/bridge/ 目录 34 个文件（REST 客户端、会话管理、JWT 工具、消息传输、权限回调等），「ACP 智能体实现」实为 src/services/acp/ 的 barrel 加子模块结构。省略的次要箭头：--bg 快速路径从入口直进后台会话管理（cli.tsx:265-275），与 daemon bg 子命令双入口，图中只画 daemon→bg 一条；网页面板到 ACP 代理的会话流经服务器中转（/acp/relay/:agentId），并入「服务器→网页面板」；界面内嵌与客户端主体共用注册与令牌工具（jwtUtils、轮询配置），未画线；会话子进程的入口侧（print 模式把 --sdk-url 交给 RemoteIO）属组件 01 的分发层，未画线。</li>
+<li>协议词汇收拢：ACP 即 Agent Client Protocol（编辑器与智能体之间的 JSON-RPC 会话协议）；/remote-control 为 REPL 内的斜杠命令；代理接入服务器的 identify 两步注册、v1/v2 双传输代际等均为流程概念，收在本栏不上图面。</li>
+<li>底座说明：ACP 智能体每会话新建查询引擎（createSessionMethod.ts:135-195），会话子进程走 print 路径同样由查询引擎驱动（见组件 02 证据），后台会话子进程运行完整 CLI；三者都过统一权限系统（组件 09）。</li>
+<li>关联图：远程控制全生命周期流程见组件 19；守护进程与后台会话流程见组件 21；底座引擎见组件 02、权限管线见组件 09；REPL 界面见组件 14。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

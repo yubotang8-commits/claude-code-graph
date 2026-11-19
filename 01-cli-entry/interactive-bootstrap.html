@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>01-cli-entry · 交互式启动全链路</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>交互式启动全链路</h1>
+<p class="sub">组件 01-cli-entry · 入口与引导</p>
+<p class="lead">从「敲下 claude 命令」到「可以开始对话」之间发生的全部事情：参数判定 → 全局初始化 → 工作区落位 → 信任与恢复 → 终端界面挂载。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1200" width="1040" height="1200" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">claude 命令启动</text>
+
+<!-- D1 快速路径判定 -->
+<polygon points="400,113 520,155 400,197 280,155" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="152" class="n-title">快速路径参数？</text>
+<text x="400" y="170" class="n-sub">--version / daemon 等</text>
+
+<!-- B1 参数解析 -->
+<rect x="250" y="235" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="264" class="n-title">解析命令行参数</text>
+<text x="400" y="288" class="n-sub">main.tsx · 识别/改写特殊参数（URL、SSH 等）</text>
+
+<!-- D2 交互判定 -->
+<polygon points="400,333 520,375 400,417 280,375" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="372" class="n-title">交互模式？</text>
+<text x="400" y="392" class="n-sub">有终端且未用 -p</text>
+
+<!-- B2 一次性初始化 -->
+<rect x="250" y="455" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="484" class="n-title">一次性全局初始化</text>
+<text x="400" y="508" class="n-sub">init.ts · 加载配置、准备遥测与崩溃上报</text>
+
+<!-- B3 工作区落位 -->
+<rect x="250" y="573" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="602" class="n-title">工作区落位</text>
+<text x="400" y="626" class="n-sub">setup.ts · 项目根目录、会话 ID、可选工作树</text>
+
+<!-- D3 首次使用判定 -->
+<polygon points="400,673 520,715 400,757 280,715" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="712" class="n-title">目录首次使用？</text>
+<text x="400" y="732" class="n-sub">或尚未被信任</text>
+
+<!-- D4 恢复会话判定 -->
+<polygon points="400,788 520,830 400,872 280,830" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="827" class="n-title">要恢复历史会话？</text>
+<text x="400" y="845" class="n-sub">--continue / --resume</text>
+
+<!-- B4 渲染引擎 -->
+<rect x="250" y="910" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="939" class="n-title">启动终端渲染引擎</text>
+<text x="400" y="963" class="n-sub">Ink · 把 React 界面渲染到终端</text>
+
+<!-- B5 REPL 就绪 -->
+<rect x="250" y="1010" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1039" class="n-title">REPL 就绪，等待输入</text>
+<text x="400" y="1063" class="n-sub">REPL.tsx · 提前敲的键已自动缓冲</text>
+
+<!-- 结束 -->
+<rect x="270" y="1121" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1146" class="n-title">交互会话开始</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 快速路径 -->
+<rect x="640" y="120" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="148" class="n-title">进入专用模式（快速路径）</text>
+<text x="825" y="170" class="n-body">不加载主程序，直接运行对应功能：</text>
+<text x="825" y="188" class="n-body">MCP 服务器 / 守护进程 / 远程控制等</text>
+
+<!-- E1 -->
+<rect x="675" y="240" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="265" class="n-title">运行结束，进程退出</text>
+
+<!-- R2 无头模式 -->
+<rect x="640" y="335" width="370" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="364" class="n-title">无头模式（-p / 管道输入）</text>
+<text x="825" y="388" class="n-body">不启动界面，直接执行这一次任务</text>
+
+<!-- E2 -->
+<rect x="675" y="435" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="460" class="n-title">结果输出到标准输出后退出</text>
+
+<!-- R3 信任对话 -->
+<rect x="660" y="686" width="300" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="715" class="n-title">信任确认对话（仅首次）</text>
+<text x="810" y="739" class="n-body">用户确认后才允许在此目录运行</text>
+
+<!-- R4 加载历史会话 -->
+<rect x="660" y="796" width="300" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="825" class="n-title">加载历史会话</text>
+<text x="810" y="849" class="n-body">读回之前的消息与上下文</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="990" width="200" height="100" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1020" class="n-title">提前按键缓冲</text>
+<text x="130" y="1044" class="n-body">启动过程中用户敲入的字符</text>
+<text x="130" y="1062" class="n-body">先被暂存，界面就绪后</text>
+<text x="130" y="1080" class="n-body">自动填入输入框</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,109" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,155 L634,161" marker-end="url(#ah)"/>
+<text x="560" y="148" class="elab">是</text>
+
+<path class="edge" d="M400,197 L400,231" marker-end="url(#ah)"/>
+<text x="410" y="220" class="elab">否</text>
+
+<path class="edge" d="M400,305 L400,329" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,375 L634,371" marker-end="url(#ah)"/>
+<text x="560" y="366" class="elab">否</text>
+
+<path class="edge" d="M400,417 L400,451" marker-end="url(#ah)"/>
+<text x="410" y="440" class="elab">是</text>
+
+<path class="edge" d="M400,525 L400,569" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,643 L400,669" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,715 L654,720" marker-end="url(#ah)"/>
+<text x="560" y="708" class="elab">是</text>
+
+<!-- R3 汇合点 -->
+<circle cx="400" cy="770" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,757 L400,784" marker-end="url(#ah)"/>
+<text x="410" y="776" class="elab">否</text>
+<path class="edge" d="M810,756 L810,770 L408,770" marker-end="url(#ah)"/>
+
+<!-- D4 分支 -->
+<path class="edge" d="M520,830 L654,831" marker-end="url(#ah)"/>
+<text x="560" y="822" class="elab">是</text>
+
+<!-- R4 汇合点 -->
+<circle cx="400" cy="890" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,872 L400,906" marker-end="url(#ah)"/>
+<text x="410" y="894" class="elab">否</text>
+<path class="edge" d="M810,866 L810,890 L408,890" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,980 L400,1006" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1080 L400,1117" marker-end="url(#ah)"/>
+
+<path class="edge" d="M825,204 L825,236" marker-end="url(#ah)"/>
+<path class="edge" d="M825,405 L825,431" marker-end="url(#ah)"/>
+
+<path class="edash" d="M230,1042 L246,1044" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/entrypoints/cli.tsx（入口与快速路径分发）、src/main.tsx（Commander 构建、preAction 初始化、主 action 编排）、src/entrypoints/init.ts、src/setup.ts、src/interactiveHelpers.tsx（信任对话）、src/replLauncher.tsx、src/utils/earlyInput.ts、src/screens/REPL.tsx。</li>
+<li>考据注记：实际引导链含 12 个站点，本图合并为 11 个节点（MCP 预取、启动性能埋点等次要机制省略）；「信任确认」在自述文档中归入 init.ts，代码实际由 showSetupScreens 承担；main.tsx 行数随提交漂移（现约 5640 行，文档写 ~5674）。</li>
+<li>快速路径不止图中三类：--dump-system-prompt、--chrome-native-host、模板 job、--tmux+--worktree 等均属快速路径，图中以「等」概括。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

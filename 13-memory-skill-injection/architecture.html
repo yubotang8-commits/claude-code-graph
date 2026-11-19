@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>13-memory-skill-injection · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：记忆与技能注入</h1>
+<p class="sub">13-memory-skill-injection · 组成模块与调用关系</p>
+<p class="lead">模型每轮「读到」的说明书与记忆从哪来：左侧主干把三件套（默认提示 · 用户上下文 · 系统快照）取数、仲裁、合并成带缓存块的请求；右侧分支则在每一轮把相关记忆、嵌套说明与技能按需注入消息。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1050" width="1040" height="1050" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部调用方 -->
+<rect x="750" y="40" width="250" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="875" y="63" class="n-body">主循环与界面层（每轮发起组装）</text>
+<text x="875" y="85" class="n-sub">组件 04 · QueryEngine / REPL</text>
+
+<!-- 行 1：入口取数 -->
+<rect x="370" y="40" width="300" height="90" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="70" class="n-title">三件套并行取数</text>
+<text x="520" y="92" class="n-sub">utils/queryContext.ts</text>
+<text x="520" y="114" class="n-body">默认提示 · 用户上下文 · 系统快照并行获取</text>
+
+<!-- 行 2：两个来源 -->
+<rect x="60" y="190" width="270" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="195" y="222" class="n-title">默认提示分段拼装</text>
+<text x="195" y="244" class="n-sub">constants/prompts.ts</text>
+<text x="195" y="266" class="n-body">静态分段＋动态段注册表</text>
+<text x="195" y="284" class="n-body">环境 / 记忆 / 语言 / 风格按需插入</text>
+
+<rect x="390" y="190" width="270" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="525" y="222" class="n-title">会话上下文构建</text>
+<text x="525" y="244" class="n-sub">会话开始构建一次，之后复用</text>
+<text x="525" y="266" class="n-body">用户上下文：CLAUDE.md 全文＋日期</text>
+<text x="525" y="284" class="n-body">系统快照：分支与工作区状态</text>
+
+<!-- 行 3：仲裁 + CLAUDE.md 加载 + 记忆库 -->
+<rect x="60" y="350" width="270" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="195" y="382" class="n-title">提示优先级仲裁</text>
+<text x="195" y="404" class="n-sub">utils/systemPrompt.ts</text>
+<text x="195" y="426" class="n-body">覆盖＞协调者＞代理＞自定义＞默认</text>
+<text x="195" y="444" class="n-body">追加段恒放提示最末</text>
+
+<rect x="380" y="350" width="280" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="382" class="n-title">CLAUDE.md 体系加载</text>
+<text x="520" y="404" class="n-sub">utils/claudemd.ts</text>
+<text x="520" y="426" class="n-body">托管→用户→项目→本地→记忆入口</text>
+<text x="520" y="444" class="n-body">递归展开 @引用 · 越近的目录越优先</text>
+
+<rect x="750" y="350" width="250" height="110" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="382" class="n-title">自动记忆库</text>
+<text x="875" y="404" class="n-sub">memdir/ 目录</text>
+<text x="875" y="426" class="n-body">记忆索引＋保存 / 召回规范</text>
+<text x="875" y="444" class="n-body">按问题召回相关记忆条目</text>
+
+<!-- 行 4：合并 + 技能发现 -->
+<rect x="150" y="520" width="510" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="405" y="552" class="n-title">三件套合并与缓存块切分</text>
+<text x="405" y="574" class="n-sub">utils/api.ts</text>
+<text x="405" y="596" class="n-body">系统快照拼到提示末尾 · CLAUDE.md 前置为独立引导消息</text>
+<text x="405" y="614" class="n-body">按缓存边界切成若干块，命中前缀缓存</text>
+
+<rect x="790" y="520" width="210" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="895" y="552" class="n-title">技能发现</text>
+<text x="895" y="574" class="n-sub">skillSearch/</text>
+<text x="895" y="596" class="n-body">本地搜索匹配技能</text>
+<text x="895" y="614" class="n-body">高分技能直接载入全文</text>
+
+<!-- 行 5：请求成型 + 附件注入 -->
+<rect x="150" y="680" width="410" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="355" y="712" class="n-title">请求级最终成型</text>
+<text x="355" y="734" class="n-sub">services/api/claude.ts</text>
+<text x="355" y="756" class="n-body">最前插身份前缀与归因头 · 打上缓存标记</text>
+
+<rect x="750" y="680" width="250" height="110" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="712" class="n-title">每轮附件注入</text>
+<text x="875" y="734" class="n-sub">每轮工具执行后收集</text>
+<text x="875" y="756" class="n-body">嵌套 CLAUDE.md · 记忆 · 技能提醒</text>
+<text x="875" y="774" class="n-body">渲染成隐藏消息并入下一轮</text>
+
+<!-- 外部下游 -->
+<rect x="750" y="850" width="250" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="875" y="873" class="n-body">API 请求子系统</text>
+<text x="875" y="895" class="n-sub">组件 05-api-request</text>
+
+<!-- 共享底座 -->
+<rect x="60" y="950" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="978" class="n-title">会话期缓存底座（被上方模块共享读写）</text>
+<text x="530" y="1000" class="n-sub">三件套一经取数即定型 · 仅 /clear、压缩、/memory、记忆写回等事件清除</text>
+
+<!-- 连线 -->
+<path class="edash" d="M746,70 L676,70" marker-end="url(#ahd)"/>
+<path class="edge" d="M460,130 L460,160 L195,160 L195,186" marker-end="url(#ah)"/>
+<path class="edge" d="M560,130 L560,186" marker-end="url(#ah)"/>
+<path class="edge" d="M195,290 L195,346" marker-end="url(#ah)"/>
+<path class="edge" d="M525,290 L525,346" marker-end="url(#ah)"/>
+<path class="edge" d="M666,405 L746,405" marker-end="url(#ah)"/>
+<path class="edge" d="M390,250 L355,250 L355,514" marker-end="url(#ah)"/>
+<path class="edge" d="M240,460 L240,514" marker-end="url(#ah)"/>
+<path class="edge" d="M355,620 L355,676" marker-end="url(#ah)"/>
+<path class="edge" d="M770,460 L770,676" marker-end="url(#ah)"/>
+<path class="edge" d="M895,620 L895,676" marker-end="url(#ah)"/>
+<path class="edge" d="M746,715 L566,715" marker-end="url(#ah)"/>
+<path class="edash" d="M480,780 L480,830 L875,830 L875,846" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用 / 产出汇入）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>按需注入分支（每轮 / 事件触发）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件（虚线箭头 = 跨组件引用）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享缓存底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/queryContext.ts、src/constants/prompts.ts、src/context.ts、src/utils/claudemd.ts、src/utils/systemPrompt.ts、src/utils/api.ts、src/services/api/claude.ts、src/memdir/（memdir.ts、findRelevantMemories.ts 等）、src/services/skillSearch/prefetch.ts、src/utils/attachments.ts、src/query.ts（消费点）。</li>
+<li>三件套并行取数：queryContext.ts:44-74（自定义提示时跳过默认段与系统快照）；调用方 QueryEngine.ts:294-335、REPL.tsx:3470-3506。</li>
+<li>默认提示分段：prompts.ts:423-543（静态段＋动态段注册表），动态边界标记 :114；身份/任务/工具规范/语气段 :175-415。</li>
+<li>会话上下文：context.ts:116-150（系统快照＝git 分支与状态）、:155-189（用户上下文＝CLAUDE.md 聚合＋当前日期）。注意本盒是 src/context.ts，与做模型窗口计算的 src/utils/context.ts 同名不同物。</li>
+<li>CLAUDE.md 体系加载：claudemd.ts:2-26（加载顺序自述文档）、:849-933（从根到当前目录逐层加载）、:617-684（@引用递归，深度上限 5）、:939-976（--add-dir 附加目录）、:978-1006（自动记忆/团队记忆入口）。</li>
+<li>提示优先级仲裁：systemPrompt.ts:41-123（覆盖＞协调者＞代理＞自定义＞默认；追加段恒在尾部）。</li>
+<li>合并与缓存块：api.ts:431（系统快照拼到提示末段）、:443-482（CLAUDE.md→独立引导消息，其余→系统提醒消息）、:317（按边界标记切成缓存块）；消费点 query.ts:648/900。</li>
+<li>请求级最终成型：claude.ts:1433-1479（身份前缀＋归因头＋缓存标记）；前缀与归因头定义在 constants/system.ts:10-46。</li>
+<li>自动记忆库：memdir/memdir.ts:35（记忆入口 200 行截断）、:419（为提示提供「记忆」规范段）；召回 findRelevantMemories.ts:19-147（小模型挑选，上限 5 条，max_tokens 256）。</li>
+<li>技能发现：skillSearch/prefetch.ts:47-54（分数阈值 0.30、自动载入上限 2 个、全文截断 12000 字符）、:249/298（每轮预取与收集）；消费点 query.ts:484/1930-1941。</li>
+<li>每轮附件注入：attachments.ts:1844-1914（嵌套说明四阶段判定）、:2217-2246（收集入口）；渲染为隐藏消息见 messages.ts:4132-4154；每轮预取入口 query.ts:454（相关记忆）/484（技能）。</li>
+<li>考据注记：完整子系统共 11 个组件，本图 10 盒——「身份前缀与归因头」（constants/system.ts）并入「请求级最终成型」一盒（claude.ts:1433-1444 调用处），不单独成盒；「--add-dir 附加目录」入口并入加载顺序正文。</li>
+<li>省略的边：默认提示拼装也会调用自动记忆库取「记忆规范段」（prompts.ts 的 memory 动态段→memdir.ts:419），为避免跨图交叉未画；仲裁器由界面层直接调用（REPL.tsx:3083-3089/3499-3505），图中以「默认提示→仲裁」表达输入流向。</li>
+<li>「会话上下文构建」「每轮附件注入」两盒的小字用职责描述而非模块名（锚点额度 8 处已满）；对应源码即 src/context.ts 与 src/utils/attachments.ts。</li>
+<li>附件注入器实际还处理日期变化、文件变更、MCP 说明增量等十余类附件，图中只列与记忆/技能相关的三类。</li>
+<li>记忆写回链路（extractMemories / dream / teamSync）属另一子系统，会反向清除本子系统缓存，图中仅在底座小字提及；缓存清理触发点见 caches.ts:84、postCompactCleanup.ts:72、memory 命令与设置同步。</li>
+<li>已知分歧：本 fork 的 feature 组合下（growthbook gate），记忆索引可能既不进系统提示也不进用户上下文、只经「相关记忆」预取浮现——该组合语义来自静态阅读，未做运行时验证。</li>
+<li>本页为静态架构图（讲组成与调用关系）；逐轮注入的时序与状态流转（相关记忆预取、技能发现、嵌套说明注入）由本组件的流程图页展开。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>24-file-history · file-history 快照与回滚</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>file-history 快照与回滚</h1>
+<p class="sub">组件 24-file-history · 状态与会话持久化子系统</p>
+<p class="lead">改文件之前先留底，每个回合拍快照，随时可回滚：从工具编辑前的 v1 备份，到每条用户消息触发的增量快照与 JSONL 记录，再到 REPL 消息选择器 / --rewind-files 两条回滚入口，以及 --resume 时备份的跨会话继承。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1640" width="1040" height="1640" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干：快照制造 ===== -->
+<!-- S0 开始 -->
+<rect x="250" y="31" width="300" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">工具即将编辑文件</text>
+
+<!-- D1 检查点开关 -->
+<polygon points="400,113 520,155 400,197 280,155" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="152" class="n-title">检查点已启用？</text>
+<text x="400" y="170" class="n-sub">默认开启 · 可关闭</text>
+
+<!-- B1 编辑前捕获 -->
+<rect x="250" y="235" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="264" class="n-title">编辑前捕获旧内容</text>
+<text x="400" y="288" class="n-sub">fileHistoryTrackEdit · 临界区外先备份</text>
+
+<!-- D2 已跟踪判定 -->
+<polygon points="400,343 520,385 400,427 280,385" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="382" class="n-title">该文件已跟踪？</text>
+<text x="400" y="400" class="n-sub">查最近一张快照</text>
+
+<!-- B2 v1 备份 -->
+<rect x="250" y="465" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="494" class="n-title">写入 v1 备份</text>
+<text x="400" y="518" class="n-sub">createBackup · 路径哈希命名 · 不存在记空</text>
+
+<!-- B3 补进最近快照 -->
+<rect x="250" y="573" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="602" class="n-title">补进最近快照</text>
+<text x="400" y="626" class="n-sub">重检竞态 · 落 JSONL 快照条目</text>
+
+<!-- B4 用户消息 -->
+<rect x="250" y="681" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="710" class="n-title">用户提交一条消息</text>
+<text x="400" y="734" class="n-sub">QueryEngine · 每条用户消息触发</text>
+
+<!-- B5 增量备份 -->
+<rect x="250" y="789" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="818" class="n-title">增量备份改动文件</text>
+<text x="400" y="842" class="n-sub">mtime 检查 · 未变复用 · 变了升版本</text>
+
+<!-- D3 上限判定 -->
+<polygon points="400,897 520,939 400,981 280,939" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="936" class="n-title">快照超过 20 张？</text>
+<text x="400" y="954" class="n-sub">MAX_SNAPSHOTS</text>
+
+<!-- B6 新快照落效 -->
+<rect x="250" y="1019" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1048" class="n-title">新快照落效</text>
+<text x="400" y="1072" class="n-sub">AppState + JSONL 条目 + VSCode 通知</text>
+
+<!-- ===== 主干：回滚 ===== -->
+<!-- S1 回滚入口 -->
+<rect x="250" y="1127" width="300" height="50" rx="25" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1149" class="n-title">用户要求回滚文件</text>
+<text x="400" y="1167" class="n-sub">双击 Esc 选消息 / --rewind-files</text>
+
+<!-- D4 有快照判定 -->
+<polygon points="400,1209 520,1251 400,1293 280,1251" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1248" class="n-title">该消息有快照？</text>
+<text x="400" y="1266" class="n-sub">按消息 ID 查找</text>
+
+<!-- B8 定位快照 -->
+<rect x="250" y="1331" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1360" class="n-title">定位目标快照</text>
+<text x="400" y="1384" class="n-sub">findLast 找最近 · 未跟踪回退 v1</text>
+
+<!-- B9 恢复磁盘 -->
+<rect x="250" y="1439" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1468" class="n-title">恢复磁盘文件</text>
+<text x="400" y="1492" class="n-sub">新增文件删除 · 内容变了拷回备份</text>
+
+<!-- E 结束 -->
+<rect x="250" y="1547" width="300" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1572" class="n-title">文件回到当时状态</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R0 无检查点 -->
+<rect x="650" y="113" width="360" height="90" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="141" class="n-title">无检查点模式（旁路）</text>
+<text x="830" y="163" class="n-body">trackEdit / makeSnapshot 全部直接返回，</text>
+<text x="830" y="182" class="n-body">编辑照常执行，但没有备份可回滚</text>
+
+<!-- R0e -->
+<rect x="690" y="233" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="840" y="258" class="n-title">对话继续 · 回滚不可用</text>
+
+<!-- R1 淘汰 -->
+<rect x="650" y="893" width="360" height="96" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="921" class="n-title">淘汰最旧的快照</text>
+<text x="830" y="943" class="n-body">内存里丢旧版本：磁盘备份仍在，</text>
+<text x="830" y="962" class="n-body">但过旧的回滚点已失效</text>
+
+<!-- R3 resume 继承 -->
+<rect x="650" y="1080" width="360" height="112" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="1108" class="n-title">--resume 继承备份</text>
+<text x="830" y="1130" class="n-body">旧会话备份硬链接到新目录（失败回退拷贝）</text>
+<text x="830" y="1148" class="n-body">成功的快照重记进新 JSONL；部分失败整张丢弃</text>
+<text x="830" y="1166" class="n-body">恢复时装回 AppState 快照表</text>
+
+<!-- R2 干净失败 -->
+<rect x="650" y="1205" width="360" height="90" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="1233" class="n-title">干净报错，不动文件</text>
+<text x="830" y="1255" class="n-body">REPL：对话框内显示错误</text>
+<text x="830" y="1274" class="n-body">CLI：stderr 报错 + exit 1</text>
+
+<!-- R2e -->
+<rect x="690" y="1320" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="840" y="1345" class="n-title">报错结束，未动任何文件</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="240" width="200" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="268" class="n-title">三相提交防竞态</text>
+<text x="130" y="290" class="n-body">读状态 → 异步备份</text>
+<text x="130" y="308" class="n-body">写回前重检竞态</text>
+
+<rect x="30" y="430" width="200" height="100" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="458" class="n-title">备份文件命名</text>
+<text x="130" y="480" class="n-body">路径 sha256 前 16 位</text>
+<text x="130" y="498" class="n-body">哈希 + @vN 版本号</text>
+<text x="130" y="516" class="n-body">同名同版本只写一次</text>
+
+<rect x="30" y="1452" width="200" height="76" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1480" class="n-title">回滚粒度</text>
+<text x="130" y="1502" class="n-body">逐文件独立恢复</text>
+<text x="130" y="1519" class="n-body">单个失败只影响该文件</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,109" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,155 L646,155" marker-end="url(#ah)"/>
+<text x="560" y="148" class="elab">否</text>
+
+<path class="edge" d="M400,197 L400,231" marker-end="url(#ah)"/>
+<text x="410" y="220" class="elab">是</text>
+
+<path class="edge" d="M400,305 L400,339" marker-end="url(#ah)"/>
+
+<!-- D2 已跟踪：绕过 v1 备份汇合 -->
+<path class="edge" d="M520,385 L572,385 L572,658 L408,658" marker-end="url(#ah)"/>
+<text x="546" y="377" class="elab">已跟踪</text>
+<text x="410" y="448" class="elab">否</text>
+
+<path class="edge" d="M400,427 L400,461" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,535 L400,569" marker-end="url(#ah)"/>
+
+<!-- D2 汇合点 -->
+<circle cx="400" cy="658" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,643 L400,677" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,751 L400,785" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,859 L400,893" marker-end="url(#ah)"/>
+
+<!-- D3 超上限分支 -->
+<path class="edge" d="M520,939 L646,939" marker-end="url(#ah)"/>
+<text x="560" y="930" class="elab">是</text>
+
+<!-- R1 汇合点 -->
+<circle cx="400" cy="1000" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,981 L400,1015" marker-end="url(#ah)"/>
+<text x="410" y="1002" class="elab">否</text>
+<path class="edge" d="M830,989 L830,1000 L408,1000" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1089 L400,1123" marker-end="url(#ah)"/>
+
+<!-- resume 旁路（虚线） -->
+<path class="edash" d="M400,1108 L646,1108" marker-end="url(#ahd)"/>
+<text x="523" y="1095" class="elab">会话结束后 --resume</text>
+
+<path class="edge" d="M400,1177 L400,1205" marker-end="url(#ah)"/>
+
+<!-- D4 分支 -->
+<path class="edge" d="M520,1251 L646,1251" marker-end="url(#ah)"/>
+<text x="560" y="1243" class="elab">否</text>
+<path class="edge" d="M400,1293 L400,1327" marker-end="url(#ah)"/>
+<text x="410" y="1316" class="elab">是</text>
+
+<path class="edge" d="M400,1401 L400,1435" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1509 L400,1543" marker-end="url(#ah)"/>
+
+<path class="edge" d="M830,203 L830,229" marker-end="url(#ah)"/>
+<path class="edge" d="M830,1295 L830,1316" marker-end="url(#ah)"/>
+
+<!-- 循环回边：新快照落效后回到下一轮用户消息 -->
+<path class="edge" d="M250,1054 L215,1054 L215,716 L246,716" marker-end="url(#ah)"/>
+<text x="168" y="880" class="elab">循环：下一轮</text>
+
+<!-- 旁注短接 -->
+<path class="edash" d="M230,275 L246,275" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,490 L246,490" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1480 L246,1480" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/fileHistory.ts（trackEdit:88 / makeSnapshot:200 / rewind:349 / createBackup:750 / copyFileHistoryForResume:924）、src/QueryEngine.ts:653-668（每条用户消息触发 makeSnapshot，fire-and-forget）、src/utils/sessionStorage.ts:1108-1122（insertFileHistorySnapshot 落 JSONL）与 2287-2311（last-wins 快照链重建）、src/cli/print.ts:749-784（--rewind-files 独立模式：校验目标必须是 user message UUID，回滚成功后 gracefulShutdownSync(0) 直接退出）、src/screens/REPL.tsx:6546-6553 与 src/components/MessageSelector.tsx:261/351（消息选择器回滚入口与逐条 diff 预览）、packages/builtin-tools（FileEditTool:431 / FileWriteTool:260 / NotebookEditTool:314 / BashTool:530 编辑前调用 trackEdit）。</li>
+<li>调用约定：trackEdit 必须在真正写文件之前调用（备份保存的是编辑前内容）；FileEditTool 在读-改-写临界区外 await 它——过时检查失败只会留下一个未使用的备份，不会污染状态。</li>
+<li>三相提交防竞态：捕获（无副作用读状态）→ 异步备份 → 写回前重检（并发 trackEdit 可能已抢先把该文件补进快照，此时放弃写回）。v1 备份名按路径哈希确定性生成，重复调用不会互相覆盖。</li>
+<li>首张快照：由第一条用户消息的 makeSnapshot 建立（trackedFileBackups 可能为空表）；trackEdit 若发现没有最近快照会 logError 并跳过。</li>
+<li>增量判定（checkOriginFileChanged）：stat 比较 mode/size；原文件 mtime 早于备份即视为未变（免读内容）；否则读双方内容逐字比较。文件被删除记 backupFileName=null 删除标记，回滚时对应执行 unlink 删除新增文件。</li>
+<li>开关（fileHistory.ts:65-80）：globalConfig.fileCheckpointingEnabled !== false 默认开启；CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING 关闭；SDK/非交互会话默认关，需 CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING 显式开启。</li>
+<li>上限与淘汰：MAX_SNAPSHOTS=20 滚动窗口；snapshotSequence 单调递增计数供 useGitDiffStats 作活跃信号。内存淘汰后磁盘备份文件仍在，但对应回滚点失效。</li>
+<li>持久化与恢复：快照以 file-history-snapshot 条目写进会话 JSONL（与消息同文件混排）；resume 时 isSnapshotUpdate=true 的条目按 last-wins 覆盖同 messageId 槽位重建快照链，再由 fileHistoryRestoreStateFromLog 装回 AppState。</li>
+<li>rewind 是纯文件系统副作用（不改 FileHistoryState）：REPL 消息选择器支持恢复代码/会话/两者三种组合，选中前逐条预览 ±行数；--rewind-files 必须搭配 --resume 且不能带 prompt（print.ts:586-594）。</li>
+<li>失败模式：备份创建失败仅跳过该文件（logEvent 不阻塞整个快照）；单文件恢复失败只影响该文件粒度；resume 拷贝部分失败时整张快照不落 JSONL（failedSnapshots 统计）；硬链接失败回退 copyFile，EEXIST 幂等跳过。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

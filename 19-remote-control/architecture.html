@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>19-remote-control · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：远程控制 / ACP / 守护进程</h1>
+<p class="sub">19-remote-control · 组成模块与调用关系</p>
+<p class="lead">「在别处指挥本机的 Claude」由这些模块协作完成：入口分流四种模式 → 本机接入侧轮询领工 → 全部汇入自托管服务端 → 网页发消息、子会话执行；ACP 另走代理分支；守护进程与后台会话负责常驻自转。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 830" width="1040" height="830" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部组件：REPL 交互界面 -->
+<rect x="95" y="84" width="190" height="48" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="190" y="105" class="n-body">REPL 交互界面（组件 14）</text>
+<text x="190" y="125" class="n-sub">/remote-control 在此输入</text>
+
+<!-- 行1：入口 -->
+<rect x="350" y="40" width="360" height="96" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="530" y="72" class="n-title">入口与模式分发</text>
+<text x="530" y="94" class="n-sub">cli.tsx · 四类模式直分，不加载主 CLI</text>
+<text x="530" y="116" class="n-body">remote-control · daemon · --acp · --bg</text>
+
+<!-- 行2：接入侧 -->
+<rect x="60" y="190" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="185" y="222" class="n-title">REPL 内远程控制</text>
+<text x="185" y="246" class="n-sub">replBridge.ts</text>
+<text x="185" y="268" class="n-body">聊天里敲 /remote-control 即建桥</text>
+<text x="185" y="288" class="n-body">本机会话与网页端双向互通</text>
+<text x="185" y="308" class="n-body">断线自动重连并恢复进度</text>
+
+<rect x="350" y="190" width="360" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="530" y="222" class="n-title">远程控制客户端主体</text>
+<text x="530" y="246" class="n-sub">bridge/ · 注册环境 · 轮询领工</text>
+<text x="530" y="268" class="n-body">注册本机环境，长轮询领取远端工单</text>
+<text x="530" y="288" class="n-body">领到工单拉起会话子进程并看护</text>
+<text x="530" y="308" class="n-body">心跳保活 · 令牌刷新 · 断线退避重连</text>
+
+<rect x="750" y="190" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="222" class="n-title">守护进程管家</text>
+<text x="875" y="246" class="n-sub">daemon/ · 状态文件 + 退避重启</text>
+<text x="875" y="268" class="n-body">常驻拉起无头客户端工作者</text>
+<text x="875" y="288" class="n-body">崩溃退避重启，连崩即熔断</text>
+<text x="875" y="308" class="n-body">致命配置错误则停放不再拉起</text>
+
+<!-- 行3：执行侧 -->
+<rect x="60" y="372" width="250" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="404" class="n-title">后台会话管理</text>
+<text x="185" y="428" class="n-sub">引擎二选一 · tmux 或无终端</text>
+<text x="185" y="450" class="n-body">把会话丢到后台跑并登记进程</text>
+<text x="185" y="470" class="n-body">登记后可列表、看日志、接管、终止</text>
+<text x="185" y="490" class="n-body">无终端模式须用管道喂提示词</text>
+
+<rect x="350" y="372" width="360" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="530" y="404" class="n-title">被拉起的子会话进程</text>
+<text x="530" y="428" class="n-sub">remoteIO.ts · 连服务端的输入输出通道</text>
+<text x="530" y="450" class="n-body">客户端领到工单后被拉起的全新进程</text>
+<text x="530" y="470" class="n-body">收到的远端消息等同用户本地输入</text>
+<text x="530" y="490" class="n-body">产出与权限询问原样回传服务端</text>
+
+<rect x="750" y="372" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="404" class="n-title">ACP 模式的 Claude</text>
+<text x="875" y="428" class="n-sub">services/acp · --acp</text>
+<text x="875" y="450" class="n-body">只对外说标准 ACP 协议</text>
+<text x="875" y="470" class="n-body">权限询问转发给客户端拍板</text>
+<text x="875" y="490" class="n-body">复用核心引擎跑真实查询</text>
+
+<!-- 行4：服务端侧 -->
+<rect x="60" y="554" width="250" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="185" y="586" class="n-title">网页控制面板</text>
+<text x="185" y="610" class="n-sub">web/ · 由服务端静态托管</text>
+<text x="185" y="632" class="n-body">浏览器里查看与指挥本机会话</text>
+<text x="185" y="652" class="n-body">事件流实时渲染 · 弹窗批权限</text>
+<text x="185" y="672" class="n-body">也能直连 ACP 中继对话</text>
+
+<rect x="350" y="554" width="360" height="128" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="530" y="586" class="n-title">自托管服务端中枢</text>
+<text x="530" y="610" class="n-sub">remote-control-server · 自部署</text>
+<text x="530" y="632" class="n-body">环境 · 工单 · 会话事件全存内存</text>
+<text x="530" y="652" class="n-body">把工单派给轮询的本机客户端</text>
+<text x="530" y="672" class="n-body">托管网页面板 · ACP 中继 · 事件流</text>
+
+<rect x="750" y="554" width="250" height="128" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="875" y="586" class="n-title">ACP 代理服务器</text>
+<text x="875" y="610" class="n-sub">编辑器与 Claude 之间的代理</text>
+<text x="875" y="632" class="n-body">收编辑器等客户端的接入</text>
+<text x="875" y="652" class="n-body">转身拉起 ACP 模式的 Claude</text>
+<text x="875" y="672" class="n-body">可选接入服务端做中继</text>
+
+<!-- 底座 -->
+<rect x="60" y="726" width="940" height="64" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="754" class="n-title">核心引擎底座（本机执行侧共用）</text>
+<text x="530" y="778" class="n-sub">回合循环 · 权限管线 · 会话存储（组件 02 / 09 / 22）· REPL 集成、子会话、ACP、后台四处复用</text>
+
+<!-- 连线 -->
+<path class="edge" d="M530,136 L530,186" marker-end="url(#ah)"/>
+<path class="edge" d="M640,136 L640,162 L860,162 L860,186" marker-end="url(#ah)"/>
+<path class="edge" d="M710,110 L1018,110 L1018,436 L1006,436" marker-end="url(#ah)"/>
+<path class="edge" d="M390,136 L390,150 L40,150 L40,436 L56,436" marker-end="url(#ah)"/>
+<path class="edash" d="M190,132 L190,186" marker-end="url(#ahd)"/>
+<path class="edge" d="M530,318 L530,366" marker-end="url(#ah)"/>
+<path class="edge" d="M710,240 L730,240 L730,536 L630,536 L630,550" marker-end="url(#ah)"/>
+<path class="edge" d="M790,318 L790,344 L730,344"/>
+<path class="edge" d="M240,318 L240,344 L330,344 L330,536 L430,536 L430,550" marker-end="url(#ah)"/>
+<path class="edge" d="M530,500 L530,550" marker-end="url(#ah)"/>
+<path class="edge" d="M310,620 L344,620" marker-end="url(#ah)"/>
+<path class="edash" d="M750,620 L716,620" marker-end="url(#ahd)"/>
+<path class="edge" d="M875,554 L875,506" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（REPL 集成 / 守护进程 / ACP 链路）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件 / 可选接入（虚线箭头）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/entrypoints/cli.tsx:124-128（--acp 快速路径）、cli.tsx:182-226（remote-control/rc/remote/sync/bridge 五别名 → bridgeMain）、cli.tsx:231-242（daemon）、cli.tsx:265-294（--bg 与 ps/logs/attach/kill 映射）；src/bridge/bridgeMain.ts:140,2454,2675,2732（runBridgeLoop / registerBridgeEnvironment / createBridgeSession）、bridgeMain.ts:2810-2962（runBridgeHeadless，daemon worker 复用）；src/bridge/sessionRunner.ts:287-340（spawn 子进程 --print --sdk-url，注入会话令牌、剥离 OAuth）；src/cli/remoteIO.ts:35-110（RemoteIO extends StructuredIO，getTransportForUrl 建传输，入站写 inputStream）；src/commands/bridge/bridge.tsx:29-50 与 src/bridge/initReplBridge.ts:112（REPL 内 /remote-control 触发）；packages/remote-control-server/src/index.ts:31-33（Hono + 纯内存 store）、index.ts:53-65（web/dist 挂 /code/* 静态托管）；packages/acp-link/src/server/start-server.ts:110-185（/ws 令牌校验）、handlers-agent.ts:52-95（spawn agent 子进程 + ClientSideConnection）；acp-link/src/rcs-upstream.ts:66-109（两步接入 RCS）；src/services/acp/entry.ts:27-74（runAcpAgent，stdin/stdout 流）、agent/createSessionMethod.ts:128-195（createAcpCanUseTool + new QueryEngine）；src/daemon/main.ts:52-101,230-428（daemonMain / runSupervisor / spawnWorker 指数退避）；src/cli/bg.ts:279-338（handleBgStart 引擎选择，无终端须 -p）。</li>
+<li>模块数：按证据清单完整收录 10 个组件，本图一个不省；省略的次要文件有——bridge/ 目录 34 个文件中 pollConfig、capacityWake、flushGate、webhookSanitizer、peerSessions 等辅助件并入「客户端主体」；rcs-server 的 v1/v2 路由拆分、鉴权（JWT/API key）并入「服务端中枢」；acp-link 的 --manager 管理面板与自签证书细节并入「代理服务器」。</li>
+<li>调用关系简化：箭头方向一律按「谁发起调用」画——客户端轮询服务端画客户端→服务端（工单由轮询响应带回，不画反向箭头）；子会话进程回连服务端画在「子会话→服务端」一条线上（该线双向流：下行用户消息、上行产出与权限询问）；守护进程的工作者内部跑的是客户端主体的无头循环，图中以汇入同一条连线的支线表达复用；daemon 命名空间下的 bg/attach/logs/kill 子命令委托给后台会话模块（daemon/main.ts:70-90），箭头省略以免横穿图面；ACP 模式有两条进入路径——编辑器直接 spawn 与代理转拉，图中分别画「入口 --acp」与「代理 spawn」两箭头。</li>
+<li>底座说明：踩核心引擎底座的是四处本机执行侧（REPL 集成、子会话、ACP 模式、后台会话）；服务端中枢与 ACP 代理是独立包，不依赖该底座，底座横条贯穿全宽仅作排版。</li>
+<li>协议级词汇说明：工单（work）、会话事件流、中继（relay）是本组件的流程概念，保留在图面；session_ingress、JSON-RPC 之类协议字段名一律不上图，收在本注记。</li>
+<li>关联图：核心引擎见 02-query-turn-loop；REPL 界面本体见 14-repl-screen；权限管线见 09-permission-pipeline；会话落盘见 22-transcript-store。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

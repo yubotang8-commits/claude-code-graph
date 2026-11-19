@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>11-bash-tool · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：Bash 命令执行</h1>
+<p class="sub">11-bash-tool · 组成模块与调用关系</p>
+<p class="lead">「模型要跑一条命令」由这些模块协作完成：主体总调度 → 问权限（先把命令拆开看清，再定沙箱）→ 执行内核起进程 → 前台跑完或转后台 → 按命令习惯解释结果回传；用户在确认框里改写过的 sed 命令走直通分支。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 760" width="1040" height="760" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 主体（入口/编排层） -->
+<rect x="310" y="28" width="420" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="56" class="n-title">Bash 工具主体（总调度）</text>
+<text x="520" y="78" class="n-sub">BashTool.tsx · 约 1300 行</text>
+<text x="520" y="100" class="n-body">先拦长阻塞命令 · 判定只读可否并发</text>
+<text x="520" y="122" class="n-body">超大输出转存文件 · 结果定型回给模型</text>
+
+<!-- 外部组件：调用方 -->
+<rect x="800" y="36" width="190" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="895" y="60" class="n-body">调用方：工具执行引擎</text>
+<text x="895" y="79" class="n-sub">组件 08 · 生命周期引擎</text>
+
+<!-- 行 1：权限阶段 -->
+<rect x="60" y="180" width="260" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="190" y="210" class="n-title">命令安全解析</text>
+<text x="190" y="232" class="n-sub">bash/ast.ts · bashSecurity.ts</text>
+<text x="190" y="254" class="n-body">把命令拆成结构化子命令</text>
+<text x="190" y="276" class="n-body">拆不动的标「太复杂」转人工确认</text>
+
+<rect x="370" y="180" width="300" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="210" class="n-title">Bash 专属权限判定</text>
+<text x="520" y="232" class="n-sub">bashPermissions.ts · 约 2600 行</text>
+<text x="520" y="254" class="n-body">认出危险命令 · 匹配用户允许规则</text>
+<text x="520" y="276" class="n-body">顺手给出「总是允许」前缀建议</text>
+
+<!-- 外部组件：权限管道 -->
+<rect x="720" y="180" width="260" height="60" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="850" y="204" class="n-body">权限确认与规则落地</text>
+<text x="850" y="223" class="n-sub">组件 09 · 权限管道</text>
+
+<!-- 行 2：沙箱决策 + sed 分支 -->
+<rect x="370" y="336" width="300" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="366" class="n-title">沙箱决策</text>
+<text x="520" y="388" class="n-sub">shouldUseSandbox.ts</text>
+<text x="520" y="410" class="n-body">判这条命令要不要套沙箱跑</text>
+<text x="520" y="432" class="n-body">沙箱内跑的命令可自动放行</text>
+
+<rect x="60" y="336" width="260" height="104" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="190" y="366" class="n-title">sed 改写直通</text>
+<text x="190" y="388" class="n-sub">sedEditParser.ts</text>
+<text x="190" y="410" class="n-body">用户在确认框改过 sed 命令时</text>
+<text x="190" y="432" class="n-body">按改后内容直接写文件（所见即所得）</text>
+
+<!-- 行 3：执行阶段 -->
+<rect x="370" y="492" width="300" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="522" class="n-title">执行内核</text>
+<text x="520" y="544" class="n-sub">Shell.ts + bashProvider.ts</text>
+<text x="520" y="566" class="n-body">挑可用的 bash · 起子进程跑命令</text>
+<text x="520" y="588" class="n-body">沙箱包装 · 超时控制 · 流式回传输出</text>
+
+<rect x="60" y="492" width="260" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="190" y="522" class="n-title">结果语义解释</text>
+<text x="190" y="544" class="n-sub">commandSemantics.ts</text>
+<text x="190" y="566" class="n-body">按命令习惯解读退出码</text>
+<text x="190" y="588" class="n-body">（grep 没匹配 ≠ 失败）</text>
+
+<rect x="720" y="492" width="260" height="104" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="850" y="522" class="n-title">后台任务管理</text>
+<text x="850" y="544" class="n-sub">LocalShellTask/</text>
+<text x="850" y="566" class="n-body">长命令转后台继续跑 · 登记可查可杀</text>
+<text x="850" y="588" class="n-body">跑完发通知 · 输出写盘随时看</text>
+
+<!-- 底座 -->
+<rect x="60" y="660" width="920" height="64" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="688" class="n-title">共享底座（被上方模块读写）</text>
+<text x="520" y="710" class="n-sub">输出轮询器 · 磁盘任务输出 · 任务注册表 · 会话工作目录</text>
+
+<!-- 连线 -->
+<path class="edash" d="M800,66 L738,66" marker-end="url(#ahd)"/>
+<path class="edge" d="M520,128 L520,176" marker-end="url(#ah)"/>
+<path class="edge" d="M370,232 L324,232" marker-end="url(#ah)"/>
+<path class="edash" d="M670,232 L716,232" marker-end="url(#ahd)"/>
+<path class="edge" d="M520,284 L520,332" marker-end="url(#ah)"/>
+<path class="edge" d="M310,78 L40,78 L40,300 L190,300 L190,332" marker-end="url(#ah)"/>
+<path class="edge" d="M520,440 L520,488" marker-end="url(#ah)"/>
+<path class="edge" d="M670,544 L716,544" marker-end="url(#ah)"/>
+<path class="edge" d="M370,544 L324,544" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（sed 直通 / 转后台）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件引用</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：packages/builtin-tools/src/tools/BashTool/BashTool.tsx（总调度：653-665 拦长阻塞命令、570-577 只读判定、666-668 权限委托、755-970 执行与结果定型、874-896 超大输出 64MB 截断转存、977-1280 执行生成器）；bashPermissions.ts:1663-1794（权限入口：命令结构解析 → 语义危险检查 → too-complex/简单命令分流）、1183（「总是允许」前缀建议）、1834-1836（沙箱自动放行）；shouldUseSandbox.ts:130-153（沙箱三条件：平台开关 / 显式关闭 / 用户排除清单）；src/utils/Shell.ts:74-160（挑选可用 bash/zsh）；src/tasks/LocalShellTask/LocalShellTask.tsx:215（转后台任务派生）。</li>
+<li>调用关系证据：BashTool.tsx:26 与 585（安全解析被引用）、1048（执行前再做一次沙箱决策）、1056-1076 与 1160-1174（显式转后台）、1132-1136（超时自动后台）、1141-1154（助手模式 15 秒阻塞预算自动后台）、829（结果语义解释调用点）、764-766（sed 直通分流）。</li>
+<li>考据注记（省略/合并）：① 只读判定三件套（readOnlyValidation.ts 约 1990 行、pathValidation.ts、sedValidation.ts——判定命令是否只读，供并发分片与权限建议使用）合并进「主体」盒子；② 终端渲染（UI.tsx、BashToolResultMessage.tsx）与提示词（prompt.ts）未上图；PowerShellTool、MonitorTool 等同样复用执行内核与后台任务（Shell.ts 的其他调用方），未画；③ 沙箱决策实际被两处独立调用（权限判定 bashPermissions.ts:1834、执行前 BashTool.tsx:1048），图上合并为权限阶段一条主路径；④ 结果解释的调用方是主体（BashTool.tsx:829，在执行结果返回后调用），图上画作执行内核的下游；⑤ sed 直通的触发链是权限确认对话框（组件 09）把用户改写塞回工具输入，模型侧伪造该字段会被防御性剥离（toolExecution.ts:798-815）；⑥ 后台化的全部触发条件（显式后台 1160、超时自动 1132、15 秒阻塞预算 1141、用户 Ctrl+B）并入「后台任务管理」盒子；⑦ bashPermissions 里的投机分类器挂钩（1459-1645）未画——本重建版分类器 API 为占位实现（bashClassifier.ts:1「Stub for external builds, ANT-ONLY」）。</li>
+<li>相关页：调用方与 tool_result 回流见组件 08（工具生命周期）；权限确认对话框与规则持久化见组件 09（权限管道）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

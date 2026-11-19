@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>20-acp · acp-link 接入 RCS</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>acp-link 接入 RCS 全链路</h1>
+<p class="sub">组件 20-acp · 远程控制 / ACP / Daemon / 后台会话</p>
+<p class="lead">acp-link 代理如何把自己登记到 Remote Control Server 并让 Web UI 远程使用：两步注册（REST 登记 + WS identify 握手）→ 前端经 /acp/relay 中继双向收发 → 断线后指数退避、重跑完整两步。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1840" width="1040" height="1840" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="270" y="25" width="260" height="58" rx="29" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="48" class="n-title">acp-link 启动</text>
+<text x="400" y="68" class="n-sub">start-server.ts · 读 RCS 环境变量</text>
+
+<!-- D1 RCS 配置判定 -->
+<polygon points="400,100 520,142 400,184 280,142" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="139" class="n-title">配置了 RCS？</text>
+<text x="400" y="158" class="n-sub">ACP_RCS_URL 环境变量</text>
+
+<!-- B1 虚拟客户端 -->
+<rect x="250" y="215" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="244" class="n-title">创建虚拟客户端</text>
+<text x="400" y="268" class="n-sub">start-server.ts · relayWs 进 clients 表</text>
+
+<!-- B2 REST 注册 -->
+<rect x="250" y="315" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="344" class="n-title">第一步：REST 注册</text>
+<text x="400" y="368" class="n-sub">POST /v1/environments/bridge</text>
+
+<!-- D2 注册成功判定 -->
+<polygon points="400,415 520,457 400,499 280,457" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="454" class="n-title">注册成功？</text>
+<text x="400" y="473" class="n-sub">拿到 environment_id</text>
+
+<!-- B3 WS 握手 -->
+<rect x="250" y="530" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="559" class="n-title">第二步：WS 握手</text>
+<text x="400" y="583" class="n-sub">连 /acp/ws · 发 identify{agent_id}</text>
+
+<!-- B4 RCS 校验绑定 -->
+<rect x="250" y="630" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="659" class="n-title">RCS 校验并绑定</text>
+<text x="400" y="683" class="n-sub">acp-ws-handler · 查记录、标记在线、订阅总线</text>
+
+<!-- D3 identified 判定 -->
+<polygon points="400,730 520,772 400,814 280,772" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="769" class="n-title">收到 identified？</text>
+<text x="400" y="788" class="n-sub">环境记录存在且为 acp</text>
+
+<!-- B5 上线就绪 -->
+<rect x="250" y="845" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="874" class="n-title">上线就绪</text>
+<text x="400" y="898" class="n-sub">registered 置真 · 打印面板地址</text>
+
+<!-- B6 Web UI 建中继 -->
+<rect x="250" y="945" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="974" class="n-title">Web UI 建中继</text>
+<text x="400" y="998" class="n-sub">relay-client · 连 /acp/relay/:agentId</text>
+
+<!-- D4 Agent 在线判定 -->
+<polygon points="400,1045 520,1087 400,1129 280,1087" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1084" class="n-title">Agent 在线？</text>
+<text x="400" y="1103" class="n-sub">存在活跃 WS 连接</text>
+
+<!-- B7 订阅总线 -->
+<rect x="250" y="1160" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1189" class="n-title">订阅频道组总线</text>
+<text x="400" y="1213" class="n-sub">acp-relay-handler · 只收 inbound 事件</text>
+
+<!-- B8 前端消息直投 -->
+<rect x="250" y="1260" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1289" class="n-title">前端消息直投</text>
+<text x="400" y="1313" class="n-sub">handleRelayMessage → sendToAgentWs</text>
+
+<!-- B9 本地分发 -->
+<rect x="250" y="1360" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1389" class="n-title">本地分发执行</text>
+<text x="400" y="1413" class="n-sub">过滤控制消息 → dispatch → agent 子进程</text>
+
+<!-- B10 响应回推总线 -->
+<rect x="250" y="1460" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1489" class="n-title">响应回推总线</text>
+<text x="400" y="1513" class="n-sub">send() → rcsUpstream → 总线记为 inbound</text>
+
+<!-- B11 推给 Web UI -->
+<rect x="250" y="1560" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1589" class="n-title">推给 Web UI</text>
+<text x="400" y="1613" class="n-sub">relay 订阅者 → 前端 WS 渲染</text>
+
+<!-- D5 断连判定 -->
+<polygon points="400,1660 520,1702 400,1744 280,1702" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="1699" class="n-title">连接断开？</text>
+<text x="400" y="1718" class="n-sub">agent WS close 或关停</text>
+
+<!-- 结束 -->
+<rect x="270" y="1772" width="260" height="58" rx="29" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1795" class="n-title">双向桥接运行中</text>
+<text x="400" y="1815" class="n-sub">心跳保活 · 消息刷新 lastPollAt</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 本地代理模式 -->
+<rect x="640" y="100" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="128" class="n-title">本地代理模式</text>
+<text x="825" y="150" class="n-body">未配置 ACP_RCS_URL 时不上报 RCS</text>
+<text x="825" y="168" class="n-body">只服务本地 /ws 客户端</text>
+
+<!-- E1 -->
+<rect x="675" y="204" width="300" height="54" rx="27" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="227" class="n-title">本地桥接独立运行</text>
+<text x="825" y="247" class="n-sub">无上游，进程照常服务</text>
+
+<!-- R2 指数退避重连 -->
+<rect x="650" y="415" width="320" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="443" class="n-title">指数退避重连</text>
+<text x="810" y="465" class="n-body">1s→30s 上限，20% 抖动</text>
+<text x="810" y="483" class="n-body">重跑完整两步注册</text>
+
+<!-- R3 注册被拒 -->
+<rect x="650" y="730" width="320" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="758" class="n-title">注册被拒</text>
+<text x="810" y="780" class="n-body">error：Agent 不存在</text>
+<text x="810" y="798" class="n-body">或 workerType ≠ acp</text>
+
+<!-- R4 中继被拒 -->
+<rect x="650" y="1045" width="320" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="1073" class="n-title">中继被拒</text>
+<text x="810" y="1095" class="n-body">Agent 不在线 → error</text>
+<text x="810" y="1113" class="n-body">close 4004 · 前端可重试</text>
+
+<!-- E4 -->
+<rect x="675" y="1169" width="300" height="54" rx="27" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="1192" class="n-title">本次中继失败</text>
+<text x="825" y="1212" class="n-sub">前端可稍后重试</text>
+
+<!-- R5 标记离线 -->
+<rect x="650" y="1660" width="320" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="810" y="1688" class="n-title">标记离线并通知</text>
+<text x="810" y="1710" class="n-body">markOffline · 记录保留</text>
+<text x="810" y="1728" class="n-body">relay 收 status{connected:false}</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="205" width="200" height="100" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="231" class="n-title">虚拟客户端</text>
+<text x="130" y="253" class="n-body">relayWs 无真实 socket</text>
+<text x="130" y="271" class="n-body">RCS 来的消息以它作</text>
+<text x="130" y="289" class="n-body">名义客户端进 dispatch</text>
+
+<rect x="30" y="310" width="200" height="108" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="336" class="n-title">服务端落库</text>
+<text x="130" y="358" class="n-body">storeCreateEnvironment</text>
+<text x="130" y="376" class="n-body">记 workerType=acp</text>
+<text x="130" y="394" class="n-body">自动建 ACP 会话</text>
+<text x="130" y="412" class="n-body">storeBindSession 绑组</text>
+
+<rect x="30" y="1455" width="200" height="96" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1481" class="n-title">总线限流</text>
+<text x="130" y="1503" class="n-body">事件带单调 seqNum</text>
+<text x="130" y="1521" class="n-body">超 5000 条截半</text>
+<text x="130" y="1539" class="n-body">旧事件可被丢弃</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,83 L400,96" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,142 L636,142" marker-end="url(#ah)"/>
+<text x="545" y="134" class="elab">否</text>
+
+<path class="edge" d="M400,184 L400,211" marker-end="url(#ah)"/>
+<text x="410" y="202" class="elab">是</text>
+
+<path class="edge" d="M825,184 L825,200" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,285 L400,311" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,385 L400,411" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,457 L646,457" marker-end="url(#ah)"/>
+<text x="545" y="449" class="elab">否</text>
+
+<!-- R2 回边：重跑两步注册 -->
+<path class="edge" d="M810,415 L810,350 L556,350" marker-end="url(#ah)"/>
+<text x="683" y="342" class="elab">重跑两步注册</text>
+
+<path class="edge" d="M400,499 L400,526" marker-end="url(#ah)"/>
+<text x="410" y="518" class="elab">是</text>
+
+<path class="edge" d="M400,600 L400,626" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,700 L400,726" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,772 L646,772" marker-end="url(#ah)"/>
+<text x="545" y="764" class="elab">否</text>
+
+<!-- R3 汇入重连干线（汇合点） -->
+<path class="edge" d="M970,772 L1001,772" marker-end="url(#ah)"/>
+<circle cx="1005" cy="772" r="4" fill="#6B7280"/>
+
+<path class="edge" d="M400,814 L400,841" marker-end="url(#ah)"/>
+<text x="410" y="832" class="elab">是</text>
+
+<path class="edge" d="M400,915 L400,941" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1015 L400,1041" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,1087 L646,1087" marker-end="url(#ah)"/>
+<text x="545" y="1079" class="elab">否</text>
+
+<path class="edge" d="M810,1129 L810,1165" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1129 L400,1156" marker-end="url(#ah)"/>
+<text x="410" y="1147" class="elab">是</text>
+
+<path class="edge" d="M400,1230 L400,1256" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1330 L400,1356" marker-end="url(#ah)"/>
+
+<!-- 会话回边：下一轮消息 -->
+<path class="edge" d="M550,1595 L630,1595 L630,1295 L556,1295" marker-end="url(#ah)"/>
+<text x="593" y="1285" class="elab">下一轮消息</text>
+
+<path class="edge" d="M400,1430 L400,1456" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1530 L400,1556" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1630 L400,1656" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,1702 L646,1702" marker-end="url(#ah)"/>
+<text x="545" y="1694" class="elab">是</text>
+
+<!-- R5 汇入重连干线（经汇合点上行） -->
+<path class="edge" d="M970,1702 L1005,1702 L1005,485 L974,485" marker-end="url(#ah)"/>
+<text x="1002" y="1250" class="elab">断线退避重连</text>
+
+<path class="edge" d="M400,1744 L400,1771" marker-end="url(#ah)"/>
+<text x="410" y="1762" class="elab">否</text>
+
+<!-- 旁注虚线连接 -->
+<path class="edash" d="M230,250 L244,250" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,350 L244,350" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1495 L244,1495" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：packages/acp-link/src/server/start-server.ts（ACP_RCS_URL/TOKEN/GROUP 读取与校验、relayWs 虚拟客户端注册）、src/rcs-upstream.ts（registerViaRest、identify/identified、1s→30s 退避重连）、src/server/dispatch.ts（JSON-RPC 与 legacy 双协议分发）；packages/remote-control-server/src/routes/v1/environments.ts、src/services/environment.ts（storeCreateEnvironment + 自动建 ACP 会话 + storeBindSession）、src/routes/acp/index.ts（/acp/ws 与 /acp/relay/:agentId 路由）、src/transport/acp-ws-handler.ts（handleIdentify 校验、markOnline/Offline、inbound 总线发布）、src/transport/acp-relay-handler.ts（中继订阅与 sendToAgentWs 直投）、src/transport/event-bus.ts（按 channelGroupId 的总线、seqNum、5000 条截半）；web/src/acp/relay-client.ts（前端中继客户端，token 走 API key/uuid 通道）。</li>
+<li>考据注记：manifest 的 10 个站点拆画为 18 个主干节点（RCS 服务端行为单列为节点）；下行链路（前端→agent）是 sendToAgentWs 直投、不经 EventBus——manifest units 所述 outbound SessionEvent 在当前实现里仅测试代码出现，agent 侧对 outbound 事件的订阅当前无人发布；REST 注册失败不阻塞本地 /ws 服务（connect() 拒绝仅 warn）；identify 被拒（Agent 不存在 / workerType≠acp）时 reject，实际靠 WS onclose 进入退避循环；RCS 对空闲连接按 3×keepalive 判死（close 1000 'client inactive'）；虚拟 relayWs 让 RCS 来的消息与本地 /ws 客户端共用同一套 dispatch handler。</li>
+<li>故障面：REST 注册失败 → 重跑完整两步；identify 拒绝 → error 消息；agent WS 断开 → markOffline（环境记录保留、可重连）+ relay 收 status{connected:false}；中继期直投失败 → 前端收 'Agent connection lost'；消息逐条原子转发，EventBus 超 5000 条截半可能丢旧事件（SSE 消费者需及时拉取）；RCS 关停时 close 1001 server_shutdown。v2 code-sessions/worker 协议未在图中展开（考据阶段未逐行核实）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

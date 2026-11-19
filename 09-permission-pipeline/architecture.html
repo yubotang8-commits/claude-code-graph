@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>09-permission-pipeline · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：权限判定管道</h1>
+<p class="sub">09-permission-pipeline · 组成模块与调用关系</p>
+<p class="lead">模型要用的每个工具都得先过这道关卡：先听用户配置的钩子裁决，再走规则级联；拿不准（待定问人）就按运行形态分流——AI 代判、终端确认框、或无头转述，选了「总是允许」便落盘存储，下次同类请求免问。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 710" width="1040" height="710" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 入口：权限关卡 -->
+<rect x="280" y="40" width="480" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="70" class="n-title">工具执行的权限关卡</text>
+<text x="520" y="92" class="n-sub">toolExecution.ts · 执行引擎的一部分</text>
+<text x="520" y="114" class="n-body">放行才执行；拒绝则把原因作为错误结果回给模型</text>
+
+<!-- 外部组件：08 上游执行循环 -->
+<rect x="820" y="58" width="180" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="910" y="76" class="n-body">回合循环 · 工具执行</text>
+<text x="910" y="94" class="n-sub">组件 08</text>
+
+<!-- 钩子裁决 -->
+<rect x="300" y="164" width="440" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="194" class="n-title">钩子裁决（优先于常规判定）</text>
+<text x="520" y="216" class="n-sub">toolHooks.ts</text>
+<text x="520" y="238" class="n-body">用户配置的自动化钩子若给出结论，直接盖过常规判定</text>
+
+<!-- 外部组件：11 Bash 工具家族 -->
+<rect x="810" y="182" width="190" height="48" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="905" y="203" class="n-body">Bash 工具家族</text>
+<text x="905" y="222" class="n-sub">组件 11</text>
+
+<!-- 判定核心：规则级联 -->
+<rect x="280" y="292" width="480" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="324" class="n-title">权限规则级联（判定核心）</text>
+<text x="520" y="346" class="n-sub">permissions.ts</text>
+<text x="520" y="372" class="n-body">拒绝规则 → 询问规则 → 工具自检 → 免检模式 → 放行规则 → 转问人</text>
+<text x="520" y="394" class="n-body">结果三态：放行 / 拒绝 / 待定问人</text>
+
+<!-- 支撑左：模式管理 -->
+<rect x="50" y="310" width="200" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="150" y="342" class="n-title">权限模式管理</text>
+<text x="150" y="364" class="n-sub">PermissionMode.ts</text>
+<text x="150" y="386" class="n-body">六种模式 · Shift+Tab 切换</text>
+
+<!-- 支撑右：Bash 专属判定 -->
+<rect x="810" y="310" width="190" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="905" y="342" class="n-title">Bash 专属判定</text>
+<text x="905" y="364" class="n-sub">bashPermissions.ts</text>
+<text x="905" y="386" class="n-body">命令先解析成语法树再匹配规则</text>
+
+<!-- 分支一：auto 分类器 -->
+<rect x="60" y="470" width="280" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="200" y="502" class="n-title">auto 模式 AI 分类器</text>
+<text x="200" y="524" class="n-sub">yoloClassifier 等</text>
+<text x="200" y="546" class="n-body">auto 模式下把判定交给 AI 代人判断</text>
+<text x="200" y="568" class="n-body">失败或超时回退人工确认</text>
+
+<!-- 分支二：终端确认框 -->
+<rect x="390" y="470" width="280" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="530" y="502" class="n-title">终端确认对话框</text>
+<text x="530" y="524" class="n-sub">PermissionRequest.tsx</text>
+<text x="530" y="546" class="n-body">按工具类型弹出对应样式的确认框</text>
+<text x="530" y="568" class="n-body">可选「总是允许」，选了就记住规则</text>
+
+<!-- 分支三：无头问询 -->
+<rect x="700" y="470" width="280" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="840" y="502" class="n-title">无头模式问询（-p / SDK）</text>
+<text x="840" y="524" class="n-sub">print.ts</text>
+<text x="840" y="546" class="n-body">不开界面：把权限问题包装成一次</text>
+<text x="840" y="568" class="n-body">模型可调用的问询，与中止信号赛跑</text>
+
+<!-- 底座 -->
+<rect x="60" y="620" width="920" height="64" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="646" class="n-title">规则与模式存储（级联从这里读，确认框往这里写）</text>
+<text x="520" y="668" class="n-sub">settings 各配置源：用户 / 项目 / 策略 / 启动参数 · 「总是允许」落盘后，下次同类请求免问</text>
+
+<!-- 连线 -->
+<path class="edash" d="M820,80 L764,80" marker-end="url(#ahd)"/>
+<path class="edge" d="M520,124 L520,160" marker-end="url(#ah)"/>
+<path class="edge" d="M520,248 L520,288" marker-end="url(#ah)"/>
+<text x="620" y="272" class="elab">钩子无结论时走常规判定</text>
+<path class="edge" d="M250,354 L276,354" marker-end="url(#ah)"/>
+<path class="edge" d="M760,354 L806,354" marker-end="url(#ah)"/>
+<path class="edash" d="M905,230 L905,306" marker-end="url(#ahd)"/>
+<path class="edge" d="M340,402 L340,444 L200,444 L200,466" marker-end="url(#ah)"/>
+<path class="edge" d="M530,402 L530,466" marker-end="url(#ah)"/>
+<path class="edge" d="M700,402 L700,444 L840,444 L840,466" marker-end="url(#ah)"/>
+<text x="150" y="428" class="elab">判定为「待定问人」时分流</text>
+<path class="edge" d="M530,570 L530,616" marker-end="url(#ah)"/>
+<text x="420" y="600" class="elab">「总是允许」写回规则</text>
+<path class="edge" d="M685,620 L685,440 L660,440 L660,406" marker-end="url(#ah)"/>
+<text x="770" y="598" class="elab">下次判定命中新规则</text>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（「待定」的三条出路）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件引用</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座（规则与模式的存取）</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/services/tools/toolExecution.ts:958-973（权限关卡：执行前判定，钩子结论优先，拒绝走错误结果分支）、src/services/tools/toolHooks.ts:340（钩子权限决策解析）、src/utils/permissions/permissions.ts:1179-1340（级联：1a 拒绝 1190-1202 → 1b 询问与 Bash 沙箱例外 1204-1227 → 1c 工具自检 1229-1244 → 免疫检查 1246-1281 → 免检模式 1283-1302 → 放行规则 1304-1318 → 兜底转询问 1320-1331）、permissions.ts:473-516（外层 auto/dontAsk 变换）、src/hooks/useCanUseTool.tsx:154-204（ask 分流链：协调者检查 → swarm 转发 → Bash 投机分类器 2 秒宽限 → 对话框）、src/utils/permissions/getNextPermissionMode.ts:11-42（模式循环）、src/screens/REPL.tsx:5808-5819（队列首项渲染）、src/hooks/toolPermission/PermissionContext.ts:139-146（持久化落盘）、src/cli/print.ts:4371（无头问询）、packages/builtin-tools/src/tools/BashTool/BashTool.tsx:666-668（自检委托）与 bashPermissions.ts:1663 起。</li>
+<li>考据注记：子系统完整清单共 18 个组件（flow-evidence/tools-permissions.json），本图收 9 个与权限判定直接相关者；工具注册、延迟加载、MCP 桥接、结果落盘分属组件 08/10/16，工具类型契约（Tool.ts）为全子系统共享地基故不重复画出。</li>
+<li>级联实为 10 个编号步骤（1a-1g / 2a / 2b / 3），图中压缩为六段：1d 工具自拒绝并入「工具自检」；1e 强制交互、1f 内容级询问、1g 安全路径三项合并——它们的共同点是「免检模式也拦」（bypass 免疫）。</li>
+<li>REPL 侧的 canUseTool 装配层（useCanUseTool）未单列：allow/deny 直通并入级联结果语义，ask 分流链上图；其中协调者/swarm 分支仅多 worker 形态生效。auto 模式的两条 AI 分类器（auto 总分类器与 Bash 专用投机分类器）合并为一盒，后者在判定前预启动、与确认框 2 秒竞速。</li>
+<li>规则加载器（permissionsLoader：用户/项目/本地/策略/启动参数五源）与模式切换装配（permissionSetup、连拒计数 denialTracking）归入底座与分类器行为，未单列；分类器经 API 层发判定请求（组件 05），Bash 执行与沙箱详见组件 11。</li>
+<li>文档分歧：CLAUDE.md 把「ask」列为权限模式之一；源码中它是判定结果行为（src/types/permissions.ts:45），模式集合为 default/acceptEdits/plan/auto/bypassPermissions/dontAsk（另有内部 bubble），按源码为准。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

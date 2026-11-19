@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>01-cli-entry · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：入口与引导</h1>
+<p class="sub">01-cli-entry · 组成模块与调用关系</p>
+<p class="lead">「从命令行到可用的会话」由下面这些模块协作完成：入口分发 → 主编排 → 三件支撑准备 → 界面挂载或无头执行；快速路径则整体绕过主编排。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 780" width="1040" height="780" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 入口 -->
+<rect x="370" y="40" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="72" class="n-title">入口与快速路径分发</text>
+<text x="520" y="94" class="n-sub">cli.tsx · 按参数分发：快速路径 / 主流程 / 无头</text>
+
+<!-- 主编排器 -->
+<rect x="320" y="170" width="400" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="203" class="n-title">主编排器</text>
+<text x="520" y="226" class="n-sub">main.tsx · 约 5600 行 · 注册 50+ 子命令</text>
+<text x="520" y="250" class="n-body">主 action 处理器：权限 · MCP · 会话恢复</text>
+<text x="520" y="272" class="n-body">并按场景分发 REPL 界面或无头执行</text>
+
+<!-- 行 3：三件支撑 -->
+<rect x="60" y="360" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="190" y="392" class="n-title">一次性初始化</text>
+<text x="190" y="414" class="n-sub">init.ts · 配置 · 遥测 · 崩溃上报</text>
+<text x="190" y="436" class="n-body">进程内仅执行一次</text>
+
+<rect x="350" y="360" width="210" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="455" y="392" class="n-title">工作区落位</text>
+<text x="455" y="414" class="n-sub">setup.ts · 项目根·会话ID·工作树</text>
+
+<rect x="600" y="360" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="730" y="392" class="n-title">REPL 挂载与信任确认</text>
+<text x="730" y="414" class="n-sub">replLauncher + interactiveHelpers</text>
+<text x="730" y="436" class="n-body">装配界面并挂载终端渲染</text>
+
+<!-- 外部组件标注 -->
+<rect x="875" y="381" width="155" height="38" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="952" y="399" class="n-body">REPL 交互界面</text>
+<text x="952" y="416" class="n-sub">组件 14-repl-screen</text>
+
+<!-- 行 4：旁路与分支 -->
+<rect x="60" y="560" width="240" height="80" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="180" y="592" class="n-title">提前按键缓冲</text>
+<text x="180" y="614" class="n-sub">earlyInput.ts</text>
+<text x="180" y="636" class="n-body">启动期敲键暂存→界面就绪后填入</text>
+
+<rect x="340" y="560" width="280" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="480" y="592" class="n-title">无头执行（-p / 管道）</text>
+<text x="480" y="614" class="n-sub">cli/print.ts</text>
+<text x="480" y="636" class="n-body">不开界面直接执行 → 核心循环（组件 02）</text>
+
+<rect x="660" y="560" width="340" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="830" y="592" class="n-title">快速路径子系统（各自独立）</text>
+<text x="830" y="614" class="n-sub">daemon · bridge · ACP · 模板任务 · 专用 MCP</text>
+<text x="830" y="636" class="n-body">→ 远程控制(19) · ACP(20) · 守护进程(21)</text>
+
+<!-- 底座 -->
+<rect x="60" y="690" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="716" class="n-title">会话单例底座（被上方所有模块读写）</text>
+<text x="530" y="738" class="n-sub">bootstrap/state.ts · sessionId · 项目根 · 交互标志 · 成本统计</text>
+
+<!-- 连线 -->
+<path class="edge" d="M520,110 L520,166" marker-end="url(#ah)"/>
+<path class="edge" d="M400,280 L400,316 L190,316 L190,356" marker-end="url(#ah)"/>
+<path class="edge" d="M480,280 L480,356" marker-end="url(#ah)"/>
+<path class="edge" d="M640,280 L640,316 L730,316 L730,356" marker-end="url(#ah)"/>
+<path class="edge" d="M580,280 L580,540 L480,540 L480,556" marker-end="url(#ah)"/>
+<path class="edash" d="M860,400 L871,400" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（绕过主编排）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁路机制 / 外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/entrypoints/cli.tsx、src/main.tsx、src/entrypoints/init.ts、src/setup.ts、src/replLauncher.tsx、src/interactiveHelpers.tsx、src/cli/print.ts、src/utils/earlyInput.ts、src/bootstrap/state.ts。</li>
+<li>考据注记：完整组成共 11 个模块，本图省略对话框启动器（dialogLaunchers，main.tsx 的对话框薄包装）、启动性能埋点（startupProfiler）等次要模块；「信任确认」实际由 interactiveHelpers 的 showSetupScreens 承担（自述文档误归入 init.ts）。</li>
+<li>快速路径完整清单见子流程图「fastpath-bypass」；会话恢复的入口判定见「resume-entry」。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

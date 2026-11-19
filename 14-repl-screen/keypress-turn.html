@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>按键回合流播放器：按键 → PromptInput → 提交 → Ink 渲染 → 终端字节</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --good:#0ca30c; --ser:#ec835a;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:var(--red-f);border-color:var(--red)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06)}
+#transport .row1{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:var(--red-f);border-color:var(--red)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:300px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#now{margin-top:8px;font-size:13.5px;color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:9px;padding:6px 12px}
+#now b{color:var(--blue)}
+
+#stage{display:grid;grid-template-columns:290px 330px 430px 1fr;gap:15px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:790px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;min-width:0}
+.lane>.h{padding:9px 12px;font-size:14.5px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-term .h{border-bottom:2px solid var(--mut)}
+#lane-ink .h{border-bottom:2px solid var(--blue)}
+#lane-react .h{border-bottom:2px solid var(--orange)}
+#lane-render .h{border-bottom:2px solid var(--green)}
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;word-break:break-all}
+.chip.io{background:#f4f4f2;border-color:var(--line);color:var(--ink)}
+.chip.key{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.state{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.frame{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.mech{background:#f3f1fb;border-color:#b9aef0;color:#5b4d99}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.flash{animation:fl .7s ease}
+@keyframes fl{0%{background:var(--orange-f)}100%{background:var(--panel)}}
+
+.stbox{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 12px;display:flex;flex-direction:column;gap:5px}
+.st-h{font-size:12px;font-weight:700;color:var(--sec)}
+.st-h .cnt{float:right;font-family:var(--mono);font-weight:700;color:var(--ink);font-size:11.5px;background:var(--white);border:1px solid var(--hair);border-radius:6px;padding:0 6px}
+.st-h .cnt.hit{animation:stamp .5s ease}
+@keyframes stamp{0%{transform:scale(1.5);background:var(--orange-f)}100%{transform:scale(1)}}
+.st-grid{font-family:var(--mono);font-size:11.5px;color:var(--sec)}
+.st-grid b{color:var(--ink)}
+.st-vis{font-family:var(--mono);font-size:13px;color:var(--ink);background:var(--white);border:1px dashed var(--hair);border-radius:7px;padding:5px 9px;min-height:26px;white-space:pre-wrap}
+#msg-list{max-height:96px;overflow-y:auto;display:flex;flex-direction:column;gap:3px}
+.mrow{font-family:var(--mono);font-size:11.5px;border-radius:5px;padding:2px 7px;background:var(--white);border:1px solid var(--hair)}
+.mrow.user{color:var(--blue);border-color:var(--blue)}
+.mrow.assistant{color:var(--green);border-color:var(--green)}
+.scr{flex:0 0 auto;border-top:2px dashed var(--hair);background:#141412;padding:9px 11px;display:flex;flex-direction:column;gap:4px}
+.scr-h{color:#898781;font-size:10.5px;font-family:var(--ui);font-weight:700}
+#scr-body{font-family:var(--mono);font-size:12.5px;color:#e8e6df;min-height:66px}
+.scr-row{white-space:pre-wrap;line-height:1.7}
+.scr-row.u{color:#9ecbf7}
+.scr-row.a{color:#8fd9b9}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-term.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-ink.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-react.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-render.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.f-byte{background:#f4f4f2;border:1.5px solid var(--sec);color:var(--ink)}
+.flight.f-key{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.f-state{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.f-out{background:var(--green-f);border:1.5px solid var(--green)}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:170px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:340px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:150px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.key .ev{color:var(--blue)}
+#lines .ln.state .ev{color:var(--orange)}
+#lines .ln.frame .ev{color:var(--green)}
+#lines .ln.mech .ev{color:#6250d6}
+#lines .ln.mech{color:var(--sec)}
+#lines .ln.sys{color:var(--mut);font-style:italic}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost{color:#b3b2ad}
+#lines .ln.lost .ev{color:#b3b2ad}
+
+#selftest-result{margin-top:12px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;background:var(--white);border:1px solid var(--hair);border-radius:10px;padding:10px 14px;color:var(--sec)}
+#selftest-result:empty{display:none}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:16px;font-size:11px;color:var(--mut)}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>按键回合流播放器：一次按键 → PromptInput → 提交 → Ink 渲染 → 终端字节</h1>
+  <div class="sub">你敲下一个键，到它出现在屏幕上要经过 <b>4 站</b>：<b>终端</b>（字节进/出）→ <b>ink 输入内核</b>（字节 → 按键事件）→ <b>React 组件</b>（mapKey 状态机 / 提交 / messages）→ <b>ink 渲染管线</b>（16ms 帧 / diff）—— stdout 字节又画回 ① 的屏幕，<b>环路闭合</b>；敲 Enter 那次还会把消息送进对话、拉起一个完整回合</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">准备 · raw mode 协商</span>
+  <span class="p1" data-ph="1">第一轮 · 敲「你好」→ Enter → 入列 → 上屏</span>
+  <span class="p2" data-ph="2">第二轮 · 又一键（循环）</span>
+  <span class="p3" data-ph="3">退出 · Ctrl+C → 干净收场</span>
+</div>
+
+<div id="transport">
+  <div class="row1">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-brk" class="danger" title="中断演示 (B)">⚡ 中断演示</button>
+      <button id="b-spot" title="聚焦模式：高亮当前站点、其余置灰">🔦 聚焦开</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪 · 点击 ▶ 播放</div>
+  </div>
+  <div id="now">现在：<b>就绪</b> —— 点击 ▶ 播放，或用 ← → 单步</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-term">
+    <div class="h" id="h-term">🖥 终端 <span class="tag">pty</span><small>① 字节进 · 字节出</small></div>
+    <div class="feed" id="feed-term"></div>
+    <div class="scr">
+      <div class="scr-h">🖥 屏幕上你看到的（stdout diff 画出来的）</div>
+      <div id="scr-body"></div>
+    </div>
+    <div class="lane-foot"><b>因果起点</b>：raw mode 下终端不回显、不做行编辑 —— 屏上所有字都是程序用 stdout diff 画回去的。字节 ↓ 进 stdin，ANSI diff ↑ 出 stdout。</div>
+  </div>
+  <div class="lane" id="lane-ink">
+    <div class="h" id="h-ink">🧠 Ink 输入内核 <span class="tag">@ant/ink</span><small>② 字节 → 按键</small></div>
+    <div class="feed" id="feed-ink"></div>
+    <div class="lane-foot"><b>parse-keypress 状态机</b>：tokenizer 切 token（text / 序列 / kitty CSI u / 粘贴模式）；不完整转义序列留 <b>50ms</b>（粘贴 500ms）定时器补齐，误判时产生"幽灵 Esc"（App.tsx:166-167/382-405）。一个 chunk 的多个键进同一个 <b>discreteUpdates</b> 高优先级批次（App.tsx:413-420）。</div>
+  </div>
+  <div class="lane" id="lane-react">
+    <div class="h" id="h-react">⚛️ React 组件 <span class="tag">src/</span><small>③ 键 → 状态 / 提交</small></div>
+    <div class="feed" id="feed-react"></div>
+    <div class="stbox">
+      <div class="st-h">PromptInput 编辑状态（每按键原子更新）</div>
+      <div class="st-grid">input: <b id="in-val">""</b> · cursorOffset: <b id="in-off">0</b> · mode: prompt</div>
+      <div class="st-vis" id="in-vis">▌</div>
+    </div>
+    <div class="stbox">
+      <div class="st-h">REPL messages[] <span class="cnt" id="msg-count">0 条</span></div>
+      <div id="msg-list"></div>
+    </div>
+    <div class="lane-foot"><b>mapKey 分派</b>（useTextInput.ts:319-414）：escape / 编辑键 / Ctrl / Enter 各有分支；handleEnter 判定链（反斜杠+Enter、Meta/Shift+Enter = 换行）。<b>setMessages 是"先立即写 ref 再交 React"</b>的 Zustand 式立即生效（REPL.tsx:1502-1526）。</div>
+  </div>
+  <div class="lane" id="lane-render">
+    <div class="h" id="h-render">🎞 Ink 渲染管线 <span class="tag">@ant/ink</span><small>④ 状态 → 帧 → 字节</small></div>
+    <div class="feed" id="feed-render"></div>
+    <div class="stbox" id="fr-box">
+      <div class="st-h">ink 帧状态</div>
+      <div class="st-grid">帧 <b id="fr-no">—</b> · <span id="fr-info">尚未渲染</span></div>
+      <div class="st-grid" id="fr-swap">—</div>
+    </div>
+    <div class="lane-foot"><b>16ms 帧节流</b>（FRAME_INTERVAL_MS，ink.tsx:286-290）：一串 setState 压成一帧；commit → yoga 布局 → 渲染 → diff → stdout；<b>空 diff 零写</b>快速路径；帧尾 front⇄back 双缓冲交换（ink.tsx:692-694）。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 提交中断现场<small>Enter 已按、onSubmit 已进 REPL —— 就在 createUserMessage 之前断开</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>PromptInput 编辑状态</b><span>完整 —— input="你好" 原封未动（每按键一次原子提交）</span></div>
+    <div class="brow"><span class="d" style="background:var(--ser)"></span><b>onSubmit 前半段</b><span>部分生效 —— repinScroll 已执行（滚动锚定已发生）</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>userMessage / messages[]</b><span>未到达 —— messages 仍 0 条，屏幕没变，query() 未启动（下方步骤全部未执行）</span></div>
+    <div class="brow" style="margin-top:4px"><span class="d" style="background:var(--red)"></span><b>另一种"断"</b><span>不完整转义序列要等 50ms/500ms 定时器补齐 —— 误判时产生"幽灵 Esc"键（App.tsx:166-167）</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">怎么恢复</div>
+    <ul>
+      <li>输入框文本还在 → 直接<b>再按一次 Enter</b>重试</li>
+      <li>若中断发生在"输入已清、消息未入列"（队列/快路径），REPL 用 <b>stashedPrompt</b> 把文本放回输入框（REPL.tsx:4401-4406）</li>
+      <li>按键路本身无持久化 —— 此刻断开不丢会话，重跑 claude 即可（transcript 由回合循环负责）</li>
+    </ul>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤线报（仓库源码实读 · file:line）<span class="lg">每步一行 · 落效时追加</span></div>
+  <div id="lines"></div>
+</div>
+
+<pre id="selftest-result"></pre>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>字节 → 键（输入内核）</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>状态写入（React 组件）</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>帧与 stdout（渲染管线）</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--sec)"></span>stdin / stdout 字节</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · R = 重置 · B = 中断演示 · 点击进度条逐段跳转 · 倍速 0.5–4×</div>
+<footer>依据 claude-code 仓库源码整理（App.tsx · parse-keypress.ts · use-input.ts · useTextInput.ts · BaseTextInput.tsx · REPL.tsx · reconciler.ts · ink.tsx · renderer.ts · log-update.ts 实读）· 姊妹篇：streaming-transcript.html（流式响应 → 转录渲染）、turn-loop.html（回合循环）</footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.onerror=function(m){window.__errors.push(String(m));return false};
+var $=function(id){return document.getElementById(id)};
+var feeds={term:$('feed-term'),ink:$('feed-ink'),react:$('feed-react'),render:$('feed-render')};
+var lanes={term:$('lane-term'),ink:$('lane-ink'),react:$('lane-react'),render:$('lane-render')};
+var heads={term:$('h-term'),ink:$('h-ink'),react:$('h-react'),render:$('h-render')};
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout'), nowEl=$('now');
+var activeAnims=[]; var breakMode=false; var focusMode=true;
+
+// ---------- state model ----------
+var inputVal='', inputOff=0, msgs=[], frameNo=0, scrRows=[], scrPrompt='', scrCur=0;
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function addLog(kind,text){
+  var d=document.createElement('div'); d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('·');
+    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
+    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur'); for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight; return d;
+}
+function fly(fromLane,toLane,label,cls,dur){
+  try{
+    var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+    var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+    var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+    f.style.left=x0+'px'; f.style.top=y0+'px';
+    flightsEl.appendChild(f);
+    var dx=x1-x0;
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){}
+  pulse(toLane);
+}
+function flash(node){node.classList.remove('flash');void node.offsetWidth;node.classList.add('flash')}
+
+// ---------- state setters（幂等：renderTo 重建时按序重放） ----------
+function setInput(text,off){
+  inputVal=text; inputOff=off;
+  $('in-vis').textContent=text.slice(0,off)+'▌'+text.slice(off);
+  $('in-val').textContent='"'+text+'"';
+  $('in-off').textContent=String(off);
+}
+function pushMsg(from,text){
+  msgs.push({from:from,text:text});
+  var c=$('msg-count'); c.textContent=msgs.length+' 条';
+  c.classList.remove('hit'); void c.offsetWidth; c.classList.add('hit');
+  var d=el('mrow '+from,$('msg-list'),(from==='user'?'❯ ':'● ')+text);
+  $('msg-list').scrollTop=1e9; return d;
+}
+function setFrame(o){
+  frameNo=o.no;
+  $('fr-no').textContent='#'+o.no;
+  $('fr-info').textContent=o.info;
+  $('fr-swap').textContent='front⇄back 已交换 ×'+o.no;
+  flash($('fr-box'));
+}
+function paintScreen(){
+  var b=$('scr-body'); b.innerHTML='';
+  for(var i=0;i<scrRows.length;i++){
+    el('scr-row '+(scrRows[i].from==='user'?'u':'a'),b,(scrRows[i].from==='user'?'❯ ':'● ')+scrRows[i].text);
+  }
+  el('scr-row',b,'> '+scrPrompt.slice(0,scrCur)+'▌'+scrPrompt.slice(scrCur));
+}
+function setScrPrompt(t,c){scrPrompt=t;scrCur=c;paintScreen()}
+function pushScrRow(from,text){scrRows.push({from:from,text:text});paintScreen()}
+
+// ---------- 33 步脚本 ----------
+var steps=[].concat(
+ // ── 准备：raw mode 协商 ──
+ {id:'p0-mount',ph:0,dur:900,focus:'react',lab:'REPL 挂载：PromptInput 里的 useInput 在 useLayoutEffect 里同步要 raw mode（赶在首帧前，别让终端停留在会回显的 cooked 模式）',log:'REPL 挂载 · useInput 用 useLayoutEffect 开 raw mode（use-input.ts:50-60，用 useEffect 会晚一拍、终端自己先回显）',logKind:'mech',state:function(){chip('react','mech','useInput 注册（useLayoutEffect）')},live:null},
+ {id:'p0-raw',ph:0,dur:1000,focus:'ink',lab:'ink 开 raw mode：stdin.setRawMode(true)、接管 readable 监听（顺手移除早期输入捕获，防止双读）；同时向终端写括号粘贴 / 焦点上报 / kitty 扩展键开关',log:'handleSetRawMode · setRawMode(true) + EBP 括号粘贴 + 焦点上报(DECSET 1004) + kitty/modifyOtherKeys（App.tsx:296-331）',logKind:'mech',state:function(){chip('ink','key','raw mode on（引用计数 0→1）')},live:function(){fly('ink','term','EBP · kitty · 焦点上报开关','f-out',800)}},
+ {id:'p0-ready',ph:0,dur:900,focus:'term',lab:'一切就绪：终端进入 raw 模式等你按键 —— 你敲的每个字节直接进 stdin；屏幕不回显，上面所有字都是程序画上去的',log:'raw mode · 终端不做行编辑/回显 —— 屏幕即程序通过 stdout diff 逐帧重画的画布',logKind:'mech',state:function(){chip('term','io','↑ 模式开关生效 · 等待按键')},live:null},
+
+ // ── 第一轮：按键「你」→「好」──
+ {id:'k1-stdin',ph:1,dur:900,focus:'term',lab:'你敲下「你」：终端把 3 个 UTF-8 字节 e4 bd a0 推进 stdin',log:'stdin chunk: e4 bd a0（「你」= U+4F60 的 UTF-8 编码）',logKind:'key',state:function(){chip('term','io','↓ e4 bd a0')},live:function(){fly('term','ink','stdin: e4 bd a0','f-byte',750)}},
+ {id:'k1-parse',ph:1,dur:950,focus:'ink',lab:'ink 输入内核收到字节：handleReadable 读走 chunk，parse-keypress 状态机解出一个普通字符键',log:'handleReadable → processInput → parseMultipleKeypresses（parse-keypress.ts:212）：tokenizer 切出 text token → 字符键 {input:"你"}',logKind:'key',state:function(){chip('ink','key','ParsedKey · input:"你"（无修饰键）')},live:null},
+ {id:'k1-dispatch',ph:1,dur:900,focus:'ink',lab:'批量分发：一个 chunk 可能解出多个键，全部塞进同一个高优先级批次（discreteUpdates，防更新超深）；字符键走 key 路 → 发出 "input" 事件',log:'processKeysInBatch（App.tsx:552-625）· response→TerminalQuerier / mouse→选区 / key→emit("input")+dispatchKeyboardEvent 三路分发',logKind:'key',state:function(){chip('ink','key','processKeysInBatch → emit("input")')},live:function(){fly('ink','react','"input" 事件 {input:"你"}','f-key',700)}},
+ {id:'k1-state',ph:1,dur:950,focus:'react',lab:'状态落点：mapKey 判定这是普通字符 → cursor.insert("你") → input="你"、cursorOffset=1 —— 注意屏幕此刻还没变',log:'useInput → useTextInput.onInput → mapKey default 分支（useTextInput.ts:382-409）→ onChange("你")+setOffset(1)',logKind:'state',state:function(){setInput('你',1);chip('react','state','input="你" · offset=1')},live:null},
+ {id:'k2-journey',ph:1,dur:900,focus:'ink',lab:'再敲「好」（e5 a5 bd）：同一条路 —— 字节 → 解析 → 同一批次分发（每个按键都走这条路，这就是 REPL 的心跳）',log:'「好」= e5 a5 bd · parseMultipleKeypresses → 字符键 → 同一 discreteUpdates 批次分发',logKind:'key',state:function(){chip('term','io','↓ e5 a5 bd');chip('ink','key','ParsedKey · input:"好"')},live:function(){fly('term','ink','stdin: e5 a5 bd','f-byte',700)}},
+ {id:'k2-state',ph:1,dur:900,focus:'react',lab:'mapKey default 分支：input="你好"、cursorOffset=2 —— 输入完成',log:'cursor.insert("好") · onChange("你好") + setOffset(2)',logKind:'state',state:function(){setInput('你好',2);chip('react','state','input="你好" · offset=2')},live:null},
+ {id:'p1-frame',ph:1,dur:1100,focus:'render',lab:'一帧落地：React 提交 → yoga 布局 → 渲染 → diff → stdout —— 两次按键的更新被 16ms 节流合并成一帧，屏幕输入框这才出现「你好」',log:'帧 #1 · throttle(16ms) 合并两键 → renderer → LogUpdate diff → writeDiffToTerminal（ink.tsx:286-290 / 829-831）',logKind:'frame',state:function(){setFrame({no:1,info:'输入框 +「你好」'});setScrPrompt('你好',2);chip('render','frame','帧 #1 · 输入框 +「你好」');chip('term','io','↑ ANSI diff（输入框行）')},live:function(){fly('render','term','stdout: diff patch','f-out',750)}},
+
+ // ── 编辑键：mapKey 的分支分派 ──
+ {id:'bs-key',ph:1,dur:900,focus:'ink',lab:'敲退格 ⌫（0x7f）：解析成 backspace 键 → 同一条路分发',log:'0x7f → ParsedKey{backspace:true} · 走 mapKey 的编辑键分支，不产生字符',logKind:'key',state:function(){chip('term','io','↓ 0x7f ⌫');chip('ink','key','ParsedKey · backspace')},live:function(){fly('term','ink','stdin: 0x7f','f-byte',700)}},
+ {id:'bs-land',ph:1,dur:950,focus:'react',lab:'状态落点：mapKey 命中 backspace 分支 —— 先试"删一个词"，删不动就删一个字 → input="你"、cursorOffset=1（状态机按键型分派：编辑键改文本，不产生字符）',log:'mapKey case backspace · deleteTokenBefore() ?? backspace()（useTextInput.ts:337-340）',logKind:'state',state:function(){setInput('你',1);chip('react','state','input="你" · offset=1（删掉「好」）')},live:null},
+ {id:'bs-frame',ph:1,dur:1000,focus:'render',lab:'又一帧：屏幕输入框「你好」变「你」—— 若两次编辑落进同一个 16ms 窗口，就只画最后一帧',log:'帧 #2 · trailing 节流：窗口内多次编辑合并成最后一帧',logKind:'frame',state:function(){setFrame({no:2,info:'输入框 -「好」'});setScrPrompt('你',1);chip('render','frame','帧 #2 · 输入框 -「好」')},live:function(){fly('render','term','stdout: diff patch','f-out',700)}},
+ {id:'ret-type',ph:1,dur:1000,focus:'react',lab:'把「好」补敲回来（字节 → 解析 → 分发，同一条路并作一步）：input="你好" —— 输入就绪，下一键就是提交',log:'重敲「好」· 同一条按键路 → input="你好"（屏幕下一帧跟上）',logKind:'state',state:function(){chip('ink','key','ParsedKey · input:"好"（同一条路）');setInput('你好',2);chip('react','state','input="你好" · offset=2')},live:null},
+ {id:'ret-frame',ph:1,dur:950,focus:'render',lab:'又一帧：屏幕输入框补回「你好」—— 键入、编辑、补敲，每次状态变化都靠这样的帧落屏',log:'帧 #3 · 输入框补回「你好」· renderNodeToOutput → diff → stdout',logKind:'frame',state:function(){setFrame({no:3,info:'输入框 补回「你好」'});setScrPrompt('你好',2);chip('render','frame','帧 #3 · 输入框 +「你好」')},live:function(){fly('render','term','stdout: diff patch','f-out',700)}},
+
+ // ── Enter：提交 ──
+ {id:'enter-key',ph:1,dur:900,focus:'ink',lab:'敲 Enter（字节 0x0d）：解析成 return 键 —— 提交开始',log:'Enter = \\r → key.return=true · SSH 慢链路上 "o\\r" 会合并成一块到达，靠特判拆出提交（useTextInput.ts:491-500）',logKind:'key',state:function(){chip('term','io','↓ 0x0d Enter');chip('ink','key','ParsedKey · return')},live:function(){fly('term','ink','stdin: 0x0d','f-byte',700)}},
+ {id:'enter-gate',ph:1,dur:1000,focus:'react',lab:'两道提交守卫：粘贴进行中 → Enter 不提交（防粘贴文本里的换行误触发）；末尾反斜杠+Enter=换行、Meta/Shift+Enter=换行 —— 都不是，这是真提交',log:'BaseTextInput 粘贴守卫（BaseTextInput.tsx:49-51）→ handleEnter 判定链（useTextInput.ts:248-268）→ onSubmit("你好")',logKind:'state',state:function(){chip('react','state','守卫通过 → 真提交 onSubmit("你好")')},live:null},
+ {id:'submit-repl',ph:1,dur:1000,focus:'react',lab:'提交一路上抛：TextInput → PromptInput → REPL.onSubmit：先把滚动锚到底部；「你好」不是斜杠命令、也不是 pipe 路由 → 走正常对话路径',log:'onSubmit（REPL.tsx:3970）· repinScroll → 非即时命令 / 非 pipe → createUserMessage',logKind:'state',state:function(){chip('react','state','REPL.onSubmit → 正常对话路径')},live:function(){fly('react','react','onSubmit("你好") 上抛','f-state',650)}},
+ {id:'submit-land',ph:1,dur:1100,focus:'react',lab:'状态落点：createUserMessage 造出 userMessage{uuid, type:"user"} → setMessages 追加，messages 0→1；setMessages 先立即写 messagesRef 再交给 React —— 当场可见',log:'createUserMessage + setMessages([...prev, userMessage])（REPL.tsx:4348-4352）· eager setMessages 立即同步 ref（REPL.tsx:1502-1526）',logKind:'state',state:function(){pushMsg('user','你好');chip('react','state','messages 0→1 · userMessage 入列')},live:null},
+ {id:'submit-clear',ph:1,dur:950,focus:'react',lab:'收尾：输入框清空（setInputValue("")、光标归 0）、「你好」进 history —— 提交侧终点：onSubmit 返回；屏幕此刻还没画（要等下一帧）',log:'setInputValue("") + addToHistory · 输入已清、消息已入列，但屏幕要等渲染帧',logKind:'state',state:function(){setInput('',0);chip('react','state','input="" · 清空 · history+1')},live:null},
+ {id:'submit-query',ph:1,dur:1100,focus:'react',lab:'handlePromptSubmit 启动 query() 生成器 —— 流程离开本页：API 请求、工具循环是「回合循环」那页的故事；本页只讲按键到屏幕这条环路',log:'handlePromptSubmit → query()（REPL.tsx:4364）· 下游见 turn-loop.html（02 回合循环）',logKind:'mech',state:function(){chip('react','mech','query() 启动 → 出本子系统')},live:function(){fly('react','term','query() 回合开始（离开本页）','f-state',900)}},
+
+ // ── 渲染管线放大 ──
+ {id:'r-commit',ph:1,dur:1000,focus:'render',lab:'放大镜 —— 把提交这帧拆开看 ① React commit：reconciler.resetAfterCommit 触发（messages+1、输入清空合并进同一次提交）',log:'reconciler.resetAfterCommit（reconciler.ts:264-322）· commit 完成即布局、排渲染',logKind:'frame',state:function(){chip('render','frame','① commit · resetAfterCommit')},live:null},
+ {id:'r-layout',ph:1,dur:950,focus:'render',lab:'② yoga 布局：calculateLayout(终端列宽) —— 每个盒子 / 文本算出终端上的行列坐标',log:'onComputeLayout · rootNode.yogaNode.calculateLayout（ink.tsx:314-331）',logKind:'frame',state:function(){chip('render','frame','② yoga calculateLayout')},live:null},
+ {id:'r-sched',ph:1,dur:950,focus:'render',lab:'③ 排帧：scheduleRender 是 16ms 节流阀 —— 突发的一串 setState 在这里被压成匀速帧流，queueMicrotask 进 onRender',log:'throttle(deferredRender, 16ms, leading+trailing)（ink.tsx:286-290 · FRAME_INTERVAL_MS=16）',logKind:'frame',state:function(){chip('render','frame','③ throttle 16ms → microtask')},live:null},
+ {id:'r-frame',ph:1,dur:1100,focus:'render',lab:'④ 渲染：renderer 遍历 ink DOM 树 → renderNodeToOutput 写 screen cells（与上一帧相同的区域走 blit 快路径）—— 产出新一帧',log:'renderer → renderNodeToOutput（renderer.ts:131-136）→ 新 Frame{screen, viewport, cursor}',logKind:'frame',state:function(){chip('render','frame','④ renderNodeToOutput → cells')},live:null},
+ {id:'r-diff',ph:1,dur:1000,focus:'render',lab:'⑤ diff：LogUpdate.render 对比前后两帧，只产出变化的 patch；随后 front⇄back 双缓冲交换，新帧成为下一帧的比较基准（resize / 老 Windows 控制台才退化为全量重绘）',log:'LogUpdate.render（log-update.ts:131-172）增量 diff → 帧交换（ink.tsx:692-694）· 空 diff 零写快速路径',logKind:'frame',state:function(){setFrame({no:4,info:'messages 行 + 输入框清空'});chip('render','frame','⑤ diffEach → optimize · 帧交换')},live:null},
+ {id:'r-write',ph:1,dur:1100,focus:'render',lab:'⑥ 写终端：writeDiffToTerminal 把 patch 变成 ANSI 字节写 stdout —— 屏幕落点：「你好」成为消息行、输入框已空；帧尾 onFrame 上报各阶段耗时',log:'writeDiffToTerminal（ink.tsx:830）→ 屏幕更新 · onFrame 遥测 renderer/diff/optimize/write 毫秒（ink.tsx:867-883）',logKind:'frame',state:function(){pushScrRow('user','你好');setScrPrompt('',0);chip('term','io','↑ ANSI diff（消息行 + 空输入框）')},live:function(){fly('render','term','stdout: ANSI diff bytes','f-out',800)}},
+
+ // ── 第二轮（循环）──
+ {id:'q-back',ph:2,dur:1000,focus:'react',lab:'（时间快进）query() 回合结束：回答入列 messages、加载态复位 —— REPL 回到空闲，又轮到你敲键：第二轮开始，走同一条环路',log:'回合结束 → resetLoadingState → queryGuard running→idle（REPL.tsx:3716-3727）· 循环语义：一轮输入一轮回答',logKind:'mech',state:function(){pushMsg('assistant','（回答……）');chip('react','mech','回合结束 · 回到空闲')},live:null},
+ {id:'k4-journey',ph:2,dur:950,focus:'ink',lab:'你敲「再」（e5 86 8d）：同一条路再走一轮 —— stdin 字节 → parse-keypress → 批量分发（第二轮，简短走）',log:'第二轮 · 「再」= e5 86 8d → 同一条按键路（这条环路就是 REPL 的心跳）',logKind:'key',state:function(){chip('term','io','↓ e5 86 8d');chip('ink','key','ParsedKey · input:"再"')},live:function(){fly('term','ink','stdin: e5 86 8d','f-byte',700)}},
+ {id:'k4-land',ph:2,dur:900,focus:'react',lab:'状态落点：input="再"、cursorOffset=1 —— 与第 7 步一模一样的落点，只是内容不同',log:'mapKey default · cursor.insert("再") → input="再"',logKind:'state',state:function(){setInput('再',1);chip('react','state','input="再" · offset=1')},live:null},
+ {id:'k4-frame',ph:2,dur:1000,focus:'render',lab:'又一帧：屏幕输入框出现「再」—— 循环闭合；只要会话还在，这条按键环路就一直转',log:'帧 #5 · 输入框 +「再」—— 循环回到打字状态，等待下一次 Enter',logKind:'frame',state:function(){setFrame({no:5,info:'输入框 +「再」'});setScrPrompt('再',1);chip('render','frame','帧 #5 · 输入框 +「再」')},live:function(){fly('render','term','stdout: diff patch','f-out',700)}},
+
+ // ── 退出 ──
+ {id:'exit-cause',ph:3,dur:1000,focus:'ink',lab:'退出信号：你按 Ctrl+C（0x03）—— ink 内核认出它 → handleExit（输入 /exit 提交也殊途同归到这里）',log:'handleInput · \\x03 && exitOnCtrlC → handleExit（App.tsx:471-480）/ exit 钩子杀 workflow 服务并 resetCursor',logKind:'key',state:function(){chip('term','io','↓ 0x03 Ctrl+C');chip('ink','key','exit → handleExit')},live:function(){fly('term','ink','stdin: 0x03','f-byte',700)}},
+ {id:'exit-unmount',ph:3,dur:1100,focus:'react',lab:'React 树卸载：渲染最后一帧、恢复终端（关 raw mode、括号粘贴、kitty），waitUntilExit 挂着的 Promise resolve —— root.waitUntilExit() 返回',log:'unmount 渲染最后一帧并清理终端（ink.tsx:1590-1644）→ resolveExitPromise → waitUntilExit 返回（ink.tsx:1672-1678）',logKind:'mech',state:function(){chip('render','frame','最后一帧 + 终端态还原');chip('react','mech','exitPromise resolve')},live:null},
+ {id:'exit-done',ph:3,dur:1000,focus:'term',lab:'流程结束 —— renderAndRun 收到退出 → gracefulShutdown(0)：进程干净退出，终端回到 shell 提示符',log:'await root.waitUntilExit() → gracefulShutdown(0)（interactiveHelpers.tsx:124-129）· 流程结束',logKind:'mech',state:function(){chip('term','io','↑ 终端还原 · exit 0')},live:function(){fly('react','term','gracefulShutdown(0) · 终端还原','f-out',700)}}
+);
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='submit-repl')return i}return 16})();
+
+// ---------- engine：确定性重建 + 播放调度 ----------
+function setFocus(s){
+  var stage=document.getElementById('stage');
+  ['term','ink','react','render'].forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  ['term','ink','react','render'].forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+}
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.term.innerHTML='';feeds.ink.innerHTML='';feeds.react.innerHTML='';feeds.render.innerHTML='';
+  linesEl.innerHTML='';
+  inputVal='';inputOff=0;msgs=[];frameNo=0;scrRows=[];scrPrompt='';scrCur=0;
+  $('in-vis').textContent='▌';$('in-val').textContent='""';$('in-off').textContent='0';
+  $('msg-count').textContent='0 条';$('msg-list').innerHTML='';
+  $('fr-no').textContent='—';$('fr-info').textContent='尚未渲染';$('fr-swap').textContent='—';
+  paintScreen();
+}
+function applyStep(i){
+  var s=steps[i];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+}
+function updateNow(){
+  if(idx<0){nowEl.innerHTML='现在：<b>就绪</b> —— 点击 ▶ 播放，或用 ← → 单步'}
+  else{nowEl.textContent='现在：'+steps[idx].lab}
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){readout.innerHTML='就绪 · 点击 ▶ 播放'}
+  else if(idx>=n-1){readout.innerHTML='<span class="fin">✓ 播放完毕 · 流程结束</span> · 共 '+n+' 步'}
+  else{readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · '+steps[idx].id}
+  updateNow();
+}
+var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  stepT0=Date.now(); remaining=delay;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true; $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- 中断演示 ----------
+function breakDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ 提交中断 —— Enter 已按、消息未入列，以下步骤未执行 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 中断演示</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意位置恢复';
+  nowEl.textContent='现在：⚡ 提交中断演示（Enter 已按、消息未入列）—— 点击 ▶ 恢复';
+}
+function exitBreak(){
+  breakMode=false; $('break-panel').classList.remove('on'); renderTo(idx);
+}
+
+// ---------- 控制条接线 ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+renderTo(-1);
+
+// ---------- 自检（?selftest=1）----------
+function runSelfTest(){
+  var lines=[], pass=0, fail=0;
+  function rec(name, ok){ lines.push((ok?'PASS':'FAIL')+' · '+name); if(ok)pass++;else fail++; }
+  var N=steps.length;
+  rec('步数 > 0（共 '+N+' 步）', N>0);
+  var walkOk=true, walkErr=null;
+  try{
+    for(var i=-1;i<N;i++){window.__goto(i);}
+    window.__goto(-1);
+  }catch(e){walkOk=false;walkErr=e&&e.message}
+  rec('逐步 __goto(-1..'+(N-1)+') 无异常'+(walkErr?('：'+walkErr):''), walkOk);
+  window.__goto(0); var a=nowEl.textContent;
+  window.__goto(6); var b=nowEl.textContent;
+  window.__goto(21); var c=nowEl.textContent;
+  rec('字幕文本随步变化（第 1/7/22 步互不相同）', a!==b&&b!==c&&a!==c);
+  window.__goto(-1);
+  var emptyFeeds=feeds.term.children.length===0&&feeds.ink.children.length===0&&feeds.react.children.length===0&&feeds.render.children.length===0;
+  var emptyState=$('in-val').textContent==='""'&&$('msg-count').textContent.indexOf('0')===0&&$('fr-no').textContent==='—';
+  var emptyLog=linesEl.children.length===0;
+  rec('__goto(-1) 重置回空态（条目区/状态/日志全清）', emptyFeeds&&emptyState&&emptyLog);
+  rec('重置后字幕回到就绪', nowEl.textContent.indexOf('就绪')>=0);
+  window.__goto(5);
+  rec('反向断言：分发在途时 input 仍为空', $('in-val').textContent==='""'&&inputVal==='');
+  window.__goto(6);
+  rec('落点：第 7 步 input 才写入「你」', inputVal==='你');
+  rec('反向断言：状态已变但屏幕尚未画（渲染在途）', $('scr-body').textContent.indexOf('你')<0);
+  window.__goto(9);
+  rec('帧 #1 后屏幕输入框出现「你好」', $('scr-body').textContent.indexOf('你好')>=0);
+  window.__goto(18);
+  rec('消息入列：messages 0→1', msgs.length===1&&$('msg-count').textContent.indexOf('1')===0);
+  window.__goto(19);
+  rec('提交清空输入，但屏幕仍显示旧输入（下一帧才画）', inputVal===''&&$('scr-body').textContent.indexOf('你好')>=0);
+  window.__goto(26);
+  rec('帧写终端后屏幕出现消息行「❯ 你好」', $('scr-body').textContent.indexOf('❯ 你好')>=0);
+  window.__goto(4);
+  rec('聚光灯：当前站点高亮、其余置灰', lanes.ink.classList.contains('hot')&&lanes.term.classList.contains('dim')&&!lanes.term.classList.contains('hot'));
+  window.__goto(9);
+  var segOk=barEl.children.length===N;
+  for(var k=0;k<=9;k++)segOk=segOk&&barEl.children[k].classList.contains('done');
+  segOk=segOk&&!barEl.children[10].classList.contains('done');
+  rec('进度条逐段点亮（第 10 段完成、第 11 段未完成）', segOk);
+  rec('window.onerror 无报错（'+window.__errors.length+' 条）', window.__errors.length===0);
+  window.__goto(-1);
+  var pre=$('selftest-result');
+  pre.textContent=lines.join('\n')+(fail>0?'\n—— 存在 FAIL ——':'\n—— 全部通过（'+pass+'/'+lines.length+'）——');
+  pre.setAttribute('data-pass',String(pass));
+  pre.setAttribute('data-fail',String(fail));
+}
+if(location.search.indexOf('selftest=1')>-1){setTimeout(runSelfTest,80);}
+})();
+</script>
+</body>
+</html>

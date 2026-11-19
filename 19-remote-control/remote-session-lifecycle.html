@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>远程控制会话全生命周期播放器：注册 → 领工 → spawn 等价 REPL → 事件回推</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:#f4f4f2;border-color:var(--sec)}
+.phases span.p1.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+.phases span.p3.on{background:var(--red-f);border-color:var(--red)}
+.phases span.p4.on{background:var(--orange-f);border-color:var(--orange)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06)}
+#transport .row1{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:#f4f4f2;border-color:var(--sec)}
+#bar .seg.p1.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg.p3.done{background:var(--red-f);border-color:var(--red)}
+#bar .seg.p4.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#cap-row{display:flex;gap:14px;align-items:baseline;margin-top:8px;padding:0 4px}
+#step-readout{font-size:13px;color:var(--sec);white-space:nowrap;min-width:86px}
+#step-readout b{color:var(--ink)}
+#step-readout .fin{color:var(--good);font-weight:700}
+#caption{flex:1;font-size:15px;font-weight:600;color:var(--ink);min-height:22px}
+#caption::before{content:'现在：';color:var(--mut);font-weight:400}
+#caption.empty::before{content:''}
+#caption.empty{color:var(--mut);font-weight:400}
+
+#stage{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:620px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+.lane>.h{padding:9px 12px;font-size:14.5px;font-weight:700;border-bottom:2px solid var(--hair);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+#lane-bridge .h{border-bottom-color:var(--sec)}
+#lane-server .h{border-bottom-color:var(--blue)}
+#lane-child .h{border-bottom-color:var(--green)}
+#lane-web .h{border-bottom-color:var(--orange)}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-bridge.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
+#stage.spot #lane-server.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-child.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-web.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+
+.en{flex:0 0 auto;border:1px solid var(--hair);border-left:3px solid var(--line);border-radius:8px;padding:7px 10px;background:var(--white);animation:pop .35s ease}
+.en .t{font-weight:700;font-size:12.5px;color:var(--ink)}
+.en .b{font-size:11.5px;color:var(--sec);margin-top:3px;line-height:1.5;word-break:break-word}
+.en.c-bridge{border-left-color:var(--sec)}
+.en.c-server{border-left-color:var(--blue)}
+.en.c-child{border-left-color:var(--green)}
+.en.c-web{border-left-color:var(--orange)}
+.en.c-ctrl{border-left-color:var(--red);background:var(--red-f)}
+.en.c-final{border-color:var(--good);border-left-color:var(--good);background:var(--green-f)}
+@keyframes pop{0%{transform:scale(.9);opacity:0}100%{transform:scale(1);opacity:1}}
+.h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.f-rest{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.f-ws{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.f-sse{background:var(--green-f);border:1.5px solid var(--green)}
+.flight.f-spawn{background:var(--purple-f);border:1.5px solid var(--purple);color:#3d2f9e;font-weight:700;padding:6px 13px}
+.flight.f-ctrl{background:var(--red-f);border:1.5px solid var(--red);color:var(--red);font-weight:700}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:128px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.req .ev{color:var(--blue)}
+#lines .ln.ws .ev{color:var(--orange)}
+#lines .ln.sse .ev{color:var(--green)}
+#lines .ln.sys .ev{color:var(--sec)}
+#lines .ln.fin{color:var(--good);font-weight:700}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+
+#faults{margin-top:14px;border:1px solid var(--hair);border-radius:12px;background:var(--white);padding:12px 16px}
+#faults .ft{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:7px}
+#faults ul{margin-left:18px;display:flex;flex-direction:column;gap:4px}
+#faults li{font-size:12px;color:var(--sec)}
+#faults li b{color:var(--ink)}
+
+details.evi{margin-top:12px;border:1px dashed var(--line);border-radius:12px;background:var(--panel);padding:10px 16px}
+details.evi summary{font-size:13px;font-weight:700;color:var(--sec);cursor:pointer}
+details.evi .cols{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;margin-top:10px}
+details.evi ul{margin-left:16px;display:flex;flex-direction:column;gap:2px}
+details.evi li{font-size:11.5px;color:var(--mut);font-family:var(--mono)}
+details.evi li.unc{font-family:var(--ui);color:var(--sec)}
+details.evi .tt{font-size:12px;font-weight:700;color:var(--sec);margin-bottom:4px}
+footer{margin-top:16px;font-size:11px;color:var(--mut)}
+
+#selftest-result{display:none;margin-top:12px;background:var(--white);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-family:var(--mono);font-size:12px;white-space:pre-wrap;color:var(--sec)}
+#selftest-result:empty{display:none}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>远程控制会话全生命周期播放器</h1>
+  <div class="sub">你在自己电脑上敲 <b>claude remote-control</b> → <b>Bridge 客户端</b>注册环境、领工单、spawn 等价 REPL → <b>自托管 RCS 服务器</b>居中转发 → <b>远端网页</b>那头打字，回答再流回来 —— 一条用户消息要绕 <b>web → 服务器 → 子进程 → 服务器 → web</b> 一整圈</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 幕 · 注册与领工</span>
+  <span class="p1" data-ph="1">第 2 幕 · 双向接线</span>
+  <span class="p2" data-ph="2">第 3 幕 · 第一轮完整往返</span>
+  <span class="p3" data-ph="3">第 4 幕 · 权限岔路</span>
+  <span class="p4" data-ph="4">第 5 幕 · 第二轮与关机</span>
+</div>
+
+<div id="transport">
+  <div class="row1">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+  </div>
+  <div id="cap-row">
+    <div id="step-readout">就绪</div>
+    <div id="caption" class="empty">就绪 · 点击 ▶ 播放</div>
+  </div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-bridge">
+    <div class="h" id="h-bridge">🖥 本地终端 · Bridge <span class="tag">客户端进程</span><small>claude remote-control</small></div>
+    <div class="feed" id="feed-bridge"></div>
+    <div class="lane-foot"><b>包工头</b>：注册环境 → 轮询领工 → spawn 子进程 → 收尾清理。断线指数退避 2s→120s（jitter±25%），连错 10 分钟判 fatal 退出。</div>
+  </div>
+  <div class="lane" id="lane-server">
+    <div class="h" id="h-server">🌐 RCS 服务器 <span class="tag">自托管</span><small>Hono + 内存 store</small></div>
+    <div class="feed" id="feed-server"></div>
+    <div class="lane-foot"><b>纯内存</b>：environments / sessions / workItems 三个 Map + 每会话 EventBus（seqNum 递增，&gt;5000 截半）。重启即清零；环境探活靠 lastPollAt，工单租约 TTL = 心跳×2。</div>
+  </div>
+  <div class="lane" id="lane-child">
+    <div class="h" id="h-child">🧒 会话子进程 <span class="tag">等价 REPL</span><small>claude --print --sdk-url</small></div>
+    <div class="feed" id="feed-child"></div>
+    <div class="lane-foot"><b>没有界面的 Claude</b>：入站消息 = 用户打字（写 inputStream），stdout 每行 JSON = 回答。权限、会话存储与终端版同一套。看门狗超时 kill 按 failed 归档。</div>
+  </div>
+  <div class="lane" id="lane-web">
+    <div class="h" id="h-web">💻 远端 Web UI <span class="tag">浏览器</span><small>RCS 控制面板</small></div>
+    <div class="feed" id="feed-web"></div>
+    <div class="lane-foot"><b>说话</b>走 POST /web/sessions/:id/events（出站方向），<b>听话</b>走 SSE；工具授权走 /control 一来一回，弹窗超时或断线 → 工具按取消处理。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="console">
+  <div class="ch">线报文（与真实调用一一对应）<span class="lg">每步一行 · 当前行高亮</span></div>
+  <div id="lines"></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>REST / HTTP</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>WebSocket</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>SSE</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>spawn / 进程</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red)"></span>权限控制对</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置</div>
+
+<div id="faults">
+  <div class="ft">故障面（代码核实）</div>
+  <ul>
+    <li><b>ack 失败非致命</b>：服务器重投同一工单，bridge 用 existingHandle / completedWorkIds 去重，不会 spawn 两份（bridgeMain.ts:766-792 / 884-897）</li>
+    <li><b>工单 secret 解码失败</b>：无法 ack（ack 需要 secret 里的 JWT），改用 OAuth 调 stopWork 防这条"毒丸"每个回收周期被无限重投（bridgeMain.ts:796-837）</li>
+    <li><b>JWT 过期</b>：心跳收到 401/403 → reconnectSession 把会话重新排队、换新 token（bridgeMain.ts:229-269）</li>
+    <li><b>连接错误</b>：指数退避 2s→120s（jitter ±25%），持续 10 分钟 fatalExit；系统休眠检测会重置错误预算</li>
+    <li><b>子进程被超时看门狗 kill</b>：按 failed 而非 interrupted 归档——清理动作照走，只是账面记为失败（bridgeMain.ts:474-479）</li>
+  </ul>
+</div>
+
+<details class="evi">
+  <summary>考据注记 · 证据出处与不确定项</summary>
+  <div class="cols">
+    <div>
+      <div class="tt">证据（file:line，仓库实读）</div>
+      <ul>
+        <li>src/entrypoints/cli.tsx:182-226</li>
+        <li>src/bridge/bridgeMain.ts:605-753</li>
+        <li>src/bridge/bridgeMain.ts:845-858</li>
+        <li>src/bridge/bridgeMain.ts:920-1104</li>
+        <li>src/bridge/bridgeMain.ts:2001-2768</li>
+        <li>src/bridge/bridgeApi.ts:143-450</li>
+        <li>src/bridge/sessionRunner.ts:287-340</li>
+        <li>src/cli/remoteIO.ts:35-110</li>
+        <li>packages/remote-control-server/src/routes/v1/environments.ts:13-25</li>
+        <li>packages/remote-control-server/src/routes/v1/environments.work.ts:14-43</li>
+        <li>packages/remote-control-server/src/services/work-dispatch.ts:27-107</li>
+        <li>packages/remote-control-server/src/routes/v1/sessions.ts:17-39</li>
+        <li>packages/remote-control-server/src/routes/v1/session-ingress.ts:62-138</li>
+        <li>packages/remote-control-server/src/transport/ws-handler.ts:40-250</li>
+        <li>packages/remote-control-server/src/routes/web/control.ts:63-79</li>
+        <li>packages/remote-control-server/src/transport/sse-writer.ts:50-98</li>
+      </ul>
+    </div>
+    <div>
+      <div class="tt">不确定项（如实标注）</div>
+      <ul>
+        <li class="unc">本页以 standalone bridge（claude remote-control）为主线；REPL 内 /remote-control 的 perpetual 模式、doReconnect 三策略等细节未逐行核实（replBridge.ts 2477 行只读了轮廓）</li>
+        <li class="unc">CCR v2 路径（code-sessions / worker epoch / SSETransport）只核对了路由签名与 use_code_sessions 分支，本页按 v1 WS 主线呈现</li>
+        <li class="unc">RCS Web UI 页面组件未逐个读，消息方向以服务端 ws-handler / sse-writer 为准</li>
+        <li class="unc">GrowthBook 运行时门控与自托管 CLAUDE_BRIDGE_BASE_URL 跳过逻辑取自 docs 声明，代码路径未逐行核对</li>
+        <li class="unc">自托管 RCS 的 pollTimeout / heartbeatInterval 取自环境变量默认值（8s / 20s），生产 Anthropic 后端数值不同</li>
+      </ul>
+    </div>
+  </div>
+</details>
+
+<footer>子系统：远程控制 / Bridge（自托管 Remote Control Server）· 站点与单元语义对照 manifest flow-evidence · 代码事实以 claude-code 仓库实读为准</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var __errs=[];
+window.addEventListener('error',function(e){__errs.push(String(e&&e.message||e))});
+
+var STATIONS=['bridge','server','child','web'];
+var feeds={bridge:$('feed-bridge'),server:$('feed-server'),child:$('feed-child'),web:$('feed-web')};
+var lanes={bridge:$('lane-bridge'),server:$('lane-server'),child:$('lane-child'),web:$('lane-web')};
+var heads={bridge:$('h-bridge'),server:$('h-server'),child:$('h-child'),web:$('h-web')};
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), capEl=$('caption'), readEl=$('step-readout');
+var stage=$('stage');
+var activeAnims=[];
+
+function pulse(lane){var h=heads[lane];if(!h)return;h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function addEntry(lane,title,body,extra){
+  var d=document.createElement('div');d.className='en c-'+lane+(extra?' '+extra:'');
+  var t=document.createElement('div');t.className='t';t.textContent=title;
+  var b=document.createElement('div');b.className='b';b.textContent=body;
+  d.appendChild(t);d.appendChild(b);feeds[lane].appendChild(d);
+  feeds[lane].scrollTop=feeds[lane].scrollHeight;return d;
+}
+function addLog(kind,text){
+  var d=document.createElement('div');d.className='ln '+kind;
+  var s=document.createElement('span');s.className='ev';s.textContent=text;
+  d.appendChild(s);
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur');for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight;return d;
+}
+function fly(from,to,label,cls,dur){
+  var a=lanes[from],b=lanes[to];if(!a||!b)return;
+  var ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect(),rh=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div');f.className='flight '+cls;f.textContent=label;
+  var x0=ra.left+ra.width/2-rh.left,y0=ra.top+18-rh.top;
+  var x1=rb.left+rb.width/2-rh.left,y1=rb.top+18-rh.top;
+  f.style.left=x0+'px';f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0,dy=y1-y0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},
+      {transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(dy*0.5)+'px))',offset:.5},
+      {transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+dy+'px))'}],
+      {duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(to);
+}
+
+// ---------- step factories ----------
+// S：单步——某个泳道发生一件事（数据驱动，落效即写入）
+function S(o){return {id:o.id,ph:o.ph,dur:o.dur||1050,lane:o.lane,cap:o.cap,
+  t:o.t,b:o.b,log:o.log||null,logKind:o.logKind||'sys',
+  fly:o.fly?{from:o.fly[0],to:o.fly[1],label:o.fly[2],cls:o.fly[3]}:null,
+  extra:o.extra||null};}
+// wire：跨泳道单元两段（发出 → 落效）
+function wire(o){return [
+  S({id:o.id+'-a',ph:o.ph,dur:o.durA||1000,lane:o.from,cap:o.capA,t:o.tA,b:o.bA,
+     log:o.logA,logKind:o.kA,fly:[o.from,o.to,o.flight,o.fcls]}),
+  S({id:o.id+'-b',ph:o.ph,dur:o.durB||950,lane:o.to,cap:o.capB,t:o.tB,b:o.bB,
+     log:o.logB,logKind:o.kB,extra:o.extraB||null})
+];}
+
+var steps=[].concat(
+ // ── 第 1 幕 · 注册与领工 ──
+ S({id:'fastpath',ph:0,lane:'bridge',dur:1150,
+   cap:'命令命中快速通道：完整 CLI 不加载，先过四道准入门',
+   t:'命中快速通道',b:'remote-control / rc / remote / sync / bridge 五个别名等价，feature(\'BRIDGE_MODE\') 门控（cli.tsx:182-226）；登录、GrowthBook 开关、版本下限、组织策略四道门，任一不过即干净退出（cli.tsx:199-222）',
+   log:'argv: remote-control → BRIDGE_MODE fast-path · gate: auth/开关/版本/策略 ✓'}),
+ S({id:'trust',ph:0,lane:'bridge',dur:1050,
+   cap:'信任检查 + 首启确认：这个目录得先被普通 claude 信任过',
+   t:'信任与首启确认',b:'目录要先被普通 claude 接受过信任对话框（bridgeMain.ts:2104-2110）；首次运行问一次 "Enable Remote Control? (y/n)"，答 y 之后 remoteDialogSeen 写进 globalConfig 永不再问（bridgeMain.ts:2126-2154）',
+   log:'trust: checkHasTrustDialogAccepted ✓ · remoteDialogSeen=true'}),
+ wire({id:'reg',ph:0,from:'bridge',to:'server',flight:'POST /v1/environments/bridge',fcls:'f-rest',
+   kA:'req',logA:'POST /v1/environments/bridge {machine_name, branch, git_repo_url, max_sessions}',
+   capA:'拿名片去注册：机器名、分支、git 地址、会话容量',
+   tA:'注册环境',bA:'组装 BridgeConfig（spawnMode 决定单会话/同目录/工作树）→ POST /v1/environments/bridge；注册失败是致命错误，打印干净信息后退出',
+   kB:'req',logB:'storeCreateEnvironment → status=active',
+   capB:'RCS 立牌：environment 落库为 active，发回身份对',
+   tB:'环境落库',bB:'纯内存 store（store.ts）：environments / sessions / workItems 三个 Map；返回 environment_id + environment_secret，此后每次轮询都出示这对身份，lastPollAt 随每次 poll 刷新'}),
+ wire({id:'presess',ph:0,from:'bridge',to:'server',flight:'POST /v1/sessions · 预建会话',fcls:'f-rest',
+   kA:'req',logA:'POST /v1/sessions（预建空会话）',
+   capA:'预建一个空会话——网页用户一进来就有地方打字',
+   tA:'预建会话',bA:'createBridgeSession（默认开启，--no-create-session-in-dir 可关）；标题由首条用户消息推导（onFirstUserMessage）',
+   kB:'req',logB:'createSession 落库 + createWorkItem(state=pending) 入队',
+   capB:'会话落库，顺手发了张工单排队等 bridge 来领',
+   tB:'会话 + 工单入队',bB:'POST /v1/sessions 处理器建会话记录，带 environment_id 就 createWorkItem 排队（sessions.ts:17-39）；初始事件也经 publishSessionEvent 直接上网'}),
+ wire({id:'poll',ph:0,from:'bridge',to:'server',flight:'GET …/work/poll（长轮询）',fcls:'f-rest',
+   kA:'req',logA:'GET /v1/environments/:id/work/poll（长轮询 ≤8s）',
+   capA:'主循环开跑：长轮询『有活吗？』（服务器最多挂 8 秒）',
+   tA:'长轮询发起',bA:'runBridgeLoop 每轮 pollForWork（bridgeMain.ts:605-620）；bridgeApi 10s 超时，RCS 侧默认挂 8s 才答（RCS_POLL_TIMEOUT=8）',
+   kB:'sys',logB:'204 No Content',
+   capB:'没活：204 空响应',
+   tB:'空响应',bB:'无工单时返回 204，客户端 axios 解析为 null——语义是"暂时没活"，不是出错'}),
+ S({id:'idle',ph:0,lane:'bridge',dur:1050,
+   cap:'睡个间隔再来——待命就是空轮询循环',
+   t:'待命循环',b:'按 pollConfig 间隔 sleep 后再轮询（bridgeMain.ts:645-753）；容量满时切换心跳模式：只续约在跑的工单、不领新活，等有会话结束再被唤醒',
+   log:'sleep poll-interval → poll again（空轮询循环）'}),
+ S({id:'work',ph:0,lane:'server',dur:1050,
+   cap:'来活了！工单出队：pending → dispatched',
+   t:'工单出队',b:'poll 命中：WorkResponse{id, data:{type:"session", id}, secret}，工单状态 pending→dispatched（work-dispatch.ts:52-82）',
+   log:'work {type:session} 出队 → state=dispatched'}),
+ S({id:'secret',ph:0,lane:'bridge',dur:1100,
+   cap:'拆暗号：secret 里是子进程的门票；容量满就不接，单子留着重投',
+   t:'拆暗号 + 自查',b:'secret 是 base64 JSON，内含 session_ingress_token（子进程连 WS 的临时门票）；session_id 非法 / 容量满就不 ack，服务器会重投，单不丢（bridgeMain.ts:872-907）',
+   log:'decodeWorkSecret(base64) → session_ingress_token'}),
+ wire({id:'ack',ph:0,from:'bridge',to:'server',flight:'POST …/work/:id/ack',fcls:'f-rest',
+   kA:'req',logA:'POST /v1/environments/:id/work/:workId/ack',
+   capA:'点头接单：dispatched → acked',
+   tA:'接单',bA:'确认承诺处理这张工单才 ack；ack 失败也不致命——服务器重投 + completedWorkIds 去重兜底（bridgeMain.ts:840-858）',
+   kB:'sys',logB:'state=acked · 租约 TTL = heartbeatInterval × 2',
+   capB:'工单正式领走，租约开始计时',
+   tB:'租约生效',bB:'state→acked；此后 bridge 定期 heartbeatWork 续约，服务器超 TTL 未续则视工单失联可回收重投（work-dispatch.ts:92-107）'}),
+ S({id:'spawn',ph:0,lane:'bridge',dur:1250,
+   cap:'拉起子进程：--print --sdk-url 连回服务器（worktree 模式先开独立小屋）',
+   t:'spawn 等价 REPL',b:'worktree 模式先 createAgentWorktree 开独立目录，并发会话互不踩文件（bridgeMain.ts:987-1026）；然后 spawn claude --print --sdk-url wss://…/session_ingress/ws/:id --input/output-format stream-json --replay-user-messages，env 里剥掉 OAuth、注入 CLAUDE_CODE_SESSION_ACCESS_TOKEN（sessionRunner.ts:287-340）',
+   log:'spawn claude --print --sdk-url wss://…/ws/:id · env: OAuth → session token',
+   fly:['bridge','child','spawn claude --print','f-spawn']}),
+ S({id:'remoteio',ph:0,lane:'child',dur:1050,
+   cap:'子进程起跑：RemoteIO 就位，选好传输方式',
+   t:'RemoteIO 就位',b:'子进程里 RemoteIO 继承 StructuredIO，按 --sdk-url 经 getTransportForUrl 选传输：v1 WS（或混合 WS读+POST写）、v2 SSE（remoteIO.ts:35-110）；token 刷新回调就位，重连时自动换新票',
+   log:'RemoteIO extends StructuredIO · getTransportForUrl(v1 WS / v2 SSE)'}),
+
+ // ── 第 2 幕 · 双向接线 ──
+ wire({id:'ws',ph:1,from:'child',to:'server',flight:'WS 握手 · Bearer token',fcls:'f-ws',
+   kA:'ws',logA:'WS wss://…/session_ingress/ws/:id · Authorization: Bearer',
+   capA:'子进程带 Bearer 门票敲门：WS 连接 session-ingress',
+   tA:'WS 握手',bA:'鉴权失败直接 close 401；会话不存在 close 4001（session-ingress.ts:95-138）',
+   kB:'ws',logB:'replay getEventsSince(0) · subscribe(outbound) · keep_alive',
+   capB:'门开了：订阅事件总线 + 重放历史 + keepalive 心跳',
+   tB:'会话通道建立',bB:'handleWebSocketOpen：先顶掉同会话旧连接，再全量重放历史事件（断线重连也能续上对话），订阅只放行 outbound 方向，定时发 {"type":"keep_alive"}（ws-handler.ts:40-118）'}),
+ wire({id:'ssesub',ph:1,from:'web',to:'server',flight:'SSE 订阅 /web/sessions/:id/events',fcls:'f-sse',
+   kA:'sse',logA:'GET /web/sessions/:id/events（SSE, uuidAuth）',
+   capA:'远端用户打开控制面板：SSE 订阅会话事件流',
+   tA:'SSE 订阅',bA:'浏览器连 GET /web/sessions/:id/events，uuidAuth 校验这个会话是不是这位用户的（routes/web/sessions.ts:112-144）',
+   kB:'sse',logB:'SSE stream open · : keepalive · Last-Event-ID 续传',
+   capB:'SSE 流建立：keepalive 保活，断线凭 Last-Event-ID 续传',
+   tB:'事件流建立',bB:'createSSEStream：先发注释帧 keepalive，新事件以 id: seqNum 推送；断线重连带 Last-Event-ID 只补漏（sse-writer.ts:50-98）'}),
+
+ // ── 第 3 幕 · 第一轮完整往返 ──
+ wire({id:'umsg',ph:2,from:'web',to:'server',flight:'用户消息（outbound）',fcls:'f-rest',
+   kA:'req',logA:'POST /web/sessions/:id/events {type:user}',
+   capA:'网页发话：『帮我看看这个项目结构』',
+   tA:'用户输入',bA:'POST /web/sessions/:id/events，direction=outbound——"出站"指发往你机器的方向（control.ts:63-79）',
+   kB:'sys',logB:'publishSessionEvent direction=outbound seqNum=1',
+   capB:'登记为出站事件：领 seqNum，进会话总线',
+   tB:'入总线',bB:'publishSessionEvent 领单调递增 seqNum；入站/出站都存进总线缓冲，供 WS 重放与 SSE 续传（event-bus.ts：>5000 截半）'}),
+ wire({id:'push',ph:2,from:'server',to:'child',flight:'WS 推送 outbound',fcls:'f-ws',
+   kA:'ws',logA:'WS → bridge (outbound)',
+   capA:'WS 只放出站方向：推给子进程',
+   tA:'定向推送',bA:'总线订阅回调过滤 direction===\'outbound\'，ws.send 一行 JSON + 换行（ws-handler.ts:72-84）',
+   kB:'ws',logB:'inputStream.write(data) → 等价用户输入',
+   capB:'写进 inputStream——这就是『用户打了字』，等价 REPL 开跑',
+   tB:'等价用户输入',bB:'RemoteIO onData → inputStream.write；对 --print 流式循环这就是一条用户消息，QueryEngine / 权限 / 会话存储与终端版同一套（remoteIO.ts:98-103）'}),
+ S({id:'work1',ph:2,lane:'child',dur:1150,
+   cap:'子进程干活：调模型、执行工具，回答一行行写 stdout',
+   t:'回合执行',b:'模型流式回答 + 工具执行；过程与结果按 stream-json 格式逐行写 stdout（user / assistant / result / control_request）',
+   log:'stdout NDJSON: {"type":"assistant", …} 逐行'}),
+ wire({id:'back',ph:2,from:'child',to:'server',flight:'NDJSON 回推（inbound）',fcls:'f-ws',
+   kA:'ws',logA:'WS ← bridge (inbound NDJSON)',
+   capA:'stdout 每行 JSON 经 WS 回推',
+   tA:'回推',bA:'按行分隔解析，逐行 ingestBridgeMessage（ws-handler.ts:123-141）',
+   kB:'sys',logB:'ingestBridgeMessage → publish inbound seqNum=2…',
+   capB:'归一化成入站事件入总线（seqNum 递增，缓冲留作重放）',
+   tB:'归一化入总线',bB:'ingestBridgeMessage：按 message.role 推断类型（user/assistant/result）、从 content 块抽文本组装 payload → publish inbound（ws-handler.ts:173-250）'}),
+ wire({id:'sse',ph:2,from:'server',to:'web',flight:'SSE 下发',fcls:'f-sse',
+   kA:'sse',logA:'SSE → web · id: seqNum · event: message',
+   capA:'同一事件推上 SSE 流',
+   tA:'SSE 下发',bA:'data: {type, payload, direction, seqNum}——网页按 seqNum 保证有序',
+   kB:'sse',logB:'web 渲染 assistant 气泡',
+   capB:'网页渲染回答——走完 web→服务器→子进程→服务器→web 一整圈',
+   tB:'渲染回答',bB:'按方向区分气泡：outbound 是用户说的，inbound 是 Claude 答的；这条环每条消息都要走一遍'}),
+
+ // ── 第 4 幕 · 权限岔路 ──
+ S({id:'permreq',ph:3,lane:'child',dur:1100,
+   cap:'模型要用写工具：子进程举手要授权',
+   t:'权限请求',b:'工具调用需要授权时，子进程发 type=control_request（subtype=can_use_tool），权限判定挂起等待网页那头的答复',
+   log:'control_request subtype=can_use_tool',
+   fly:['child','server','权限请求 can_use_tool','f-ctrl'],extra:'c-ctrl'}),
+ S({id:'permfwd',ph:3,lane:'server',dur:1000,
+   cap:'权限请求转 SSE 送往网页',
+   t:'转送网页',b:'按 inbound 事件入总线、推上 SSE——和普通回答同一条转发链路',
+   log:'SSE → web permission_request',
+   fly:['server','web','permission_request','f-ctrl']}),
+ S({id:'permdec',ph:3,lane:'web',dur:1200,
+   cap:'网页弹授权框，用户点『允许』回话',
+   t:'用户裁决',b:'授权框四个选项：允许 / 总是允许 / 拒绝 / 总是拒绝；点了允许 → POST /web/sessions/:id/control 回 control_response（control.ts:76-79）',
+   log:'POST /web/sessions/:id/control {behavior: allow}',
+   fly:['web','server','control_response(allow)','f-ctrl'],extra:'c-ctrl'}),
+ S({id:'permback',ph:3,lane:'server',dur:1000,
+   cap:'裁决推回子进程：allow 放行 / deny 拒绝',
+   t:'裁决送达',b:'control_response 作为 outbound 事件经 WS 推回子进程，resolve 那个挂起的权限 Promise——allow 放行执行，deny 拒绝并告知模型',
+   log:'WS → bridge control_response(allow)'}),
+ S({id:'toolres',ph:3,lane:'child',dur:1100,
+   cap:'工具执行，结果复用同一条回传链路回网页',
+   t:'工具结果回传',b:'执行结果同样走 NDJSON → inbound → SSE 回网页（复用第 3 幕的回推链路）；之后模型带着工具结果继续生成',
+   log:'tool result → inbound → SSE'}),
+
+ // ── 第 5 幕 · 第二轮与关机 ──
+ wire({id:'umsg2',ph:4,from:'web',to:'server',flight:'第二条用户消息',fcls:'f-rest',
+   kA:'req',logA:'POST /web/sessions/:id/events {type:user} #2',
+   capA:'第二轮：用户再发『总结一下』——同一个环再转一圈',
+   tA:'第二轮消息',bA:'循环语义：每条用户消息都重走出站 → WS → inputStream 同一条环，只是上下文更长',
+   kB:'sys',logB:'publish direction=outbound seqNum=N+1',
+   capB:'第二条出站事件入总线（每条消息都走同样的环）',
+   tB:'再次入总线',bB:'新 seqNum；子进程把它当排队输入依次处理'}),
+ S({id:'run2',ph:4,lane:'child',dur:1150,
+   cap:'子进程产出最终 result（success，带用量），经 WS 回推',
+   t:'产出并回推 result',b:'type=result · subtype=success，附 input/output token 用量与回合统计；与其他 NDJSON 行同一条通道回传：stdout → WS → ingestBridgeMessage',
+   log:'result subtype=success · WS ← bridge {"type":"result"}',
+   fly:['child','server','result','f-ws']}),
+ S({id:'resultfwd',ph:4,lane:'server',dur:1000,
+   cap:'入总线转 SSE——网页标记回合完成',
+   t:'SSE 终局',b:'网页收到 result 消息，回合标记完成（用量、耗时落格）',
+   log:'SSE → web {"type":"result"}',
+   fly:['server','web','result','f-sse']}),
+ S({id:'childexit',ph:4,lane:'child',dur:1000,
+   cap:'回合完成，--print 子进程自然退出（exit 0）',
+   t:'子进程退出',b:'--print 一轮 query 结束即退出；sessionRunner 通过 handle.done 感知，stdout/stderr 都已收干',
+   log:'child exit 0 → handle.done'}),
+ S({id:'done',ph:4,lane:'bridge',dur:1200,
+   cap:'本地收尾：清簿记、工单置 completed、归档会话',
+   t:'onSessionDone',b:'清 activeSessions / 超时定时器 / token 刷新 / 工作树；stopWorkWithRetry 置工单 completed（completedWorkIds 防重投）+ archiveSession 归档（bridgeMain.ts:442-561）',
+   log:'stopWork → completed · archiveSession'}),
+ S({id:'shutdown',ph:4,lane:'bridge',dur:1250,
+   cap:'注销环境（网页上机器转离线），进程退出 0——流程结束',
+   t:'关机序列',b:'单会话模式停止轮询 → 等所有清理落定 → deregisterEnvironment（网页上你的机器转为离线）→ clearBridgePointer → process.exit(0)（bridgeMain.ts:1530-1601）；多会话模式则只归档这个会话，继续轮询等新工单',
+   log:'deregisterEnvironment → clearBridgePointer → process.exit(0)',
+   extra:'c-final'})
+);
+
+// ---------- engine ----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.bridge.innerHTML='';feeds.server.innerHTML='';feeds.child.innerHTML='';feeds.web.innerHTML='';
+  linesEl.innerHTML='';
+}
+function applyStep(i){
+  var s=steps[i];
+  addEntry(s.lane,s.t,s.b,s.extra);
+  if(s.log)addLog(s.logKind||'sys',s.log);
+}
+function setFocus(s){
+  STATIONS.forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!s){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.lane].classList.add('hot');
+  STATIONS.forEach(function(k){if(k!==s.lane)lanes[k].classList.add('dim')});
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  if(idx<0){
+    capEl.textContent='就绪 · 点击 ▶ 播放';capEl.classList.add('empty');
+    readEl.textContent='就绪';
+  }else{
+    capEl.classList.remove('empty');
+    capEl.textContent=steps[idx].cap+(idx>=n-1?' —— 流程结束':'');
+    readEl.innerHTML=(idx>=n-1)?'<span class="fin">✓ 播放完毕</span>':('步骤 <b>'+(idx+1)+'/'+n+'</b>');
+  }
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  addEntry(s.lane,s.t,s.b,s.extra);
+  if(s.log)addLog(s.logKind||'sys',s.log);
+  if(s.fly){try{fly(s.fly.from,s.fly.to,s.fly.label,s.fly.cls,700)}catch(e){}}
+  setFocus(s);
+  updateUI();
+  clearTimeout(timer);
+  timer=setTimeout(next,s.dur/speed);
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].cap;
+      s.addEventListener('click',function(){pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){pause();renderTo(-1)};
+$('b-prev').onclick=function(){pause();renderTo(idx-1)};
+$('b-next').onclick=function(){pause();renderTo(idx+1)};
+$('b-end').onclick=function(){pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){toggle()};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();toggle()}
+  else if(e.key==='ArrowRight'){pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){pause();renderTo(-1)}
+});
+
+// test hooks
+window.__goto=function(i){pause();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+
+// ---------- selftest ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  var lines=[],pass=0,fail=0;
+  function rec(name,ok,detail){
+    lines.push((ok?'PASS':'FAIL')+' · '+name+(ok?'':' —— '+(detail||'')));
+    ok?pass++:fail++;
+  }
+  try{
+    // 1. 步数 > 0
+    rec('步数 > 0（实际 '+steps.length+' 步）',steps.length>0);
+    // 2. 逐步 __goto 无异常
+    var err2=null;
+    try{for(var i=0;i<steps.length;i++)window.__goto(i)}
+    catch(e){err2=e}
+    rec('逐步 __goto(0..'+(steps.length-1)+') 无异常',!err2,err2?String(err2):'');
+    // 3. 字幕文本随步变化（非空且全唯一）
+    var caps=[],ok3=true,distinct=0;
+    try{
+      for(var j=0;j<steps.length;j++){window.__goto(j);caps.push(capEl.textContent)}
+      var uniq=caps.filter(function(v,ix,a){return a.indexOf(v)===ix});
+      distinct=uniq.length;
+      ok3=caps.every(function(c){return c&&c.length>3})&&distinct===steps.length;
+    }catch(e){ok3=false}
+    rec('字幕文本随步变化（'+distinct+'/'+steps.length+' 个不同字幕）',ok3);
+    // 4. 布局恒定：多次 seek 之间播放按钮坐标不变
+    var r0,r1,r2,ok4=true;
+    try{
+      window.__goto(-1);r0=$('b-play').getBoundingClientRect();
+      window.__goto(Math.floor(steps.length/2));r1=$('b-play').getBoundingClientRect();
+      window.__goto(steps.length-1);r2=$('b-play').getBoundingClientRect();
+      ok4=r0.top===r1.top&&r1.top===r2.top&&r0.left===r1.left&&r1.left===r2.left;
+    }catch(e){ok4=false}
+    rec('控制栏坐标恒定（多次 seek 不位移）',ok4);
+    // 5. __goto(-1) 重置回空态
+    window.__goto(-1);
+    var empty=STATIONS.every(function(k){return feeds[k].childElementCount===0});
+    var logEmpty=linesEl.childElementCount===0;
+    var capInit=capEl.textContent.indexOf('就绪')>=0;
+    rec('__goto(-1) 重置回空态（泳道空 / 日志空 / 字幕=就绪）',empty&&logEmpty&&capInit,
+      'feeds='+(empty?'空':'非空')+' log='+(logEmpty?'空':'非空')+' cap='+capEl.textContent.slice(0,20));
+    // 6. window.onerror 为空
+    rec('window.onerror 为空（运行零报错）',__errs.length===0,__errs.join(' ; '));
+  }catch(e){
+    lines.push('FAIL · selftest 自身异常 —— '+String(e));fail++;
+  }
+  lines.push('----');
+  lines.push('selftest 结果：PASS '+pass+' / FAIL '+fail);
+  pre.textContent=lines.join('\n');
+  pre.style.display='block';
+}
+if(/selftest=1/.test(location.search)){setTimeout(runSelfTest,30)}
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

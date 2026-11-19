@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ink 单帧渲染管线播放器：React commit → yoga 布局 → 屏幕缓冲 → diff → 终端字节 → 帧遥测</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --violet:#6250d6; --violet-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1500px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:24px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
+
+#sticky-top{position:sticky;top:0;z-index:30;margin:12px 0 10px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.08);padding:10px 6px 0}
+#transport{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 6px 8px}
+#transport .btns{display:flex;gap:6px;flex-wrap:wrap}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 13px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:92px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#transport button.danger{border-color:var(--red);color:var(--red)}
+#transport button.danger:hover{background:var(--red-f)}
+#bar{flex:1;min-width:300px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:260px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#caption{padding:2px 6px 10px;font-size:15.5px;font-weight:700;color:var(--ink);border-top:1px solid var(--hair);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#caption.fin{color:var(--good)}
+
+#stage{display:grid;grid-template-columns:218px 306px 240px 358px 1fr;gap:14px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:760px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+.lane>.h{padding:9px 12px;font-size:13.5px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:7px;position:relative}
+.lane>.h .dot{width:10px;height:10px;border-radius:50%;flex:0 0 auto}
+.lane>.h .tag{font-size:9.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 5px;font-family:var(--mono);white-space:nowrap}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;margin-left:auto;text-align:right}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.5;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--sec)}100%{box-shadow:inset 0 0 0 transparent}}
+#lane-react .h{border-bottom:2px solid var(--blue)}
+#lane-layout .h{border-bottom:2px solid var(--orange)}
+#lane-diff .h{border-bottom:2px solid var(--violet)}
+#lane-term .h{border-bottom:2px solid var(--green)}
+#lane-tele .h{border-bottom:2px solid var(--sec)}
+
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.4;word-break:break-all}
+.chip.msg{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.blk{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
+.chip.df{background:var(--violet-f);border-color:var(--violet);color:var(--ink)}
+.chip.act{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.tok{background:#f4f4f2;border-color:var(--line);color:var(--ink)}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+
+.mem{flex:0 0 auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:9px 12px;display:flex;flex-direction:column;gap:6px}
+.mem-h{font-size:11.5px;font-weight:700;color:var(--sec)}
+.mem-h small{font-weight:400;color:var(--mut);margin-left:5px;font-size:10px}
+.bufl{font-size:11px;font-family:var(--mono);display:flex;gap:6px;align-items:baseline}
+.bufl .k{flex:0 0 76px;color:var(--mut)}
+.bufl .v{color:var(--ink);background:var(--white);border:1px solid var(--hair);border-radius:6px;padding:1px 7px;flex:1;word-break:break-all}
+#term-preview{font-family:var(--mono);font-size:12px;white-space:pre;background:var(--white);border:1px solid var(--hair);border-radius:8px;padding:7px 10px;color:var(--ink);line-height:1.6;min-height:118px}
+.mem.glow{border-color:var(--green);box-shadow:0 0 0 2px rgba(27,175,122,.25)}
+.flash{animation:fl .7s ease}
+@keyframes fl{0%{background:var(--orange-f)}100%{background:var(--white)}}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
+#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
+#stage.spot #lane-react.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#stage.spot #lane-layout.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#stage.spot #lane-diff.hot{box-shadow:0 0 0 2px var(--violet),0 10px 30px rgba(98,80,214,.25)}
+#stage.spot #lane-term.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+#stage.spot #lane-tele.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.15)}
+.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.ev{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.frame{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.diff{background:var(--violet-f);border:1.5px solid var(--violet)}
+.flight.tele{background:#f4f4f2;border:1.5px solid var(--sec)}
+.flight.loop{background:var(--green-f);border:1.5px dashed var(--green);color:var(--ink)}
+
+#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
+#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
+#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:190px;flex:0 0 auto}
+#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
+#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
+.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
+.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
+.brow b{color:var(--ink)}
+.brow span{color:var(--sec)}
+#break-panel .rec{width:420px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
+#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
+#break-panel .rec li{margin-left:16px;margin-bottom:5px}
+
+#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
+#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
+#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
+#lines{height:170px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
+#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px}
+#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
+#lines .ln .ev{font-weight:700}
+#lines .ln.u .ev{color:var(--blue)}
+#lines .ln.m .ev{color:var(--violet)}
+#lines .ln.sys{color:var(--mut);font-style:italic}
+#lines .ln.brk{color:var(--red);font-weight:700}
+#lines .ln.lost{color:#b3b2ad}
+#lines .ln.lost .ev{color:#b3b2ad}
+
+#notes{margin-top:12px;background:var(--white);border:1px dashed var(--line);border-radius:12px;padding:10px 14px;font-size:12px;color:var(--sec)}
+#notes .nt{font-weight:700;color:var(--ink);margin-bottom:4px}
+#notes ul{margin-left:16px}
+#notes li{margin-bottom:3px}
+
+.legend{margin-top:12px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:7px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:14px;font-size:11px;color:var(--mut);line-height:1.6}
+#selftest-result{font-family:var(--mono);font-size:11.5px;color:var(--sec);white-space:pre-wrap;margin:10px 2px 0}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>Ink 单帧渲染管线播放器：React commit → yoga 布局 → 屏幕缓冲 → diff → 终端字节 → 帧遥测</h1>
+  <div class="sub">终端上 60 次/秒的流畅画面 = 这条管线每 <b>16ms</b> 完整跑一遍 —— 本页拆开其中<b>一帧</b>看（以全屏 REPL 的 alt-screen 为例；站点与代码行为照录 @ant/ink 源码）</div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 帧 · 流式文本追加（完整走一轮）</span>
+  <span class="p1" data-ph="1">第 2 帧 · 又一个 delta（同路径，简写）</span>
+  <span class="p2" data-ph="2">退出 · 管线静默与收尾</span>
+</div>
+
+<div id="sticky-top">
+  <div id="transport">
+    <div class="btns">
+      <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+      <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+      <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+      <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+      <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+      <button id="b-brk" class="danger" title="中断演示 (B)">⚡ 中断演示</button>
+      <button id="b-spot" title="聚焦模式：高亮当前站点，其余置灰">◆ 聚焦开</button>
+    </div>
+    <div id="bar"></div>
+    <div id="speed">
+      <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+    </div>
+    <div id="readout">就绪 · 点击 ▶ 播放</div>
+  </div>
+  <div id="caption">就绪 —— 点击 ▶ 播放（空格）</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-react">
+    <div class="h" id="h-react"><span class="dot" style="background:var(--blue)"></span>React / reconciler <span class="tag">reconciler.ts:264</span><small>setState → commit</small></div>
+    <div class="feed" id="feed-react"></div>
+    <div class="lane-foot"><b>改动从这里进树</b>：setState → 并发提交 → commit 挂钩。<br>resetAfterCommit 先于 React 布局阶段执行 —— 真正的渲染被推迟成微任务。</div>
+  </div>
+  <div class="lane" id="lane-layout">
+    <div class="h" id="h-layout"><span class="dot" style="background:var(--orange)"></span>布局与屏幕缓冲 <span class="tag">renderer.ts · ink.tsx:507</span><small>yoga · cells · 双缓冲</small></div>
+    <div class="feed" id="feed-layout"></div>
+    <div class="mem" id="mem-layout">
+      <div class="mem-h">双缓冲 frontFrame / backFrame<small>ink.tsx:693-694 每帧交换</small></div>
+      <div class="bufl"><span class="k">frontFrame</span><span class="v" id="buf-front">帧 #0（上一帧 · diff 基准）</span></div>
+      <div class="bufl"><span class="k">backFrame</span><span class="v" id="buf-back">复用池（下帧写入）</span></div>
+      <div class="bufl"><span class="k">screen cells</span><span class="v" id="buf-cells">—</span></div>
+    </div>
+    <div class="lane-foot"><b>yoga 一次算完全树坐标</b>；renderNodeToOutput 走 blit 快路径 —— 没变的子树整块拷贝，只有变化的格子进 damage。</div>
+  </div>
+  <div class="lane" id="lane-diff">
+    <div class="h" id="h-diff"><span class="dot" style="background:var(--violet)"></span>Diff 引擎 <span class="tag">log-update.ts:131</span><small>diffEach 增量</small></div>
+    <div class="feed" id="feed-diff"></div>
+    <div class="lane-foot"><b>只比 damage 圈出的格子</b>：变化格产出 patch。<br>resize / 老式 Windows 控制台 → 整体换成全量重绘（用闪烁换正确，自愈花屏）。</div>
+  </div>
+  <div class="lane" id="lane-term">
+    <div class="h" id="h-term"><span class="dot" style="background:var(--green)"></span>终端 stdout <span class="tag">terminal.ts:188</span><small>optimize · 原子写</small></div>
+    <div class="feed" id="feed-term"></div>
+    <div class="mem" id="mem-term">
+      <div class="mem-h">物理终端画面<small>示意缩略 · 只有 writeDiffToTerminal 能改它</small></div>
+      <pre id="term-preview"></pre>
+    </div>
+    <div class="lane-foot"><b>BSU/ESU（DEC 2026）</b>把一帧字节包成原子块：要么整帧可见、要么全不可见；tmux 等不支持时退回逐行写。帧尾把物理光标停回输入插入符。</div>
+  </div>
+  <div class="lane" id="lane-tele">
+    <div class="h" id="h-tele"><span class="dot" style="background:var(--sec)"></span>帧遥测 <span class="tag">ink.tsx:867</span><small>onFrame 记账</small></div>
+    <div class="feed" id="feed-tele"></div>
+    <div class="lane-foot"><b>每帧报一次</b> durationMs 与各相位耗时（renderer / diff / optimize / write / yoga / commit）；FpsTracker 与 StatsStore 记账，可选逐帧 JSONL 落盘。</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="break-panel">
+  <div class="bt">⚡ 中断现场<small>断在「diff 已算出、双缓冲已交换、字节还没写进 stdout」</small></div>
+  <div class="rows">
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>双缓冲已交换</b><span>frontFrame = 帧 #1 —— 内存里的「真相」已切换（ink.tsx:693-694 已执行）</span></div>
+    <div class="brow"><span class="d" style="background:var(--good)"></span><b>Diff patch 完整</b><span>2 个补丁已在 optimized 数组里等待写入</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>终端画面缺失</b><span>writeDiffToTerminal 未执行 —— 屏幕停在上一帧，一行字节都没收到</span></div>
+    <div class="brow"><span class="d" style="background:var(--red)"></span><b>onFrame 未触发</b><span>本帧没有记账 —— FpsTracker 少一帧</span></div>
+  </div>
+  <div class="rec">
+    <div class="rt">怎么恢复（代码自带的自愈）</div>
+    <ul>
+      <li>onRender 不会重跑本帧 —— 漏写的格子随<b>下一帧 diff 自动补写</b>：frontFrame 是基准，物理终端旧内容与之差分即得补丁</li>
+      <li><b>alt-screen</b>：每帧前置 CSI H 锚定物理光标 —— 外部把光标挪走也能自愈（ink.tsx:665-677）</li>
+      <li><b>主屏</b>：光标前导码先把物理光标移回 prevFrame.cursor 再跑 diff（ink.tsx:783-789）</li>
+      <li><b>resize / 老控制台</b>：fullResetSequence 全量重绘兜底（必闪烁，flicker 上报）</li>
+    </ul>
+  </div>
+</div>
+
+<div id="console">
+  <div class="ch">步骤日志（真实单元 · 机制旁白分开着色）<span class="lg">蓝 = 真实单元/动作 · 紫 = 机制旁白（不可观测的内部行为）</span></div>
+  <div id="lines"></div>
+</div>
+
+<div id="notes">
+  <div class="nt">考据注记（对照 ui-repl-ink 证据档案的 uncertainties）</div>
+  <ul>
+    <li>时序数字（16ms 节流、4ms drain 续排、5 分钟 resetPools）照录源码常量与注释；本任务只读取证，未做运行时验证。</li>
+    <li>flicker 上报分支源码写作 now − lastFlickerTime &lt; 1000 才 logEvent（与「1 秒去重」的直觉相反，疑为反编译还原差异）—— 照录，不修正。</li>
+    <li>unmount 最后一帧走 renderPreviousOutput_DEPRECATED（命名自带 DEPRECATED）—— 照录。</li>
+    <li>「中断演示」断点选在双缓冲交换之后、stdout 写入之前 —— 内存真相先于物理终端切换，是这条管线刻意的设计（靠下一帧 diff 自愈）。</li>
+  </ul>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>React / commit</span>
+  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>布局 / 屏幕缓冲</span>
+  <span class="k"><span class="sw" style="background:var(--violet-f);border-color:var(--violet)"></span>Diff 引擎</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>终端写入</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--sec)"></span>帧遥测</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 中断演示 · 地址加 ?selftest=1 跑自检 · ?step=N 直达某步</div>
+<footer>流程：单帧渲染管线（slug: ui-repl-ink · frame-pipeline）。证据（只读取证）：packages/@ant/ink/src/core/{ink.tsx:507-884 · reconciler.ts:264-322 · renderer.ts:39-178 · log-update.ts:131-210,528-538 · terminal.ts:188-246 · constants.ts:2} · src/interactiveHelpers.tsx:318-365 —— 仓库 C:/Users/naie/Desktop/claude-code。终端画面为示意缩略，场景取「流式回答 + spinner」。</footer>
+</div>
+<pre id="selftest-result"></pre>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var STATIONS=['react','layout','diff','term','tele'];
+var lanes={react:$('lane-react'),layout:$('lane-layout'),diff:$('lane-diff'),term:$('lane-term'),tele:$('lane-tele')};
+var feeds={react:$('feed-react'),layout:$('feed-layout'),diff:$('feed-diff'),term:$('feed-term'),tele:$('feed-tele')};
+var heads={react:$('h-react'),layout:$('h-layout'),diff:$('h-diff'),term:$('h-term'),tele:$('h-tele')};
+var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout'), captionEl=$('caption');
+var bufF=$('buf-front'), bufB=$('buf-back'), bufC=$('buf-cells'), prevEl=$('term-preview');
+var activeAnims=[]; var breakMode=false; var focusMode=true;
+window.__errs=[];
+window.addEventListener('error',function(e){window.__errs.push((e&&e.message)||'error')});
+
+// —— 终端画面（示意缩略）：初始 = 帧 #0 的物理画面 ——
+var SCR0=' ❯ 天气怎么样？\n ⠋ 旧金山 21°C\n ▍';
+var SCR1=' ❯ 天气怎么样？\n ⠋ 旧金山 21°C\n   晴，适合出行。\n ▍';
+var SCR2=' ❯ 天气怎么样？\n ⠙ 旧金山 21°C\n   晴，适合出行。\n ▍';
+var SCRF=' ❯ 天气怎么样？\n ✓ 完成 · 旧金山 21°C · 晴，适合出行。';
+function setScr(t){prevEl.textContent=t}
+function setBuf(f,b,c){bufF.textContent=f;bufB.textContent=b;bufC.textContent=c}
+var BUF0F='帧 #0（上一帧 · diff 基准）',BUF0B='复用池（下帧写入）',BUF0C='—';
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function addLog(kind,text){
+  var d=document.createElement('div'); d.className='ln '+kind;
+  if(kind==='sys'||kind==='brk'){d.textContent=text}
+  else{
+    var i=text.indexOf('·');
+    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
+      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
+    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
+  }
+  linesEl.appendChild(d);
+  var cur=linesEl.querySelectorAll('.ln.cur'); for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
+  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
+  linesEl.scrollTop=linesEl.scrollHeight; return d;
+}
+function fly(from,to,label,cls,dur){
+  var a=lanes[from].getBoundingClientRect(), b=lanes[to].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
+  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
+  f.style.left=x0+'px'; f.style.top=y0+'px';
+  flightsEl.appendChild(f);
+  var dx=x1-x0;
+  try{
+    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){setTimeout(function(){f.remove()},dur||700)}
+  pulse(to);
+}
+function flash(node){node.classList.remove('flash');void node.offsetWidth;node.classList.add('flash')}
+var glowT=null;
+function memGlow(id){var m=$(id);m.classList.remove('glow');void m.offsetWidth;m.classList.add('glow');clearTimeout(glowT);glowT=setTimeout(function(){m.classList.remove('glow')},900)}
+
+function setFocus(s){
+  var stage=document.getElementById('stage');
+  STATIONS.forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
+  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
+  stage.classList.add('spot');
+  lanes[s.focus].classList.add('hot');
+  STATIONS.forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
+  if(s.mem)memGlow(s.mem);
+}
+
+// ══ 步骤总表：第 1 帧 · 完整走一轮（React → 布局/缓冲 → diff → 终端 → 遥测）══
+var steps=[].concat(
+{id:'f1-set',ph:0,dur:820,focus:'react',lab:'流式 delta 到达：setStreamingText 追加一行',log:null,
+ state:function(){chip('react','msg','setState · streamingText += 「\\n晴，适合出行。」')},live:null},
+{id:'f1-commit',ph:0,dur:880,focus:'react',lab:'React 并发提交：更新 ink 宿主树',
+ log:'React commit · 并发根 ConcurrentRoot —— reconciler 增/改 ink-text 宿主节点（dom 树），渲染可让步保输入响应',logKind:'u',
+ state:function(){chip('react','msg','reconciler：更新 ink-text 节点')},live:null},
+{id:'f1-hook',ph:0,dur:800,focus:'react',lab:'commit 完成钩子 resetAfterCommit 触发',
+ log:'resetAfterCommit · 依次调 rootNode.onComputeLayout() → rootNode.onRender()（reconciler.ts:264-322）',logKind:'u',
+ state:function(){chip('react','msg','resetAfterCommit(rootNode)')},live:null},
+{id:'f1-yoga',ph:0,dur:900,focus:'react',lab:'yoga 一次算完全树 flexbox 布局',
+ log:'onComputeLayout · rootNode.yogaNode.setWidth(terminalColumns); calculateLayout(terminalColumns)（ink.tsx:314-331）',logKind:'u',
+ state:function(){chip('react','msg','calculateLayout(96 列) · 缓存命中的节点跳过')},live:null},
+{id:'f1-sched',ph:0,dur:850,focus:'react',lab:'scheduleRender：16ms 节流 + 微任务推迟',
+ log:'scheduleRender · throttle(deferredRender, FRAME_INTERVAL_MS=16, {leading,trailing}) + queueMicrotask —— commit 钩子先于 React 布局阶段，直接渲染会让光标声明滞后一帧（ink.tsx:277-290）',logKind:'m',
+ state:function(){chip('react','msg','throttle(16ms) → queueMicrotask(onRender)')},
+ live:function(){fly('react','layout','onRender()（microtask）','ev',700)}},
+{id:'f1-onrender',ph:0,dur:800,focus:'layout',lab:'onRender 开始：清 drain 定时器、量终端尺寸',
+ log:'onRender() · clearTimeout(drainTimer)；terminalWidth = effectiveColumns(stdout.columns)（ink.tsx:507-537）',logKind:'u',
+ state:function(){chip('layout','blk','onRender() · 96×8（示意）')},live:null},
+{id:'f1-renderer',ph:0,dur:850,focus:'layout',lab:'renderer 启动：从 backFrame 拿复用屏缓冲',
+ log:'this.renderer({frontFrame, backFrame, isTTY, terminalWidth, terminalRows, altScreen, prevFrameContaminated})（ink.tsx:529-537）',logKind:'u',
+ state:function(){chip('layout','blk','renderer({frontFrame, backFrame, …})');setBuf(BUF0F,'复用屏缓冲 · Output 挂在上面',BUF0C)},live:null},
+{id:'f1-blit',ph:0,dur:900,focus:'layout',lab:'renderNodeToOutput：blit 快路径 + damage 裁剪',
+ log:'renderNodeToOutput · renderNodeToOutput(node, output, {prevScreen}) —— prevScreen blit 恢复 O(未变) 快路径；布局位移/选择态时强制全屏 damage（renderer.ts:131-138 · ink.tsx:656-663）',logKind:'m',
+ state:function(){chip('layout','blk','blit：未变子树整块拷贝 · damage 只圈变化区')},live:null},
+{id:'f1-cells',ph:0,dur:850,focus:'layout',lab:'Output.write：字符逐格写进 screen cells',
+ log:'Cell 单元 · Cell {char, styleId, width, hyperlink} → screen cells 打包数组（output.get()）',logKind:'u',
+ state:function(){chip('layout','blk','Cell ×768（示意 96×8）· charPool/stylePool 池化');setBuf(BUF0F,'复用屏缓冲 · Output 挂在上面','768 格已写入（等待 diff 比较）')},live:null},
+{id:'f1-frame',ph:0,dur:800,focus:'layout',lab:'Frame 定型：{screen, viewport, cursor, scrollHint}',
+ log:'Frame 单元 · Frame {screen, viewport, cursor, scrollHint, scrollDrainPending}（renderer.ts:147-177）',logKind:'u',
+ state:function(){chip('layout','blk','Frame #1 定型 · 含新行「晴，适合出行。」');setBuf('帧 #1（待比较）','复用屏缓冲 · Output 挂在上面','768 格 · Frame #1')},live:null},
+{id:'f1-overlay',ph:0,dur:760,focus:'layout',lab:'本帧无选择/搜索高亮 —— overlay 直写路径跳过',
+ log:'机制旁白 · applySelectionOverlay / applySearchHighlight 直写 screen buffer（不追踪 damage）→ 强制全屏比较；prevFrameContaminated 让下一帧也全比（ink.tsx:625-663,837）',logKind:'m',
+ state:function(){chip('layout','blk','selActive=false · 跳过 overlay')},live:null},
+{id:'f1-diff',ph:0,dur:900,focus:'diff',lab:'log.render：prevFrame 与新帧逐格比较',
+ log:'this.log.render(prevFrame, frame, altScreen, SYNC_OUTPUT_SUPPORTED)（ink.tsx:681-690）',logKind:'u',
+ state:function(){chip('diff','df','diffEach：只比 damage 区域')},
+ live:function(){fly('layout','diff','Frame #1','frame',650)}},
+{id:'f1-patch',ph:0,dur:850,focus:'diff',lab:'产出 Diff patch：只有第 3 行是新的 —— 终端还没收到任何字节',
+ log:'Diff patch 单元 · {type:"stdout", content:"   晴，适合出行。"} + 光标移动 —— 物理终端此刻仍是帧 #0',logKind:'u',
+ state:function(){chip('diff','df','diff: 2 patches（1 行内容 + 光标）')},live:null},
+{id:'f1-swap',ph:0,dur:820,focus:'layout',lab:'双缓冲交换：本帧成为下一帧的 diff 基准',mem:'mem-layout',
+ log:'this.backFrame = this.frontFrame; this.frontFrame = frame（ink.tsx:693-694）',logKind:'u',
+ state:function(){chip('layout','blk','frontFrame ↔ backFrame');setBuf('帧 #1（含新行 · diff 基准）','帧 #0（旧 front · 供复用）','768 格 · 已交换')},live:null},
+{id:'f1-opt',ph:0,dur:800,focus:'diff',lab:'optimize：合并相邻 patch、相对光标建模',
+ log:'optimize(diff) · VirtualScreen 相对光标建模 + 相邻 patch 合并（ink.tsx:726 · optimizer.ts）',logKind:'u',
+ state:function(){chip('diff','df','optimize(diff) → ~60 字节')},
+ live:function(){fly('diff','term','Diff ×2（ANSI 字节）','diff',680)}},
+{id:'f1-write',ph:0,dur:950,focus:'term',lab:'writeDiffToTerminal：BSU/ESU 把整帧包成原子块写入 stdout',mem:'mem-term',
+ log:'writeDiffToTerminal · BSU + 补丁字节 + ESU 拼成一个字符串、一次 stdout.write —— 单帧写入不可分割（terminal.ts:188-246）',logKind:'u',
+ state:function(){chip('term','act','BSU …diff… ESU · 1 次 write');setScr(SCR1);flash(prevEl)},live:null},
+{id:'f1-park',ph:0,dur:800,focus:'term',lab:'帧尾光标停靠：物理光标停回输入插入符',
+ log:'机制旁白 · declared cursor（nodeCache 绝对坐标）→ 帧尾 CUP 停靠 —— IME 预编辑/读屏跟随插入符；alt-screen 每帧 CSI H 自锚（ink.tsx:733-827）',logKind:'m',
+ state:function(){chip('term','act','cursorPosition(row,col) 停靠 + CSI H 锚定')},live:null},
+{id:'f1-onframe',ph:0,dur:850,focus:'tele',lab:'onFrame 回调：帧耗时 + 五段相位',
+ log:'onFrame({durationMs, phases:{renderer, diff, optimize, write, patches, yoga, commit}, flickers})（ink.tsx:867-883）',logKind:'u',
+ state:function(){chip('tele','tok','onFrame · 7 项相位耗时')},
+ live:function(){fly('term','tele','onFrame 事件','tele',700)}},
+{id:'f1-tele',ph:0,dur:800,focus:'tele',lab:'FpsTracker 记账（可选逐帧 JSONL）',
+ log:'fpsTracker.record(event.durationMs) · stats.observe("frame_duration_ms", event.durationMs)；CLAUDE_CODE_FRAME_TIMING_LOG 开启时逐帧 JSONL 落盘（interactiveHelpers.tsx:328-345）',logKind:'u',
+ state:function(){chip('tele','tok','fpsTracker.record · stats.observe')},live:null},
+{id:'f1-end',ph:0,dur:900,focus:'react',lab:'第 1 帧完成 —— 循环：任何新的 setState 都会再走一遍这条管线',
+ log:'机制旁白 · 第 1 帧结束 —— 跨帧存留的状态只有 frontFrame（下一帧的 diff 基准）；16ms 窗口重开，合并下一批 setState',logKind:'m',
+ state:function(){chip('react','msg','第 1 帧完成 · 等待下一批 setState')},
+ live:function(){fly('tele','react','循环 · 等待下一个 setState','loop',900)}}
+);
+
+// ══ 第 2 帧 · 同路径简写（循环语义）══
+steps=steps.concat(
+{id:'f2-set',ph:1,dur:800,focus:'react',lab:'第 2 帧：又一个 delta + spinner tick —— 16ms 窗口内合并成一次提交',
+ log:'机制旁白 · 帧节流合并：一帧窗口内的多次 setState 只渲染一次 —— 第 2 帧沿用同一条管线（REPL 侧另有 useDeferredValue 过渡渲染）',logKind:'m',
+ state:function(){chip('react','msg','setState ×2（delta + spinner tick）合并')},
+ live:function(){fly('react','layout','onRender()（第 2 帧）','ev',620)}},
+{id:'f2-fast',ph:1,dur:900,focus:'layout',lab:'commit → yoga → renderNodeToOutput：blit 命中绝大多数行',
+ log:'第 2 帧 blit 快路径 · prevScreen 整行拷贝 —— damage 只圈 spinner 格与新行；未变行 O(1) 恢复，未变子树不下探',logKind:'u',
+ state:function(){chip('layout','blk','blit：未变行整块拷贝 · damage=2 格');setBuf('帧 #2（spinner ⠙ + delta）','帧 #1','新帧 cells 写入中')},live:null},
+{id:'f2-diff',ph:1,dur:850,focus:'diff',lab:'diffEach 只比 damage：产出 1 个补丁',
+ log:'Diff patch 单元 · {type:"stdout", content:"⠙"} —— spinner 旋转一档，只有 1 个字符格变了',logKind:'u',
+ state:function(){chip('diff','df','diff: 1 patch · ⠙')},
+ live:function(){fly('layout','diff','Frame #2','frame',620)}},
+{id:'f2-write',ph:1,dur:900,focus:'term',lab:'BSU/ESU 原子写 + 光标停靠（同第 1 帧）—— 双缓冲已交换',mem:'mem-term',
+ log:'writeDiffToTerminal · BSU + "⠙" + ESU 一次写出 —— frontFrame=帧 #2 成为新基准',logKind:'u',
+ state:function(){chip('term','act','写 2 字节 + 光标停回插入符');setScr(SCR2);flash(prevEl)},
+ live:function(){fly('diff','term','Diff ×1','diff',650)}},
+{id:'f2-tele',ph:1,dur:850,focus:'tele',lab:'onFrame 记账 —— 循环继续，直到没有新的 setState',
+ log:'onFrame(第 2 帧) · 每帧都是完整一遍管线：commit → yoga → cells → diff → 原子写 → 遥测',logKind:'u',
+ state:function(){chip('tele','tok','onFrame · 第 2 帧')},live:null}
+);
+
+// ══ 退出 · 管线静默与收尾 ══
+steps=steps.concat(
+{id:'ex-idle',ph:2,dur:850,focus:'react',lab:'流结束：不再有 setState → 空帧走「零写」快速路径',
+ log:'机制旁白 · 空 diff 零写快速路径：hasDiff=false 且光标未动 → 不写 stdout（ink.tsx:728,775-778）',logKind:'m',
+ state:function(){chip('react','msg','无 setState · trailing 边缘渲染空 diff')},live:null},
+{id:'ex-drain',ph:2,dur:850,focus:'term',lab:'ScrollBox 若有未排空滚动差 → 4ms 续排一帧',
+ log:'frame.scrollDrainPending · this.drainTimer = setTimeout(() => this.onRender(), FRAME_INTERVAL_MS >> 2)（ink.tsx:851-853）',logKind:'u',
+ state:function(){chip('term','act','drain 续排：setTimeout(onRender, 4ms)')},live:null},
+{id:'ex-unmount',ph:2,dur:900,focus:'term',lab:'退出：unmount 渲染最后一帧 + writeSync 清理终端模式',mem:'mem-term',
+ log:'unmount() · this.onRender() → writeDiffToTerminal(terminal, optimize(renderPreviousOutput_DEPRECATED(frontFrame))) → writeSync(1, EXIT_ALT_SCREEN / DISABLE_MOUSE_TRACKING / SHOW_CURSOR …)（ink.tsx:1590-1644）',logKind:'u',
+ state:function(){chip('term','act','最后一帧 + writeSync 清理');setScr(SCRF);flash(prevEl)},live:null},
+{id:'ex-end',ph:2,dur:1000,focus:'tele',lab:'流程结束 —— 你看到的「流畅动画」，就是这条管线每 16ms 跑一遍的结果',
+ log:'流程结束 · 单帧管线：React commit → yoga 布局 → screen cells → diff → BSU/ESU 原子写 → onFrame 遥测，每 16ms 重复一次',logKind:'sys',
+ state:function(){chip('tele','tok','会话结束 · 帧管线静默')},live:null}
+);
+
+var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='f1-opt')return i}return -1})();
+
+// ---------- 引擎（确定性重建）----------
+var idx=-1, playing=false, timer=null, speed=1;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  for(var k=0;k<STATIONS.length;k++)feeds[STATIONS[k]].innerHTML='';
+  linesEl.innerHTML='';
+  setScr(SCR0);
+  setBuf(BUF0F,BUF0B,BUF0C);
+}
+function applyStep(i){var s=steps[i];if(s.state)s.state();if(s.log)addLog(s.logKind||'u',s.log)}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setFocus(idx>=0?steps[idx]:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else{$('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放'}
+  if(idx<0){
+    readout.innerHTML='就绪 · 点击 ▶ 播放';
+    captionEl.textContent='就绪 —— 点击 ▶ 播放（空格）';captionEl.classList.remove('fin');
+  }else if(idx>=n-1){
+    readout.innerHTML='<span class="fin">✓ 播放完毕</span> · '+steps[idx].lab;
+    captionEl.textContent='流程结束 —— '+steps[idx].lab;captionEl.classList.add('fin');
+  }else{
+    readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · '+steps[idx].lab;
+    captionEl.textContent='现在：'+steps[idx].lab;captionEl.classList.remove('fin');
+  }
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state)s.state();
+  if(s.log)addLog(s.logKind||'u',s.log);
+  if(s.live)try{s.live()}catch(e){}
+  setFocus(s);
+  updateUI();
+  timer=setTimeout(next,s.dur/speed);
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
+  updateUI();
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
+  next();
+}
+function toggle(){playing?pause():play()}
+
+function breakDemo(){
+  pause(); breakMode=true;
+  renderTo(BREAK_AT);
+  $('break-panel').classList.add('on');
+  addLog('brk','⚡ 中断 —— diff 已算出、双缓冲已交换，但 stdout 一个字节都没写 ↓');
+  for(var k=BREAK_AT+1;k<steps.length;k++){
+    if(steps[k].log){var d=addLog(steps[k].logKind||'u',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
+  }
+  readout.innerHTML='<b style="color:var(--red)">⚡ 中断现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 恢复';
+  captionEl.textContent='中断现场 —— 后续单元未到达（点击 ▶ 或进度条恢复）';
+}
+function exitBreak(){breakMode=false;$('break-panel').classList.remove('on');renderTo(idx)}
+
+// ---------- transport wiring ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){if(breakMode)exitBreak();pause();renderTo(kk)});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
+$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
+$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
+$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
+$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
+$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'◆ 聚焦开':'◆ 聚焦关';setFocus(idx>=0?steps[idx]:null)};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
+  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
+  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
+});
+
+// test/debug hooks
+window.__goto=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
+
+// ---------- selftest ----------
+function runSelfTest(){
+  var pre=$('selftest-result');
+  var out=[];
+  function rec(name,ok,extra){out.push((ok?'PASS':'FAIL')+' · '+name+(extra!=null?' — '+extra:''))}
+  try{
+    var n=steps.length;
+    rec('T1 步骤数 > 0',n>0,'steps='+n);
+    var caps=[];var ok2=true;
+    for(var i=0;i<n;i++){try{__goto(i);caps.push(captionEl.textContent)}catch(e){ok2=false;caps.push('ERR: '+e.message)}}
+    rec('T2 逐步 __goto(0..n-1) 无异常',ok2);
+    var seen={};for(var j=0;j<caps.length;j++)seen[caps[j]]=1;
+    var dc=0;for(var key in seen)dc++;
+    rec('T3 字幕文本随步变化',dc>=5,'distinct='+dc);
+    var ip=__idxOf('f1-patch'),iw=__idxOf('f1-write');
+    __goto(ip);
+    var inFlight=prevEl.textContent.indexOf('晴，适合出行')<0;
+    __goto(iw);
+    var landed=prevEl.textContent.indexOf('晴，适合出行')>=0;
+    rec('T4 在途时状态尚未变化（diff 产出后终端未变；写入落地后才变）',inFlight&&landed);
+    __goto(-1);
+    var feedsEmpty=true;
+    for(var f=0;f<STATIONS.length;f++)if(feeds[STATIONS[f]].children.length>0)feedsEmpty=false;
+    var logsEmpty=linesEl.children.length===0;
+    var cap0=captionEl.textContent;
+    rec('T5 __goto(-1) 重置回空态',feedsEmpty&&logsEmpty&&cap0.indexOf('就绪')===0,'feeds空='+feedsEmpty+' 日志空='+logsEmpty);
+    var r1=$('b-play').getBoundingClientRect();
+    __goto(4);var r2=$('b-play').getBoundingClientRect();
+    __goto(n-1);var r3=$('b-play').getBoundingClientRect();
+    rec('T6 控制按钮坐标恒定（布局零位移）',r1.top===r2.top&&r1.top===r3.top&&r1.left===r2.left);
+    rec('T7 window.onerror 无错误',(window.__errs||[]).length===0,'errors='+(window.__errs||[]).length);
+  }catch(e){
+    rec('TF 自检自身异常',false,String((e&&e.message)||e));
+  }
+  pre.textContent=out.join('\n');
+  window.__selftestDone=true;
+}
+
+renderTo(-1);
+(function(){
+  var m=location.search.match(/[?&]step=(-?\d+)/);
+  if(m){renderTo(parseInt(m[1],10))}
+})();
+if(location.search.indexOf('selftest=1')>=0){setTimeout(runSelfTest,80)}
+})();
+</script>
+</body>
+</html>

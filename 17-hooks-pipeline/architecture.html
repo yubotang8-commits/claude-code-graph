@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>17-hooks-pipeline · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：生命周期钩子管道</h1>
+<p class="sub">17-hooks-pipeline · 组成模块与调用关系</p>
+<p class="lead">「在主流程的固定时机插入并执行外部逻辑」由这些模块协作完成：各处时机触发 → 从五源合并的配置里匹配命中钩子 → 统一引擎并发执行（六条支路任选其一）→ 结果聚合成放行/阻断/改写决策回流权限与消息流；工具调用点是其中环节最完整的一条管道。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 880" width="1040" height="880" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行 1：触发点层 -->
+<rect x="60" y="36" width="440" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="280" y="66" class="n-title">工具调用点的拦截管道</text>
+<text x="280" y="88" class="n-sub">toolExecution.ts · toolHooks.ts</text>
+<text x="280" y="110" class="n-body">工具执行前拦截 → 权限判定 → 执行</text>
+<text x="280" y="132" class="n-body">→ 执行后处理 → 失败善后，环环可插手</text>
+
+<rect x="580" y="36" width="400" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="780" y="66" class="n-title">其他 20 余类时机触发</text>
+<text x="780" y="88" class="n-sub">processUserInput.ts · sessionStart.ts</text>
+<text x="780" y="110" class="n-body">用户提交 · 会话启停 · 回合停止 · 压缩</text>
+<text x="780" y="132" class="n-body">通知与问询等，各自就地调用引擎</text>
+
+<!-- 行 2：匹配器 + 配置来源 -->
+<rect x="220" y="196" width="440" height="96" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="440" y="228" class="n-title">事件匹配器</text>
+<text x="440" y="250" class="n-sub">hooks.ts · 约 5200 行</text>
+<text x="440" y="272" class="n-body">按事件名与工具名筛出本次命中的钩子</text>
+<text x="440" y="288" class="n-body">五源合并去重后交给引擎</text>
+
+<rect x="720" y="196" width="280" height="96" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="860" y="228" class="n-title">钩子配置五源合并</text>
+<text x="860" y="250" class="n-sub">hooksSettings.ts</text>
+<text x="860" y="272" class="n-body">设置文件三级 · 会话级技能声明</text>
+<text x="860" y="288" class="n-body">插件注册表 · 企业策略锁</text>
+
+<!-- 外部组件：技能与插件资产 -->
+<rect x="740" y="352" width="260" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="870" y="374" class="n-body">技能与插件资产注入</text>
+<text x="870" y="392" class="n-sub">组件 18-slash-skills-plugins</text>
+
+<!-- 行 3：执行引擎 -->
+<rect x="220" y="350" width="440" height="96" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="440" y="382" class="n-title">统一执行引擎</text>
+<text x="440" y="404" class="n-sub">与匹配器同一文件 · 信任门 + 并发调度</text>
+<text x="440" y="426" class="n-body">工作区未获信任则整体跳过（防远程执行）</text>
+<text x="440" y="446" class="n-body">命中钩子并发执行，超时即取消</text>
+
+<!-- 行 4：六条执行支路 -->
+<rect x="220" y="502" width="440" height="96" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="440" y="534" class="n-title">六条执行支路</text>
+<text x="440" y="556" class="n-sub">exec*Hook.ts</text>
+<text x="440" y="578" class="n-body">命令子进程 · HTTP 请求 · 回调直调</text>
+<text x="440" y="598" class="n-body">提示词与代理支路交给模型推理</text>
+
+<!-- 行 5：结果聚合 -->
+<rect x="220" y="654" width="440" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="440" y="686" class="n-title">结果聚合与决策注入</text>
+<text x="440" y="708" class="n-sub">types/hooks.ts · 退出码语义</text>
+<text x="440" y="730" class="n-body">放行 / 阻断 / 改写工具输入与输出</text>
+<text x="440" y="748" class="n-body">或直接注入权限决策，与权限判定竞争</text>
+
+<!-- 外部组件：权限判定 / 模型回合 -->
+<rect x="740" y="640" width="260" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="870" y="662" class="n-body">权限判定子系统</text>
+<text x="870" y="680" class="n-sub">组件 09-permission-pipeline</text>
+
+<rect x="740" y="700" width="260" height="44" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="870" y="722" class="n-body">模型回合与消息流</text>
+<text x="870" y="740" class="n-sub">组件 02-query-turn-loop</text>
+
+<!-- 底座 -->
+<rect x="60" y="790" width="940" height="56" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="816" class="n-title">会话状态底座（钩子注册表与统计被上方读写）</text>
+<text x="530" y="838" class="n-sub">会话级注册表 · 插件注册表 · 耗时统计</text>
+
+<!-- 连线 -->
+<path class="edge" d="M280,140 L280,192" marker-end="url(#ah)"/>
+<path class="edge" d="M780,140 L780,164 L560,164 L560,192" marker-end="url(#ah)"/>
+<path class="edge" d="M440,292 L440,346" marker-end="url(#ah)"/>
+<path class="edge" d="M720,246 L664,246" marker-end="url(#ah)"/>
+<path class="edash" d="M870,352 L870,296" marker-end="url(#ahd)"/>
+<path class="edge" d="M440,446 L440,498" marker-end="url(#ah)"/>
+<path class="edge" d="M440,598 L440,650" marker-end="url(#ah)"/>
+<path class="edash" d="M664,662 L736,662" marker-end="url(#ahd)"/>
+<path class="edash" d="M664,722 L736,722" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支支路（六种执行方式任选其一）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件引用</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>事件名对照（图面人话 → 事件常量，收于本栏不入主干）：「工具执行前拦截」= PreToolUse；「执行后处理」= PostToolUse；「失败善后」= PostToolUseFailure；共 27 类事件（用户提交 / 会话启停 / 回合停止 / 压缩前后 / 通知 / 权限请求与拒绝 / 问询等），完整清单定义于 src/entrypoints/sdk/coreTypes.ts:25-53。</li>
+<li>匹配与执行：src/utils/hooks.ts:1739（按事件名 + matchQuery——工具调用类事件用工具名、会话类事件用来源/原因——过滤 matchers）、:2088（统一执行入口）、:2128-2135（工作区信任门，未信任整体跳过）、:3538 / :3594 / :3636（工具前/后/失败三类包装函数）。</li>
+<li>工具调用点管道：src/services/tools/toolExecution.ts:842-904（前拦截循环：可改写工具输入 :876-880、注入权限决策 :873、stop 直接阻断返回 :890-902）、:1472 与 :1558-1650（执行后处理，可改写 MCP 工具输出）、:1782-1786（失败善后）；包装层 src/services/tools/toolHooks.ts:39/197/443。</li>
+<li>其他触发点实证：src/utils/processUserInput/processUserInput.ts:190（用户输入提交）、src/sessionStart.ts:132（会话开始）、src/query/stopHooks.ts:189（回合停止）、src/utils/notifier.ts:25（通知）、compact 路径（压缩前后）、elicitationHandler（问询）。</li>
+<li>配置五源：src/utils/hooks/hooksSettings.ts:92-161（user/project/local 三级设置文件 + 会话级 + policy allowManagedHooksOnly 企业锁——锁开时用户侧钩子全部屏蔽）；会话级来自技能 frontmatter（src/utils/hooks/registerSkillHooks.ts:20-64，once 成功即自动移除）；插件注册表来自 src/utils/plugins/loadPluginHooks.ts:28。</li>
+<li>退出码语义（命令型钩子）：0 = 成功放行、2 = 阻断、其他 = 非阻断错误，聚合为统一结果（放行 / 阻断 / 非阻断错误 / 取消四态），见 src/types/hooks.ts:50-166 与 hooksConfigManager.ts 事件描述。</li>
+<li>考据注记（省略与合并）：省略了 AsyncHookRegistry（异步钩子完成后的续流回调）、hooksConfigSnapshot（启动期配置快照）、fileChangedWatcher（文件变更触发）、postSamplingHooks、apiQueryHookHelper、skillImprovement、ssrfGuard（HTTP 支路的内联防护，并入六支路描述）等次要模块；「其他时机」盒内合并了通知 / 压缩 / 问询触发点，未逐一单列；共享底座实际分散在 AppState（会话级注册表）与 bootstrap/state（插件注册表 / 耗时统计），图中合并为一条横条。</li>
+<li>存疑：27 事件常量在 src/entrypoints/agentSdkTypes.js:4-32 与 src/entrypoints/sdk/coreTypes.ts:25-53 两处完全重复定义（内容一致，后续是否失同步存疑）；配置合并优先级存在张力——hooks.ts:1852-1854 注释称 Map 去重「后合并者胜出」，而 hooksSettings.ts:230-271 又按来源顺序排展示优先级（插件/内置垫底），冲突场景下的实际胜者未逐条验证，如实存疑。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

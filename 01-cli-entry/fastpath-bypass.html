@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>01-cli-entry · 快速路径旁路（静态流程图）</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>CLI 快速路径旁路</h1>
+<p class="sub">组件 01-cli-entry · 入口与引导 · 静态流程图</p>
+<p class="lead">敲下 claude 之后、进入主程序之前的岔路口：cli.tsx 的 main() 按代码顺序逐个试探快速路径——--version、无参开关、daemon worker、子命令（bridge / daemon / job）、tmux 组合——命中即预热配置、动态加载对应子系统并运行到结束；只有全部未命中，才落到完整 CLI（main.tsx）。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1360" width="1040" height="1360" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干（cli.tsx main() 的优先级 if 链） ===== -->
+<!-- 开始 -->
+<rect x="270" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">进程启动 · 参数捕获</text>
+
+<!-- 环境早修正 -->
+<rect x="250" y="113" width="300" height="64" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="141" class="n-title">环境早修正</text>
+<text x="400" y="163" class="n-sub">cli.tsx:11-69 · MACRO/TTY/堆修正</text>
+
+<!-- D1 --version -->
+<polygon points="400,219 520,261 400,303 280,261" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="258" class="n-title">单独 --version？</text>
+<text x="400" y="276" class="n-sub">零模块加载的捷径</text>
+
+<!-- 加载埋点 -->
+<rect x="250" y="341" width="300" height="64" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="369" class="n-title">加载启动埋点</text>
+<text x="400" y="391" class="n-sub">profileCheckpoint · 唯一共享写点</text>
+
+<!-- D2 无参快速路径 -->
+<polygon points="400,447 520,489 400,531 280,489" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="486" class="n-title">命中无参快速路径？</text>
+<text x="400" y="504" class="n-sub">argv 字面量/前缀匹配</text>
+
+<!-- D3 daemon-worker -->
+<polygon points="400,573 520,615 400,657 280,615" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="612" class="n-title">daemon-worker 参数？</text>
+<text x="400" y="628" class="n-sub">supervisor 派生进程</text>
+
+<!-- D4 子命令快速路径 -->
+<polygon points="400,699 520,741 400,783 280,741" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="738" class="n-title">命中子命令快速路径？</text>
+<text x="400" y="756" class="n-sub">首个命中即离场</text>
+
+<!-- D5 tmux+worktree -->
+<polygon points="400,827 520,869 400,911 280,869" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="866" class="n-title">tmux+worktree 组合？</text>
+<text x="400" y="884" class="n-sub">双 flag 同时出现</text>
+
+<!-- 参数小修正 -->
+<rect x="250" y="947" width="300" height="64" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="975" class="n-title">参数小修正</text>
+<text x="400" y="997" class="n-sub">cli.tsx:342-350 · argv/env 微调</text>
+
+<!-- 启动按键缓冲 -->
+<rect x="250" y="1047" width="300" height="64" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1075" class="n-title">启动按键缓冲</text>
+<text x="400" y="1097" class="n-sub">startCapturingEarlyInput · TTY raw 模式</text>
+
+<!-- 动态加载主程序 -->
+<rect x="250" y="1147" width="300" height="64" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1175" class="n-title">动态加载主程序</text>
+<text x="400" y="1197" class="n-sub">import main.tsx → cliMain()</text>
+
+<!-- 结束 -->
+<rect x="270" y="1247" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1272" class="n-title">进入完整 CLI 主链路</text>
+
+<!-- ===== 右侧分支（快速路径处理） ===== -->
+<!-- R1 --version 终点 -->
+<rect x="675" y="242" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="267" class="n-title">打印版本号后退出</text>
+<text x="825" y="300" class="elab">零模块加载（cli.tsx:80-84）</text>
+
+<!-- R2 无参快速路径 -->
+<rect x="640" y="447" width="370" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="475" class="n-title">运行专用入口后返回</text>
+<text x="825" y="497" class="n-body">dump-prompt / ACP / weixin /</text>
+<text x="825" y="515" class="n-body">chrome·computer-use MCP 服务器</text>
+
+<!-- R3 daemon-worker -->
+<rect x="640" y="581" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="609" class="n-title">worker 精简直启</text>
+<text x="825" y="631" class="n-body">runDaemonWorker(kind) · 不加载配置</text>
+<text x="825" y="649" class="n-body">feature(DAEMON) 关则 exitCode=1</text>
+
+<!-- RC1 预热 -->
+<rect x="640" y="699" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="727" class="n-title">预热配置（部分路径）</text>
+<text x="825" y="749" class="n-sub">enableConfigs() · initSinks()</text>
+<text x="825" y="767" class="n-body">bridge/daemon/tmux 预热；worker·job 不预热</text>
+
+<!-- RD bridge 四道门 -->
+<polygon points="825,805 1010,847 825,889 640,847" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="825" y="844" class="n-title">bridge 四道门全过？</text>
+<text x="825" y="862" class="n-sub">登录→开关→版本→策略</text>
+<text x="598" y="830" class="elab">仅 bridge 经此门</text>
+
+<!-- RE 动态 import -->
+<rect x="640" y="925" width="200" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="740" y="953" class="n-title">动态 import 入口</text>
+<text x="740" y="975" class="n-body">daemonMain / bridgeMain</text>
+<text x="740" y="993" class="n-body">templatesMain 等</text>
+
+<!-- RX 报错退出 -->
+<rect x="860" y="925" width="150" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="935" y="950" class="n-title">报错退出</text>
+<text x="935" y="978" class="elab">exitWithError 即退</text>
+
+<!-- RF 子系统循环 -->
+<rect x="640" y="1027" width="200" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="740" y="1055" class="n-title">子系统自有循环</text>
+<text x="740" y="1077" class="n-body">daemon 主管：调度 worker</text>
+<text x="740" y="1095" class="n-body">bridge：远程会话服务</text>
+
+<!-- RG 结束 -->
+<rect x="640" y="1121" width="200" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="740" y="1146" class="n-title">return / exit 结束</text>
+<text x="740" y="1180" class="elab">job：TUI 句柄兜底 exit(0)</text>
+
+<!-- R7 tmux+worktree -->
+<rect x="640" y="1215" width="370" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="1243" class="n-title">exec 进 tmux 工作树</text>
+<text x="825" y="1265" class="n-body">isWorktreeModeEnabled 门通过后</text>
+<text x="825" y="1283" class="n-body">execIntoTmuxWorktree(args) 接管终端</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="100" width="200" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="125" class="n-title">加载即生效的副作用</text>
+<text x="130" y="147" class="n-body">MACRO 兜底·强制 TTY</text>
+<text x="130" y="163" class="n-body">COREPACK=0 / 远程堆 8GB</text>
+<text x="130" y="179" class="n-body">消融基线 env 注入</text>
+
+<rect x="30" y="440" width="200" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="465" class="n-title">argv 一次性消费</text>
+<text x="130" y="487" class="n-body">每个 if 命中即 return</text>
+<text x="130" y="503" class="n-body">参数不再向下流动</text>
+<text x="130" y="519" class="n-body">cli.tsx:77 顶部切片</text>
+
+<rect x="30" y="580" width="200" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="605" class="n-title">feature() 构建期门</text>
+<text x="130" y="627" class="n-body">bun:bundle 注入常量</text>
+<text x="130" y="643" class="n-body">未启用分支被 DCE 剥除</text>
+<text x="130" y="659" class="n-body">外部构建不含该代码</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,109" marker-end="url(#ah)"/>
+<path class="edge" d="M400,177 L400,215" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,261 L671,261" marker-end="url(#ah)"/>
+<text x="560" y="252" class="elab">是</text>
+
+<path class="edge" d="M400,303 L400,337" marker-end="url(#ah)"/>
+<text x="412" y="322" class="elab">否</text>
+
+<path class="edge" d="M400,405 L400,443" marker-end="url(#ah)"/>
+
+<path class="edge" d="M520,489 L636,489" marker-end="url(#ah)"/>
+<text x="560" y="480" class="elab">是</text>
+
+<path class="edge" d="M400,531 L400,569" marker-end="url(#ah)"/>
+<text x="412" y="554" class="elab">否</text>
+
+<path class="edge" d="M520,615 L636,615" marker-end="url(#ah)"/>
+<text x="560" y="606" class="elab">是</text>
+
+<path class="edge" d="M400,657 L400,695" marker-end="url(#ah)"/>
+<text x="412" y="680" class="elab">否</text>
+
+<path class="edge" d="M520,741 L636,741" marker-end="url(#ah)"/>
+<text x="560" y="732" class="elab">是</text>
+
+<path class="edge" d="M400,783 L400,823" marker-end="url(#ah)"/>
+<text x="412" y="806" class="elab">否</text>
+
+<path class="edge" d="M520,869 L575,869 L575,1255 L636,1255" marker-end="url(#ah)"/>
+<text x="560" y="860" class="elab">是</text>
+
+<!-- D5 否：继续主干（tmux 落回也汇入此点） -->
+<circle cx="400" cy="929" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,911 L400,945" marker-end="url(#ah)"/>
+<text x="416" y="920" class="elab">否</text>
+
+<!-- tmux 未接管 → 落回主干 -->
+<path class="edge" d="M825,1295 L825,1330 L560,1330 L560,929 L410,929" marker-end="url(#ah)"/>
+<text x="690" y="1320" class="elab">门未过或未接管 → 落回默认路径</text>
+
+<path class="edge" d="M400,1011 L400,1043" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1111 L400,1143" marker-end="url(#ah)"/>
+<path class="edge" d="M400,1211 L400,1243" marker-end="url(#ah)"/>
+
+<!-- 右侧链内部 -->
+<path class="edge" d="M825,779 L825,801" marker-end="url(#ah)"/>
+<path class="edge" d="M825,889 L740,921" marker-end="url(#ah)"/>
+<text x="770" y="905" class="elab">是</text>
+<path class="edge" d="M1010,847 L935,921" marker-end="url(#ah)"/>
+<text x="990" y="900" class="elab">否</text>
+<path class="edge" d="M740,1005 L740,1023" marker-end="url(#ah)"/>
+<path class="edge" d="M740,1107 L740,1117" marker-end="url(#ah)"/>
+
+<!-- 左侧旁注虚线 -->
+<path class="edash" d="M230,145 L246,145" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,485 L272,489" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,622 L264,615" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>快速路径 / 子系统</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/entrypoints/cli.tsx:76-360（main() 优先级 if 链）、cli.tsx:11-69（模块顶部副作用）、src/daemon/main.ts:52（daemonMain 子命令分发：start/stop/status/bg/attach/logs/kill）、src/daemon/workerRegistry.ts:26（runDaemonWorker，退出码 78=EX_CONFIG 表示永久失败、supervisor 不重试）、src/bridge/bridgeMain.ts:2001（bridgeMain 参数解析与会话循环）、src/cli/handlers/templateJobs.ts:14（templatesMain：list/new/reply/status）、src/services/acp/entry.ts:27（runAcpAgent：stdin/stdout 上的 NDJSON ACP 协议）。</li>
+<li>bridge 四道门的顺序是刻意的：认证检查必须先于 GrowthBook 门——没有认证时 GrowthBook 缺用户上下文会返回过期的默认 false（cli.tsx:199-203 注释）；门依次为 OAuth/bridge token（:205）、GrowthBook 运行时开关（:208）、最低版本（:212）、组织策略 allow_remote_control（:218-221）。</li>
+<li>失败面：门检查是原子单元——任一失败 exitWithError 即退、不留状态；--version 打印不可部分生效。可部分生效的单元：bridge 路径 enableConfigs 已发生（配置缓存写入）后才因认证/策略失败退出；daemon 路径 initSinks 已挂。唯一跨路径共享写点：profileCheckpoint 埋点（cli.tsx:88/107/190 等）与 process.exitCode（如 --daemon-worker 门关时置 1，cli.tsx:169）。</li>
+<li>考据注记（与 CLAUDE.md 的差异）：文档漏了 -V 变体（cli.tsx:80）；daemon 路径实际门是 feature('DAEMON')||feature('BG_SESSIONS')（cli.tsx:231，文档只写 DAEMON）；文档所列 environment-runner / self-hosted-runner BYOC 快速路径已在提交 f38f8f20 / b59461ae 中删除，声明过时；--acp（:124-129）、weixin（:131-157）、autonomy（:249-263）、job（:297-305）为文档未列的快速路径；ps/logs/attach/kill 是 deprecated 别名映射到 daemon 子命令（:278-294），--bg 的匹配先于它们（:266）。</li>
+<li>本图合并：无参快速路径六条（--dump-system-prompt、--claude-in-chrome-mcp、--chrome-native-host、--computer-use-mcp、--acp、weixin）合并为一个判定节点；子命令组（bridge 五别名 remote-control/rc/remote/sync/bridge、daemon、--bg、job 与 new/list/reply 别名）合并为一个判定节点；autonomy 快速路径（读状态后 process.exit(0)）省略。tmux 组合未接管时确实会落回默认路径继续执行（cli.tsx:330-338 注释 "fall through to normal CLI"）。</li>
+<li>相邻页面：主干走到底（全部未命中）进入 main.tsx 完整 CLI——交互链路见 interactive-bootstrap.html，无头 -p 链路见 headless-pipe.html，会话恢复见 resume-entry.html。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>12-context-assembly · 一次请求的上下文组装</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>一次请求的上下文组装</h1>
+<p class="sub">组件 12-context-assembly · 上下文与系统提示</p>
+<p class="lead">从「用户按回车」到「请求发往 API」之间，模型看到的系统提示与上下文是怎么被拼出来的：三件套并行取件 → 提示来源仲裁 → 环境快照追加 → 用户上下文前置 → 身份头与缓存切块。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1240" width="1040" height="1240" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<!-- 开始 -->
+<rect x="340" y="31" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="470" y="56" class="n-title">用户提交一条消息</text>
+
+<!-- B1 并行取三件套 -->
+<rect x="330" y="105" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="129" class="n-title">并行取「三件套」</text>
+<text x="470" y="151" class="n-sub">queryContext.fetchSystemPromptParts</text>
+<text x="470" y="169" class="n-sub">Promise.all 三路并发</text>
+
+<!-- 三路并行：环境上下文（左） -->
+<rect x="30" y="223" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="160" y="248" class="n-title">快照 git 状态</text>
+<text x="160" y="272" class="n-sub">context.ts · getSystemContext</text>
+<text x="160" y="290" class="n-sub">分支/状态/近5条提交</text>
+
+<!-- 三路并行：默认系统提示（中，主干） -->
+<rect x="330" y="223" width="280" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="248" class="n-title">组装默认系统提示</text>
+<text x="470" y="272" class="n-sub">prompts.ts · 静态段+动态段</text>
+<text x="470" y="290" class="n-sub">身份/任务/工具/语气分段</text>
+
+<!-- 三路并行：用户上下文（右） -->
+<rect x="650" y="223" width="260" height="80" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="780" y="248" class="n-title">聚合 CLAUDE.md</text>
+<text x="780" y="272" class="n-sub">context.ts · getUserContext</text>
+<text x="780" y="290" class="n-sub">Managed→User→项目→Local</text>
+
+<!-- D1 提示来源仲裁 -->
+<polygon points="470,375 620,420 470,465 320,420" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="470" y="414" class="n-title">系统提示要替换？</text>
+<text x="470" y="437" class="n-sub">更高级来源已设置</text>
+
+<!-- B4 追加环境快照段 -->
+<rect x="330" y="505" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="530" class="n-title">追加环境快照段</text>
+<text x="470" y="553" class="n-sub">query.ts · appendSystemContext</text>
+<text x="470" y="570" class="n-sub">gitStatus 拼为末段 kv 文本</text>
+
+<!-- B5 前置用户上下文 -->
+<rect x="330" y="613" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="638" class="n-title">前置用户上下文</text>
+<text x="470" y="661" class="n-sub">query.ts · prependUserContext</text>
+<text x="470" y="678" class="n-sub">两条 isMeta 消息插到最前</text>
+
+<!-- B6 插身份前缀与归因 -->
+<rect x="330" y="721" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="746" class="n-title">插身份前缀与归因</text>
+<text x="470" y="769" class="n-sub">claude.ts · getCLISyspromptPrefix</text>
+<text x="470" y="786" class="n-sub">非交互会话用 SDK 身份</text>
+
+<!-- D2 缓存打断判定 -->
+<polygon points="470,831 620,876 470,921 320,876" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="470" y="870" class="n-title">有缓存打断标记？</text>
+<text x="470" y="893" class="n-sub">once / always 标记文件</text>
+
+<!-- B7 按边界切提示块 -->
+<rect x="330" y="965" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="990" class="n-title">按边界切提示块</text>
+<text x="470" y="1013" class="n-sub">api.ts · splitSysPromptPrefix</text>
+<text x="470" y="1030" class="n-sub">cacheScope: null/org/global</text>
+
+<!-- B8 生成 system 参数块 -->
+<rect x="330" y="1073" width="280" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="470" y="1098" class="n-title">生成 system 参数块</text>
+<text x="470" y="1121" class="n-sub">claude.ts · buildSystemPromptBlocks</text>
+<text x="470" y="1138" class="n-sub">每块附 cache_control 断点</text>
+
+<!-- 结束 -->
+<rect x="340" y="1181" width="260" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="470" y="1206" class="n-title">发往 Anthropic API</text>
+
+<!-- ===== 右侧分支 ===== -->
+<!-- R1 特殊来源替换 -->
+<rect x="660" y="378" width="350" height="96" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="835" y="404" class="n-title">特殊来源替换主提示</text>
+<text x="835" y="428" class="n-body">override 完全替换</text>
+<text x="835" y="446" class="n-body">coordinator / agent / custom</text>
+<text x="835" y="464" class="n-body">append 恒追加在尾部</text>
+
+<!-- R2 附加 nonce -->
+<rect x="660" y="845" width="350" height="100" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="835" y="871" class="n-title">附加随机 nonce 注释</text>
+<text x="835" y="893" class="n-body">随机 UUID 注释附加到末尾</text>
+<text x="835" y="911" class="n-body">强制本次缓存未命中</text>
+<text x="835" y="929" class="n-body">once 标记用后即删</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="95" width="220" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="140" y="120" class="n-title">三件套会话级缓存</text>
+<text x="140" y="142" class="n-body">memoize 定型整棵结果</text>
+<text x="140" y="159" class="n-body">CLAUDE.md 中途改动不生效</text>
+<text x="140" y="176" class="n-body">/clear 或 compact 才刷新</text>
+
+<rect x="30" y="430" width="220" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="140" y="455" class="n-title">git 失败仅缺段</text>
+<text x="140" y="479" class="n-body">快照为 null，请求照常</text>
+<text x="140" y="497" class="n-body">非 git 目录直接跳过</text>
+
+<rect x="30" y="545" width="220" height="105" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="140" y="570" class="n-title">claudeMd 单独成条</text>
+<text x="140" y="594" class="n-body">不进「可能无关」提醒包装</text>
+<text x="140" y="612" class="n-body">独立 project-instructions</text>
+<text x="140" y="630" class="n-body">消息，保住指令权重</text>
+
+<rect x="30" y="965" width="220" height="90" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="140" y="990" class="n-title">静态/动态边界标记</text>
+<text x="140" y="1012" class="n-body">标记前静态段 → global</text>
+<text x="140" y="1030" class="n-body">标记后动态段不缓存</text>
+<text x="140" y="1048" class="n-body">归因头始终不缓存</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M470,69 L470,101" marker-end="url(#ah)"/>
+
+<!-- 扇出：三路并行取件 -->
+<path class="edge" d="M470,175 L470,190 L160,190 L160,219" marker-end="url(#ah)"/>
+<path class="edge" d="M470,175 L470,219" marker-end="url(#ah)"/>
+<path class="edge" d="M470,175 L470,190 L780,190 L780,219" marker-end="url(#ah)"/>
+<text x="310" y="183" class="elab">环境上下文</text>
+<text x="492" y="200" class="elab">系统提示</text>
+<text x="630" y="183" class="elab">用户上下文</text>
+
+<!-- 三路汇合 -->
+<circle cx="470" cy="342" r="4" fill="#6B7280"/>
+<path class="edge" d="M160,303 L160,342 L462,342" marker-end="url(#ah)"/>
+<path class="edge" d="M780,303 L780,342 L478,342" marker-end="url(#ah)"/>
+<path class="edge" d="M470,303 L470,371" marker-end="url(#ah)"/>
+
+<!-- D1 分支 -->
+<path class="edge" d="M620,420 L654,420" marker-end="url(#ah)"/>
+<text x="634" y="410" class="elab">是</text>
+<path class="edge" d="M470,465 L470,501" marker-end="url(#ah)"/>
+<text x="482" y="488" class="elab">否</text>
+
+<!-- R1 汇合点 -->
+<circle cx="470" cy="490" r="4" fill="#6B7280"/>
+<path class="edge" d="M835,474 L835,490 L478,490" marker-end="url(#ah)"/>
+
+<path class="edge" d="M470,575 L470,609" marker-end="url(#ah)"/>
+<path class="edge" d="M470,683 L470,717" marker-end="url(#ah)"/>
+<path class="edge" d="M470,791 L470,827" marker-end="url(#ah)"/>
+
+<!-- D2 分支 -->
+<path class="edge" d="M620,876 L654,876" marker-end="url(#ah)"/>
+<text x="634" y="866" class="elab">是</text>
+<path class="edge" d="M470,921 L470,961" marker-end="url(#ah)"/>
+<text x="482" y="944" class="elab">否</text>
+
+<!-- R2 汇合点 -->
+<circle cx="470" cy="958" r="4" fill="#6B7280"/>
+<path class="edge" d="M835,945 L835,958 L478,958" marker-end="url(#ah)"/>
+
+<path class="edge" d="M470,1035 L470,1069" marker-end="url(#ah)"/>
+<path class="edge" d="M470,1143 L470,1177" marker-end="url(#ah)"/>
+
+<!-- 旁注虚线 -->
+<path class="edash" d="M250,140 L326,140" marker-end="url(#ahd)"/>
+<path class="edash" d="M140,430 L140,309" marker-end="url(#ahd)"/>
+<path class="edash" d="M250,648 L326,648" marker-end="url(#ahd)"/>
+<path class="edash" d="M250,1010 L326,1010" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/queryContext.ts（fetchSystemPromptParts 三路并行）、src/constants/prompts.ts:423-543（getSystemPrompt 静态段+动态段注册表+边界标记）、src/context.ts:36-189（getGitStatus/getSystemContext/getUserContext）、src/utils/systemPrompt.ts:41-123（buildEffectiveSystemPrompt 仲裁）、src/screens/REPL.tsx:3470-3506 与 src/QueryEngine.ts:294-335（两个入口层）、src/query.ts:647-649 与 899-901（appendSystemContext / prependUserContext 落点）、src/utils/api.ts:317-485（splitSysPromptPrefix / appendSystemContext / prependUserContext 实现）、src/services/api/claude.ts:1433-1479 与 3368-3392（身份头+nonce+buildSystemPromptBlocks）、src/constants/system.ts:30-46（身份前缀三选一）。</li>
+<li>入口差异：REPL.tsx:3470-3485 直接 Promise.all 并行调三件套（同一批里还混入 fast-mode 熔断检查）；QueryEngine.ts:298-310 走 fetchSystemPromptParts 封装；SDK side_question 路径用 buildSideQuestionFallbackParams 重建同一前缀以保缓存命中（queryContext.ts:88-179）。</li>
+<li>顺序注记：manifest 站点顺序把 prependUserContext 列在 claude.ts 定型之后；实际代码中它在 query.ts:899-901 作为 callModel 的调用参数先执行——messages 侧先包好，system 侧随后在 claude.ts 定型。本图按代码实际顺序绘制。</li>
+<li>customSystemPrompt（--system-prompt）设置时，getSystemPrompt 与 getSystemContext 在取件阶段就被跳过（queryContext.ts:61-72 返回空值），所以「替换」分支同时意味着环境快照段为空、cache 前缀整体不同。</li>
+<li>仲裁细节：agent 提示在 proactive 模式下是「追加到默认提示之后」而非替换（systemPrompt.ts:99-113）；override（loop 模式）完全替换一切；appendSystemPrompt 恒追加在尾部。QueryEngine 路径实际是内联拼装（QueryEngine.ts:331-335）而非调 buildEffectiveSystemPrompt。</li>
+<li>REPL 会把 coordinator 上下文与「终端未聚焦」状态并入 userContext（REPL.tsx:3486-3495），QueryEngine 也合并 coordinator 字段并可能注入 memory-mechanics 提示（QueryEngine.ts:312-335）——图中未展开。</li>
+<li>splitSysPromptPrefix 有三种模式（global-cache 边界模式 / 工具化缓存模式 / 默认 org 模式），取决于 shouldUseGlobalCacheScope() 与 1P provider 判定，默认构建实际命中哪条路径未验证。buildSystemPromptBlocks（claude.ts:3368-3392）内部调用 splitSysPromptPrefix，并给 cacheScope 非 null 的块加 cache_control。</li>
+<li>CLAUDE_CODE_SIMPLE=1 时 getSystemPrompt 直接返回 3 行极简提示（prompts.ts:429-433）；BREAK_CACHE_COMMAND 注入（ant-only 调试机制）默认关闭。</li>
+<li>git status 截断文案写 "2k characters" 但 MAX_STATUS_CHARS=1000（context.ts:20 与 :88，上游文案遗留）；git 命令失败时 getGitStatus 返回 null，仅缺该段不中断（context.ts:104-110）。</li>
+<li>memoize 缓存失效点：/clear（caches.ts:84）、compact（postCompactCleanup.ts:72，reason 'compact'）、/memory、settingsSync、sessionRestore。cache-break nonce 的 once 标记删除是 best-effort try/catch（claude.ts:1461-1467）；always 标记保留直到 /break-cache off。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

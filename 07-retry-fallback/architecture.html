@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>07-retry-fallback · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：重试与模型回退</h1>
+<p class="sub">07-retry-fallback · 组成模块与调用关系</p>
+<p class="lead">「请求失败后的自愈链」由这些模块协作：宿主把发请求打包成可重试的尝试 → 编排器对每次失败分类（能修就修、该等就退避等待、连续过载就换模型）→ 支撑模块管凭据、调速与遥测；两条紫色分支是最终出路（换备用模型整轮重跑、降级为非流式请求）。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 780" width="1040" height="780" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部引用：上游主回合循环 -->
+<rect x="60" y="36" width="210" height="52" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="165" y="57" class="n-body">主回合循环（上游）</text>
+<text x="165" y="77" class="n-sub">组件 02 · 指定当前与备用模型</text>
+
+<!-- 宿主 -->
+<rect x="330" y="40" width="380" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="520" y="70" class="n-title">请求失败处置宿主</text>
+<text x="520" y="90" class="n-sub">claude.ts · 流式/非流式两处入口</text>
+<text x="520" y="112" class="n-body">把「建客户端＋发流式请求」打包成可重试的尝试</text>
+<text x="520" y="130" class="n-body">重试等待时转发进度；彻底失败时产出错误回复</text>
+
+<!-- 外部引用：客户端工厂 -->
+<rect x="830" y="36" width="170" height="52" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="915" y="57" class="n-body">客户端工厂与发送</text>
+<text x="915" y="77" class="n-sub">组件 05 · 失败后可重建</text>
+
+<!-- 核心：重试编排器 -->
+<rect x="330" y="190" width="380" height="120" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="520" y="222" class="n-title">重试编排器</text>
+<text x="520" y="242" class="n-sub">withRetry.ts · 默认最多 10 次尝试</text>
+<text x="520" y="264" class="n-body">失败 → 分类 → 修复或退避等待 → 再试</text>
+<text x="520" y="282" class="n-body">连续 3 次服务器过载 → 抛「换模型」信号</text>
+<text x="520" y="300" class="n-body">上下文超限 → 自动调小输出上限再试</text>
+
+<!-- 支撑行 -->
+<rect x="50" y="360" width="215" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="157" y="392" class="n-title">错误翻译器</text>
+<text x="157" y="414" class="n-sub">errors.ts</text>
+<text x="157" y="438" class="n-body">把失败翻成用户能看懂的提示</text>
+<text x="157" y="456" class="n-body">并标出可自愈的种类</text>
+
+<rect x="305" y="360" width="200" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="405" y="392" class="n-title">快速档调速</text>
+<text x="405" y="414" class="n-sub">fastMode.ts</text>
+<text x="405" y="438" class="n-body">短等待保快速档重试</text>
+<text x="405" y="456" class="n-body">长等待降标准档（冷却）</text>
+
+<rect x="535" y="360" width="205" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="637" y="392" class="n-title">凭据修复</text>
+<text x="637" y="414" class="n-sub">auth.ts</text>
+<text x="637" y="438" class="n-body">登录凭证过期 → 刷新重发</text>
+<text x="637" y="456" class="n-body">云凭据失效 → 清缓存重建</text>
+
+<rect x="790" y="360" width="200" height="104" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="890" y="392" class="n-title">重试遥测</text>
+<text x="890" y="414" class="n-sub">services/analytics</text>
+<text x="890" y="438" class="n-body">每次重试/回退/放弃都上报</text>
+<text x="890" y="456" class="n-body">第几次 · 等多久 · 什么错</text>
+
+<!-- 分支行 -->
+<rect x="90" y="560" width="280" height="84" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="230" y="592" class="n-title">非流式回退</text>
+<text x="230" y="614" class="n-sub">流式创建失败（404）时触发</text>
+<text x="230" y="636" class="n-body">改发一次性非流式请求重跑</text>
+
+<rect x="440" y="560" width="330" height="84" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="605" y="592" class="n-title">模型回退重跑</text>
+<text x="605" y="614" class="n-sub">query.ts · 换备用模型整轮重跑</text>
+<text x="605" y="636" class="n-body">清掉半截回复，提示「因高峰已切换模型」</text>
+
+<!-- 底座 -->
+<rect x="50" y="690" width="940" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="716" class="n-title">跨尝试存续的少量状态（重试编排器读写）</text>
+<text x="520" y="738" class="n-sub">输出上限覆盖值 · 过载连续计数 · 快速档冷却时刻</text>
+
+<!-- 连线 -->
+<path class="edge" d="M270,62 L326,62" marker-end="url(#ah)"/>
+<path class="edge" d="M520,140 L520,186" marker-end="url(#ah)"/>
+<path class="edash" d="M710,62 L824,62" marker-end="url(#ahd)"/>
+<path class="edge" d="M405,310 L405,356" marker-end="url(#ah)"/>
+<path class="edge" d="M637,310 L637,356" marker-end="url(#ah)"/>
+<path class="edge" d="M710,270 L890,270 L890,356" marker-end="url(#ah)"/>
+<path class="edge" d="M330,110 L155,110 L155,356" marker-end="url(#ah)"/>
+<path class="edge" d="M710,240 L765,240 L765,556" marker-end="url(#ah)"/>
+<path class="edge" d="M440,570 L440,540 L285,540 L285,160 L360,160 L360,146" marker-end="url(#ah)"/>
+<path class="edge" d="M330,125 L30,125 L30,530 L255,530 L255,556" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>回退分支（改变模型或请求方式）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>降级出路 / 外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>跨尝试共享状态</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+<span style="color:#8A8F98">「服务器过载 / 流式创建失败(404)」= 状态码 529 / 404，见深入细节</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/services/api/withRetry.ts:170-517（重试主循环）、:52-55（默认 10 次）、:62-89（前台来源判定，后台任务过载直接放弃）、:232-251（认证/陈旧连接后重建客户端）、:267-314（快速档短重试与冷却降级）、:326-365（连续 3 次过载 → 抛换模型信号）、:384-427（上下文超限自动调小输出上限）、:431-512（指数退避+抖动、持久模式心跳）、:693-784（错误分类 shouldRetry）；src/services/api/claude.ts:1874-1952（宿主把建客户端+发流式请求包进 withRetry、转发重试进度消息）、:2723-2815（流式创建 404 → 降级非流式重跑）、:2884-2889（展开不可重试信封取原始错误）；src/query.ts:890-896、:1152-1208（捕获换模型信号 → 换备用模型、清半截回复、整轮重跑）；src/services/api/errors.ts:425-934（错误 → 用户可读消息）；src/utils/fastMode.ts、src/utils/auth.ts、src/services/analytics/index.ts。</li>
+<li>考据注记：模块清单取自 api-streaming.json 的 retry-orchestrator / api-error-mapping 及其边界描述；同清单其余组件（参数组装、SSE 事件消费、provider 分流、三个兼容层）分属 05/06 号组件页，本图仅以虚线盒引用客户端工厂（每次尝试可被强制重建）。</li>
+<li>省略/合并：errors.ts 同目录的 errorUtils.ts（8 行 re-export 薄包装，from @ant/model-provider）并入错误翻译器锚点；「凭据修复」合并了 OAuth 401/403-token-revoked 刷新与 AWS/GCP 云凭据缓存清理三条路径；重试遥测的多个上报点（withRetry/claude/query 各自调用）合并为一盒。</li>
+<li>状态码与判定规则：图上「服务器过载」= HTTP 529（含流中 overloaded_error 消息），「流式创建失败(404)」= 流创建阶段 404；完整重试判定见 withRetry.ts:693-784（408/409/429/5xx、x-should-retry 响应头优先、mock 限流错误不重试、订阅用户 429 不重试、CCR 模式 401/403 视为瞬时故障等）。</li>
+<li>分歧如实：模型回退默认仅对非订阅（PAYG）用户且主模型为 Opus 时生效，FALLBACK_FOR_ALL_PRIMARY_MODELS 环境变量可放开（withRetry.ts:326-365）；无备用模型的外部用户连续 3 次过载直接产出一条错误消息而非回退。「上下文超限自愈」在源码注释中标注为向后兼容保留——API 现改用 stop_reason 返回该情况。</li>
+<li>相关交互：流式回退发生时主回合循环用「墓碑」消息丢弃已产出的半截回复（query.ts:953-969，详见 02-query-turn-loop 页）；非流式回退由 claude.ts 侧触发并回调 onStreamingFallback 通知上游。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

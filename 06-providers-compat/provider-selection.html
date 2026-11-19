@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>06-providers-compat · Provider 选择与客户端构造分发</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .n-titlec{font:600 14px system-ui;fill:#fff}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>Provider 选择与客户端构造分发</h1>
+<p class="sub">组件 06-providers-compat · 多厂商接入</p>
+<p class="lead">一次模型请求怎么决定走哪家 API：用户配置（/provider、/login）落到两条通道 → 每次请求用纯函数判定 → 第三方走适配层、Anthropic 系走 SDK 客户端工厂 → 凭据与请求头就位后交给重试层发流式请求。共 7 条通路。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 1340" width="1040" height="1340" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- ===== 主干 ===== -->
+<rect x="250" y="31" width="300" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="56" class="n-title">用户切换提供方</text>
+
+<rect x="250" y="105" width="300" height="92" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="132" class="n-title">配置落到两条通道</text>
+<text x="400" y="154" class="n-sub">provider.ts:143 · /login 也会写</text>
+<text x="400" y="176" class="n-body">modelType → settings.json</text>
+<text x="400" y="192" class="n-body">云厂商只写环境变量</text>
+
+<rect x="250" y="233" width="300" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="260" class="n-title">一次模型请求发起</text>
+<text x="400" y="282" class="n-sub">claude.ts · queryModel 共享预处理</text>
+<text x="400" y="304" class="n-body">消息规范化 / 工具过滤 / 媒体剥离</text>
+
+<rect x="250" y="357" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="384" class="n-title">getAPIProvider 求值</text>
+<text x="400" y="408" class="n-sub">providers.ts:12 · 纯函数每次重判</text>
+
+<polygon points="400,463 530,505 400,547 270,505" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="502" class="n-title">第三方适配层？</text>
+<text x="400" y="521" class="n-sub">openai/gemini/grok</text>
+
+<rect x="250" y="583" width="300" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="610" class="n-title">getAnthropicClient 工厂</text>
+<text x="400" y="632" class="n-sub">client.ts:84 · 统一注入请求头</text>
+<text x="400" y="654" class="n-body">x-app / 会话 ID / 自定义头</text>
+
+<rect x="250" y="707" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="734" class="n-title">预刷新登录凭据</text>
+<text x="400" y="758" class="n-sub">OAuth 到期先刷新 · API key 就位</text>
+
+<rect x="250" y="813" width="300" height="88" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="840" class="n-title">包装 fetch</text>
+<text x="400" y="862" class="n-sub">client.ts:358 · buildFetch</text>
+<text x="400" y="884" class="n-body">仅 firstParty 官方域名注入 ID</text>
+
+<polygon points="400,937 530,979 400,1021 270,979" fill="#FFF9E6" stroke="#D9A400" stroke-width="1.5"/>
+<text x="400" y="976" class="n-title">云厂商渠道？</text>
+<text x="400" y="994" class="n-sub">bedrock/vertex/foundry</text>
+
+<rect x="250" y="1057" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1084" class="n-title">默认 Anthropic 直连</text>
+<text x="400" y="1108" class="n-sub">new Anthropic · OAuth 或 API key</text>
+
+<rect x="250" y="1163" width="300" height="70" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="400" y="1190" class="n-title">client 交给 withRetry</text>
+<text x="400" y="1214" class="n-sub">withRetry.ts:170 · 请求重试都在这</text>
+
+<rect x="250" y="1269" width="300" height="38" rx="19" fill="#E8EAF0" stroke="#4C5566" stroke-width="1.5"/>
+<text x="400" y="1294" class="n-title">流式请求发出</text>
+
+<!-- ===== 右侧分支：第三方适配层 ===== -->
+<rect x="640" y="471" width="370" height="70" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="498" class="n-title">动态加载对应适配层</text>
+<text x="825" y="522" class="n-sub">claude.ts:1343-1381 · 按需 import</text>
+
+<rect x="640" y="559" width="370" height="106" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="586" class="n-title">转换格式并构造各家客户端</text>
+<text x="825" y="608" class="n-sub">模型名按 env 映射 · 消息/工具转协议</text>
+<text x="825" y="630" class="n-body">openai / grok 用 OpenAI SDK</text>
+<text x="825" y="648" class="n-body">gemini 手写 fetch + SSE 解析</text>
+
+<rect x="675" y="683" width="300" height="38" rx="19" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.5"/>
+<text x="825" y="708" class="n-title">适配层发流式请求</text>
+<text x="825" y="744" class="elab">产出与 Anthropic 同构的事件流</text>
+<text x="825" y="762" class="elab">下游 query.ts 零改动</text>
+
+<!-- ===== 右侧分支：云厂商客户端 ===== -->
+<rect x="640" y="937" width="370" height="120" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="825" y="964" class="n-title">构造云厂商 SDK 客户端</text>
+<text x="825" y="986" class="n-body">Bedrock: 刷新 AWS 凭据 / Bearer</text>
+<text x="825" y="1004" class="n-body">Foundry: Azure AD 令牌或 API key</text>
+<text x="825" y="1022" class="n-body">Vertex: GoogleAuth + 区域解析</text>
+<text x="825" y="1040" class="n-body">凭据都在构造时刷新，可跳过鉴权</text>
+
+<!-- ===== 左侧旁注 ===== -->
+<rect x="30" y="365" width="200" height="96" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="393" class="n-title">判定的优先级</text>
+<text x="130" y="415" class="n-body">modelType 管三家适配</text>
+<text x="130" y="433" class="n-body">云厂商仅看环境变量</text>
+<text x="130" y="451" class="n-body">都没配就是 firstParty</text>
+
+<rect x="30" y="583" width="200" height="100" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="611" class="n-title">无效构造的坑</text>
+<text x="130" y="635" class="n-body">modelType 选 openai 时</text>
+<text x="130" y="653" class="n-body">仍会构造直连客户端</text>
+<text x="130" y="671" class="n-body">但它不会被调用</text>
+
+<rect x="30" y="1159" width="200" height="96" rx="8" fill="#FFFFFF" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="130" y="1187" class="n-title">什么情况重建 client</text>
+<text x="130" y="1209" class="n-body">401 / 403 token 吊销</text>
+<text x="130" y="1227" class="n-body">云凭据错误或断连</text>
+<text x="130" y="1245" class="n-body">强制重建后重试</text>
+
+<!-- ===== 连线 ===== -->
+<path class="edge" d="M400,69 L400,101" marker-end="url(#ah)"/>
+<path class="edge" d="M400,197 L400,229" marker-end="url(#ah)"/>
+<path class="edge" d="M400,321 L400,353" marker-end="url(#ah)"/>
+<path class="edge" d="M400,427 L400,459" marker-end="url(#ah)"/>
+
+<path class="edge" d="M530,505 L634,505" marker-end="url(#ah)"/>
+<text x="566" y="498" class="elab">是</text>
+
+<path class="edge" d="M400,547 L400,579" marker-end="url(#ah)"/>
+<text x="412" y="566" class="elab">否</text>
+
+<path class="edge" d="M400,671 L400,703" marker-end="url(#ah)"/>
+<path class="edge" d="M400,777 L400,809" marker-end="url(#ah)"/>
+<path class="edge" d="M400,901 L400,933" marker-end="url(#ah)"/>
+
+<path class="edge" d="M530,979 L634,979" marker-end="url(#ah)"/>
+<text x="566" y="972" class="elab">是</text>
+
+<path class="edge" d="M400,1021 L400,1053" marker-end="url(#ah)"/>
+<text x="412" y="1038" class="elab">否</text>
+
+<!-- 云分支汇合点 -->
+<circle cx="400" cy="1136" r="4" fill="#6B7280"/>
+<path class="edge" d="M400,1127 L400,1159" marker-end="url(#ah)"/>
+<path class="edge" d="M825,1057 L825,1136 L408,1136" marker-end="url(#ah)"/>
+
+<path class="edge" d="M400,1233 L400,1265" marker-end="url(#ah)"/>
+
+<path class="edge" d="M825,541 L825,555" marker-end="url(#ah)"/>
+<path class="edge" d="M825,665 L825,679" marker-end="url(#ah)"/>
+
+<path class="edash" d="M230,394 L246,394" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,616 L246,616" marker-end="url(#ahd)"/>
+<path class="edash" d="M230,1192 L246,1192" marker-end="url(#ahd)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>处理步骤</span>
+<span><i class="lg" style="border-color:#D9A400;background:#FFF9E6"></i>判定分支</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>替代路径 / 模式</span>
+<span><i class="lg" style="border-color:#4C5566;background:#E8EAF0;border-radius:8px"></i>开始 / 结束</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁注机制</span>
+<span style="color:#8A8F98">灰色小字 = 对应源码模块（仅作定位锚点）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/utils/model/providers.ts（getAPIProvider 纯函数与优先级）、src/utils/model/providerClassification.ts（7 个 APIProvider 枚举）、src/services/api/claude.ts:1343-1381（适配层分流三检查）、src/services/api/client.ts:84-316（getAnthropicClient 四分支）、client.ts:356-389（buildFetch）、src/commands/provider.ts:126-161（/provider 写入语义）、src/components/ConsoleOAuthFlow.tsx:880-918（/login 写 modelType 并清客户端缓存）、src/services/api/openai/client.ts、grok/client.ts、gemini/client.ts（各适配层客户端）。</li>
+<li>判定优先级原文：modelType 只匹配 openai/gemini/grok（providers.ts:16-18）→ CLAUDE_CODE_USE_BEDROCK/VERTEX/FOUNDRY（:20-22）→ CLAUDE_CODE_USE_OPENAI/GEMINI/GROK（:24-26）→ 默认 firstParty。即 settings 里选了 openai 会压过 env 里的云厂商通道；而 bedrock/vertex/foundry 永远只有 env 通道（/provider 对云厂商不写 settings.json，provider.ts:148-156）。</li>
+<li>「无效构造的坑」：getAPIProvider()==='openai' 走 modelType 路径而 CLAUDE_CODE_USE_OPENAI 未设时，getAnthropicClient 的调用点（如 verifyApiKey、buildFetch 内部检查）仍会构造一个 firstParty Anthropic 客户端——该实例在 openai 路径不会被用于发请求，属无效构造。</li>
+<li>buildFetch 细节：包装发生在云分支判定之前，四个 Anthropic 系客户端共用；但 x-client-request-id 仅在 getAPIProvider()==='firstParty' 且 ANTHROPIC_BASE_URL 指向官方域名（或未设）时注入（client.ts:366-376），用于超时场景下与服务器日志对账。ANTHROPIC_BASE_URL 配了第三方地址时被视为非官方（providers.ts:40-56）。</li>
+<li>客户端缓存差异：firstParty 侧每次调用都重建 Anthropic 实例；openai/grok 有模块级 cachedClient 单例，/login 改完 OPENAI_* 环境变量后靠显式 clearOpenAIClientCache 失效（ConsoleOAuthFlow.tsx:917），否则沿用旧配置。gemini 无客户端对象，直接每次手写 fetch。</li>
+<li>考据注记（api-streaming.json uncertainties）：Bedrock/Vertex/Foundry 三条云 SDK 分支只核验到构造参数（区域解析、凭据刷新、skipAuth/Bearer），SDK 实体在 @anthropic-ai/vertex-sdk / foundry-sdk 等包内未逐行核验；Vertex 分支每次新建 GoogleAuth 实例（client.ts:232-239 TODO 注释自述），靠 projectId 兜底防 GCP 外 12 秒元数据超时。</li>
+<li>7 路全景：firstParty（默认直连）、bedrock（AWS）、vertex（Google Cloud）、foundry（Azure）走 Anthropic SDK 家族四分支；openai、gemini、grok 走三个独立适配层（后两者细节见同目录 openai-adapter.html 流程图）。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

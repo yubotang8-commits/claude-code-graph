@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>24-file-history · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：文件改动检查点</h1>
+<p class="sub">24-file-history · 组成模块与调用关系</p>
+<p class="lead">「AI 改过的文件，能不能退回到某条消息时的样子」由这套检查点回答：编辑工具动文件前先把老内容存底，每条用户消息之后再拍一轮快照；反悔时按消息把文件现场退回去，换会话恢复时把备份搬进新家。三处落点：磁盘备份仓库、会话日志里的快照条目、内存里的快照索引。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 835" width="1040" height="835" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 行 1：四类触发方（外部组件） -->
+<rect x="40" y="40" width="225" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="152" y="66" class="n-title">文件编辑类工具</text>
+<text x="152" y="88" class="n-sub">组件 08 · 编辑·写入·笔记本·Bash</text>
+
+<rect x="295" y="40" width="225" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="407" y="66" class="n-title">每条用户消息</text>
+<text x="407" y="88" class="n-sub">组件 04 引擎 · 组件 14 界面提交</text>
+
+<rect x="550" y="40" width="225" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="662" y="66" class="n-title">回滚请求</text>
+<text x="662" y="88" class="n-sub">组件 14 选择器 · 命令行 · SDK</text>
+
+<rect x="805" y="40" width="195" height="64" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="902" y="66" class="n-title">会话恢复</text>
+<text x="902" y="88" class="n-sub">组件 23 · 继续或换会话</text>
+
+<!-- 行 2：写入模块与分支路径 -->
+<rect x="40" y="170" width="225" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="152" y="200" class="n-title">编辑前备份</text>
+<text x="152" y="222" class="n-sub">fileHistory.ts · trackEdit</text>
+<text x="152" y="246" class="n-body">文件被改前先把老内容存底</text>
+<text x="152" y="268" class="n-body">三相提交 · 并发不踩踏</text>
+
+<rect x="295" y="170" width="225" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="407" y="200" class="n-title">每轮消息快照</text>
+<text x="407" y="222" class="n-sub">fileHistory.ts · makeSnapshot</text>
+<text x="407" y="246" class="n-body">每条用户消息后补一轮备份</text>
+<text x="407" y="268" class="n-body">没变的复用旧份 · 上限 20 份</text>
+
+<rect x="550" y="170" width="225" height="110" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="662" y="200" class="n-title">回滚与预览</text>
+<text x="662" y="222" class="n-sub">rewind · applySnapshot</text>
+<text x="662" y="246" class="n-body">把工作区文件恢复到快照版本</text>
+<text x="662" y="268" class="n-body">快照没有的删掉 · 先预览差异</text>
+
+<rect x="805" y="170" width="195" height="110" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="902" y="200" class="n-title">恢复时迁移</text>
+<text x="902" y="222" class="n-sub">copyFileHistoryForResume</text>
+<text x="902" y="246" class="n-body">旧会话备份硬链接到新目录</text>
+<text x="902" y="268" class="n-body">失败则拷贝 · 重建索引</text>
+
+<!-- 行 3：引擎与索引 -->
+<rect x="200" y="350" width="330" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="365" y="380" class="n-title">内容寻址备份引擎</text>
+<text x="365" y="402" class="n-sub">createBackup · checkOriginFileChanged</text>
+<text x="365" y="426" class="n-body">备份按「路径哈希 @ 版本」命名 · 惰性建目录</text>
+<text x="365" y="448" class="n-body">改没改：时间戳＋内容双查 · 备份同权限</text>
+
+<rect x="560" y="350" width="215" height="110" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="667" y="380" class="n-title">内存快照索引</text>
+<text x="667" y="402" class="n-sub">AppStateStore.ts</text>
+<text x="667" y="426" class="n-body">快照列表（≤20）＋追踪文件清单</text>
+<text x="667" y="448" class="n-body">界面问它：这条消息能回滚吗</text>
+
+<!-- 行 4：日志存储（外部组件） -->
+<rect x="40" y="495" width="280" height="110" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="180" y="525" class="n-title">会话日志存储</text>
+<text x="180" y="547" class="n-sub">组件 22-transcript-store</text>
+<text x="180" y="571" class="n-body">快照条目混排在会话日志文件里</text>
+<text x="180" y="593" class="n-body">恢复时按后写的合并重建</text>
+
+<!-- 底座 -->
+<rect x="40" y="665" width="960" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="691" class="n-title">磁盘备份仓库（引擎写入 · 回滚读取 · 迁移搬移）</text>
+<text x="520" y="713" class="n-sub">~/.claude/file-history/&lt;会话ID&gt;/ · 备份名＝「路径哈希@版本」</text>
+
+<rect x="40" y="743" width="960" height="60" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="520" y="769" class="n-title">会话身份底座（目录跟会话 ID 走）</text>
+<text x="520" y="791" class="n-sub">bootstrap/state.ts · 会话 ID 定目录 · 原始目录定相对路径基准</text>
+
+<!-- 连线 -->
+<path class="edge" d="M152,104 L152,166" marker-end="url(#ah)"/>
+<path class="edge" d="M407,104 L407,166" marker-end="url(#ah)"/>
+<path class="edge" d="M662,104 L662,166" marker-end="url(#ah)"/>
+<path class="edge" d="M902,104 L902,166" marker-end="url(#ah)"/>
+<path class="edge" d="M220,280 L220,346" marker-end="url(#ah)"/>
+<path class="edge" d="M407,280 L407,346" marker-end="url(#ah)"/>
+<path class="edash" d="M100,280 L100,491" marker-end="url(#ahd)"/>
+<path class="edge" d="M520,240 L545,240 L545,306 L600,306 L600,346" marker-end="url(#ah)"/>
+<path class="edge" d="M902,280 L902,661" marker-end="url(#ah)"/>
+<path class="edge" d="M740,280 L740,305 L790,305 L790,635 L740,635 L740,661" marker-end="url(#ah)"/>
+<path class="edge" d="M380,460 L380,661" marker-end="url(#ah)"/>
+<path class="edge" d="M662,280 L662,346" marker-end="url(#ah)"/>
+
+<!-- 连线标注 -->
+<text x="145" y="380" class="elab">快照条目落盘</text>
+<text x="585" y="296" class="elab">记进内存索引</text>
+<text x="958" y="480" class="elab">备份搬进新会话目录</text>
+<text x="845" y="500" class="elab">取备份恢复文件</text>
+<text x="428" y="560" class="elab">备份文件落点</text>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（回滚与恢复迁移：把检查点用起来）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#FDFDFB;border-style:dashed"></i>外部组件 / 调用方（标「组件 NN」）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座（磁盘备份仓库与会话身份）</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（仅定位用，非图面内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源（已抽查核对）：核心 src/utils/fileHistory.ts:88-195（trackEdit 三相提交：捕获→异步备份→重检回写；99-120 查重防止覆盖确定性 {hash}@v1 备份）、:200-344（makeSnapshot：逐追踪文件 stat/mtime 检查后增量备份，删除文件记 null 标记 :243-255）、:349-399（rewind，按 messageId 定位快照，找不到即抛错）、:539-593（applySnapshot：null 备份＝删除该文件，restoreBackup 恢复内容与权限）、:416-486（getDiffStats 差异预览）、:727-743（备份名＝路径 sha256 前 16 位@vN；resolveBackupPath＝{配置目录}/file-history/{会话ID}/）、:750-800（copyFile 落盘、惰性 mkdir、chmod 保留权限）、:890-919（fileHistoryRestoreStateFromLog 重建索引）、:924-1048（copyFileHistoryForResume：硬链接、EEXIST 跳过、失败回退 copyFile、整快照失败则不记条目）。</li>
+<li>调用方（已抽查核对）：编辑前备份由 FileEditTool.ts:427-431、FileWriteTool.ts:256-260、NotebookEditTool.ts:313-314、BashTool.tsx:529-530（内嵌 sed 写文件前）调用；每轮快照由 QueryEngine.ts:653-668（引擎路径，过滤可选中用户消息）与 handlePromptSubmit.ts:556-566（界面提交路径）调用，REPL.tsx:3911 初始消息也拍一份；回滚入口三处：REPL.tsx:6539-6553（消息选择器「恢复代码」→ fileHistoryRewind）、cli/print.ts:749-783（--rewind-files：须配 --resume、仅限用户消息 UUID、回滚后立即退出）、print.ts:3204-3216（SDK 控制请求 rewind_files，支持 dry_run 只预览）；界面判定由 MessageSelector.tsx:82-122 用 fileHistoryCanRestore/getDiffStats 驱动。</li>
+<li>记账与恢复：快照条目经 sessionStorage.ts:1108-1122（insertFileHistorySnapshot）与 :1513-1519（recordFileHistorySnapshot，trackEdit 补录与 makeSnapshot 新增都调用）混排进会话 JSONL；加载时 buildFileHistorySnapshotChain（:2287-2311）按消息序合并、后写的覆盖先写的；恢复链路 conversationRecovery.ts:570-604（copyFileHistoryForResume + 快照清单随结果返回）、sessionRestore.ts:104-106（SDK 侧 restoreStateFromLog 回填 AppState）、hooks/useFileHistorySnapshotInit.ts（界面挂载时一次性重建）；AppState 字段见 AppStateStore.ts:225/514-517。</li>
+<li>考据注记（合并与省略）：本组件在源码中是单个 fileHistory.ts（约 1100 行），图中按职能拆为五个模块盒子；「快照条目记账」的实际写函数 recordFileHistorySnapshot 属组件 22 的 sessionStorage.ts，图上画成指向组件 22 的虚线；trackEdit 与 makeSnapshot 都写条目、都更新内存索引，图面各只画了一条代表箭头（B1→日志、B2→索引），未画 B1→索引与 B2→日志，以免箭头交叉；恢复迁移对索引的重建（SDK 走 sessionRestore、界面走挂载钩子）并入迁移盒子文字，未单独画箭头。MAX_SNAPSHOTS=20（fileHistory.ts:54-56，注释自述「检查点导致内存无限增长，改增量 diff 前不再调大」）只淘汰内存列表，磁盘备份文件不删。</li>
+<li>门控开关：交互会话默认开启（globalConfig.fileCheckpointingEnabled ≠ false 且环境变量未禁用，fileHistory.ts:65-73）；SDK / 无界面会话默认关闭，须 CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING 显式打开（:75-80）；makeSnapshot 的 VS Code 文件变更通知（notifyVscodeSnapshotFilesUpdated，:1056-1100）为 fire-and-forget 副作用，未上图。</li>
+<li>考据分歧：fileHistory.ts:48-51 注释称 snapshotSequence 计数「供 useGitDiffStats 用作活跃信号」，但全仓检索未见 useGitDiffStats 实际消费该字段，/clear 与恢复路径只将其归零（conversation.ts:215、main.tsx:3552）——疑为陈旧注释；磁盘仓库路径由 envUtils.getClaudeConfigHomeDir() 决定，默认 ~/.claude/。</li>
+<li>与其他图的关系：会话日志文件本身的写入队列与退出冲刷见组件 22；恢复的完整编排（多源定位、换脑、成本恢复）见组件 23；编辑工具的执行流见组件 08/11。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

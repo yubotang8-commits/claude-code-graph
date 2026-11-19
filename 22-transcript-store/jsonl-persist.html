@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>会话消息落盘播放器：turn 消息 → JSONL</title>
+<style>
+:root{
+  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
+  --blue:#2a78d6; --blue-f:#E8F0FB;
+  --orange:#eb6834; --orange-f:#FDEFE7;
+  --green:#1baf7a; --green-f:#E6F5EF;
+  --red:#d03b3b; --red-f:#fdf1f0;
+  --purple:#6250d6; --purple-f:#EDEBFA;
+  --good:#0ca30c;
+  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
+  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
+  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
+#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
+header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
+header .sub b{color:var(--ink)}
+.phases{display:flex;gap:8px;margin:14px 0 10px}
+.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
+.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
+.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
+.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
+.phases span.p2.on{background:var(--purple-f);border-color:var(--purple)}
+.phases span.p3.on{background:var(--red-f);border-color:var(--red)}
+
+#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px 8px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#transport .btns{display:flex;gap:6px}
+#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
+#transport button:hover{border-color:var(--blue);color:var(--blue)}
+#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
+#transport button.main:hover{filter:brightness(1.08);color:#fff}
+#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
+#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
+#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
+#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
+#bar .seg.p2.done{background:var(--purple-f);border-color:var(--purple)}
+#bar .seg.p3.done{background:var(--red-f);border-color:var(--red)}
+#bar .seg:hover{transform:scaleY(1.5)}
+#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
+#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
+#speed button.on{background:var(--ink);color:#fff}
+#readout{font-size:13px;color:var(--sec);min-width:290px}
+#readout b{color:var(--ink)}
+#readout .fin{color:var(--good);font-weight:700}
+#subtitle{flex-basis:100%;font-size:13px;background:var(--white);border:1px solid var(--hair);border-radius:9px;padding:6px 12px;color:var(--sec)}
+#subtitle b{color:var(--ink)}
+#subtitle.fin{border-color:var(--good);color:var(--sec)}
+#subtitle.fin b{color:var(--good)}
+
+#stage{display:grid;grid-template-columns:192px 222px 1fr 232px 330px;gap:12px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:640px}
+.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden;transition:box-shadow .35s ease}
+.lane>.h{padding:9px 12px;font-size:14px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:7px;position:relative;flex-wrap:wrap}
+.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
+.lane>.h small{font-weight:400;color:var(--mut);font-size:10.5px;width:100%;margin-top:1px}
+.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
+.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
+.lane-foot b{color:var(--sec)}
+#lane-repl .h{border-bottom:2px solid var(--sec)}
+#lane-hook .h{border-bottom:2px solid var(--blue)}
+#lane-engine .h{border-bottom:2px solid var(--orange)}
+#lane-queue .h{border-bottom:2px solid var(--purple)}
+#lane-disk .h{border-bottom:2px solid var(--green)}
+.lane.hot{box-shadow:0 0 0 2px var(--line),0 10px 30px rgba(11,11,11,.12)}
+#lane-repl.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.16)}
+#lane-hook.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
+#lane-engine.hot{box-shadow:0 0 0 2px var(--orange),0 10px 30px rgba(235,104,52,.25)}
+#lane-queue.hot{box-shadow:0 0 0 2px var(--purple),0 10px 30px rgba(98,80,214,.25)}
+#lane-disk.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
+.lane .h.pulse{animation:hp .55s ease}
+@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--line)}100%{box-shadow:inset 0 0 0 transparent}}
+
+.bubble{max-width:92%;font-size:12px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-word}
+.bubble.q{align-self:flex-end;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
+.bubble.a{align-self:flex-start;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-bottom-left-radius:4px}
+.bubble.st{align-self:flex-start;background:#f4f4f2;border:1.5px dashed var(--line);color:var(--sec);font-size:11.5px}
+.bubble.loopq{align-self:flex-end;background:var(--purple-f);border:1.5px dashed var(--purple);color:var(--ink);font-size:11.5px}
+@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
+.chip{font-family:var(--mono);font-size:11.5px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease;line-height:1.5;word-break:break-word}
+.chip.msg{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
+.chip.act{background:var(--green-f);border-color:var(--green);color:var(--ink)}
+.chip.warn{background:var(--red-f);border-color:var(--red);color:var(--red);font-weight:600}
+.chip.mch{background:var(--purple-f);border-color:var(--purple);color:var(--ink)}
+#qstat{padding:6px 12px;font-family:var(--mono);font-size:11px;color:var(--sec);border-bottom:1px dashed var(--hair);background:var(--panel)}
+#qstat b{color:var(--purple)}
+#fpath{padding:6px 10px;font-family:var(--mono);font-size:10.5px;color:var(--sec);border-bottom:1px solid var(--hair);background:var(--panel);word-break:break-all;line-height:1.5}
+#fpath.mat{color:var(--ink);font-weight:600}
+#dops{flex:0 0 auto;display:flex;flex-wrap:wrap;gap:5px;padding:8px 10px 0;max-height:78px;overflow-y:auto}
+#dops .chip{font-size:10.5px;padding:3px 8px}
+#jl{flex:1 1 0;overflow-y:auto;padding:8px 10px;display:flex;flex-direction:column;gap:4px;min-height:0}
+#jl .ln{font-family:var(--mono);font-size:10.8px;white-space:pre-wrap;word-break:break-all;border-radius:5px;padding:3px 7px;animation:pop .4s ease;line-height:1.45}
+#jl .ln .no{color:var(--mut);margin-right:6px}
+#jl .ln.t-meta{color:var(--mut);background:#f4f4f2}
+#jl .ln.t-user{color:var(--ink);background:var(--blue-f)}
+#jl .ln.t-assistant{color:var(--ink);background:var(--green-f)}
+#jl .ln.t-meta .no{color:var(--mut)}
+
+#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
+.flight{position:absolute;font-family:var(--mono);font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.flight.m{background:var(--blue-f);border:1.5px solid var(--blue)}
+.flight.e{background:var(--orange-f);border:1.5px solid var(--orange)}
+.flight.q{background:var(--purple-f);border:1.5px solid var(--purple)}
+.flight.d{background:var(--green-f);border:1.5px solid var(--green)}
+
+#failbox{margin-top:12px;border:1.5px solid var(--line);border-radius:14px;background:var(--white);padding:13px 16px}
+#failbox .ft{font-weight:700;font-size:14px;margin-bottom:8px}
+#failbox .ft small{font-weight:400;color:var(--mut);margin-left:8px;font-size:11.5px}
+.frow{display:flex;gap:9px;align-items:baseline;font-size:12.5px;margin-bottom:5px}
+.frow .ic{flex:0 0 auto}
+.frow b{color:var(--ink)}
+.frow span{color:var(--sec)}
+.frow.bad b{color:var(--red)}
+
+.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
+.legend .k{display:flex;gap:6px;align-items:center}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
+.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
+footer{margin-top:16px;font-size:11px;color:var(--mut);line-height:1.6}
+#selftest-result:empty{display:none}
+#selftest-result{margin-top:12px;font-family:var(--mono);font-size:12px;background:var(--ink);color:#9fe8a0;border-radius:10px;padding:12px 16px;white-space:pre-wrap;max-height:260px;overflow-y:auto}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div id="wrap">
+<header>
+  <a class="backhome" href="../index.html">← 回总览</a>
+<h1>会话消息落盘播放器：turn 消息 → JSONL</h1>
+  <div class="sub">每回合的对话是怎么变成磁盘上一行行 JSON 的 —— <b>REPL 消息数组</b> → <b>useLogMessages 增量切片</b> → <b>recordTranscript 清洗 / UUID 去重</b> → <b>insertMessageChain 建 parentUuid 链 + 盖会话戳</b> → <b>写队列 100ms 批刷</b> → <b>append-only JSONL</b></div>
+</header>
+
+<div class="phases">
+  <span class="p0" data-ph="0">第 1 轮 · 第一条 user 消息（文件物化）</span>
+  <span class="p1" data-ph="1">第 1 轮 · assistant + tool_result（链式追加）</span>
+  <span class="p2" data-ph="2">第 2 轮 · 循环重放（简短）</span>
+  <span class="p3" data-ph="3">故障面 &amp; 退出兜底</span>
+</div>
+
+<div id="transport">
+  <div class="btns">
+    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
+    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
+    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
+    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
+    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
+  </div>
+  <div id="bar"></div>
+  <div id="speed">
+    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
+  </div>
+  <div id="readout">就绪 · 点击 ▶ 播放</div>
+  <div id="subtitle">就绪 —— 点击 ▶ 播放，跟着一条消息走完全程</div>
+</div>
+
+<div id="stage">
+  <div class="lane" id="lane-repl">
+    <div class="h" id="h-repl">🖥 REPL 界面 <span class="tag">React/Ink</span><small>messages 数组 · 本地 useState</small></div>
+    <div class="feed" id="feed-repl"></div>
+    <div class="lane-foot">每回合 <b>setMessages</b> 多次更新数组；落盘链路只关心一件事：<b>数组变长了</b>（append-only）</div>
+  </div>
+  <div class="lane" id="lane-hook">
+    <div class="h" id="h-hook">🪝 useLogMessages <span class="tag">hook</span><small>增量切片 · 父提示</small></div>
+    <div class="feed" id="feed-hook"></div>
+    <div class="lane-foot">记住上次写到哪（水位 + 首条 uuid），只把<b>新尾巴</b>交给引擎；<b>fire-and-forget</b>，绝不卡 UI</div>
+  </div>
+  <div class="lane" id="lane-engine">
+    <div class="h" id="h-engine">🗄 sessionStorage 引擎 <span class="tag">Project 单例</span><small>清洗 · 去重 · 链 · 盖戳</small></div>
+    <div class="feed" id="feed-engine"></div>
+    <div class="lane-foot">把内存消息变成<b>可恢复的对话</b>：滤掉临时态、UUID 去重、串 parentUuid 链、盖 sessionId/cwd/… 会话戳</div>
+  </div>
+  <div class="lane" id="lane-queue">
+    <div class="h" id="h-queue">📬 写队列 <span class="tag">100ms 批刷</span><small>enqueue → drain</small></div>
+    <div id="qstat">队列：<b>0</b> 待写 · 定时器：<b>待命</b></div>
+    <div class="feed" id="feed-queue"></div>
+    <div class="lane-foot">单条入队、<b>100ms</b> 攒一批、<b>100MB</b> 分块拼接、<b>0600</b> 权限追加——磁盘只在拍点被碰</div>
+  </div>
+  <div class="lane" id="lane-disk">
+    <div class="h" id="h-disk">💾 磁盘 JSONL <span class="tag">append-only</span><small id="linecount">0 行</small></div>
+    <div id="fpath">~/.claude/projects/&lt;sanitizePath(cwd)&gt;/&lt;sessionId&gt;.jsonl（待物化）</div>
+    <div id="dops"></div>
+    <div id="jl"></div>
+    <div class="lane-foot">每行一条 JSON，<b>只追加不改写</b>——这就是 <b>--continue / --resume</b> 能把对话读回来的原因</div>
+  </div>
+  <div id="flights"></div>
+</div>
+
+<div id="failbox">
+  <div class="ft">故障面速览<small>fire-and-forget：落盘永远不阻塞对话</small></div>
+  <div class="frow"><span class="ic">⚠️</span><b>崩在 100ms 窗口内</b><span>丢的最多是队列里 ≤100ms 的条目；append-only 文件仍保持一致（最坏半行 JSON，加载时跳过）</span></div>
+  <div class="frow"><span class="ic">⚠️</span><b>队列达 1000 条</b><span>丢最旧、只留 999，被丢条目的写 Promise 也照样 resolve（防内存膨胀）</span></div>
+  <div class="frow bad"><span class="ic">⛔</span><b>整体不落盘开关</b><span>test 环境（未开 TEST_ENABLE_SESSION_PERSISTENCE）/ cleanupPeriodDays=0 / --no-session-persistence —— shouldSkipPersistence 全链跳过</span></div>
+  <div class="frow bad"><span class="ic">☁️</span><b>远程持久化（CCR）失败</b><span>是硬失败：gracefulShutdownSync(1) 退出进程；本地 JSONL 已写部分不受影响</span></div>
+  <div class="frow"><span class="ic">🪦</span><b>墓碑删除</b><span>removeMessageByUuid 只读尾部 64KB 快路径定位删除；文件 &gt;50MB 时放弃慢路径整档重写</span></div>
+</div>
+
+<div class="legend">
+  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>消息数据流</span>
+  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>引擎/落盘动作</span>
+  <span class="k"><span class="sw" style="background:var(--purple-f);border-color:var(--purple)"></span>写队列</span>
+  <span class="k"><span class="sw" style="background:var(--red-f);border-color:var(--red)"></span>故障面</span>
+  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--line)"></span>机制说明</span>
+</div>
+<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置</div>
+<footer>依据 claude-code 源码考据：src/screens/REPL.tsx:1486,4759 · src/hooks/useLogMessages.ts:19-118 · src/utils/sessionStorage.ts（recordTranscript:1445 / insertMessageChain:1015 / materializeSessionFile:998 / appendEntry:1151 / enqueueWrite:613 / scheduleDrain:632 / drainWriteQueue:659 / appendToFile:648）· src/utils/sessionStoragePortable.ts:309（sanitizePath）</footer>
+<pre id="selftest-result"></pre>
+</div>
+
+<script>
+(function(){
+'use strict';
+window.__errors=[];
+window.onerror=function(msg){window.__errors.push(String(msg));return false};
+
+var $=function(id){return document.getElementById(id)};
+var feeds={repl:$('feed-repl'),hook:$('feed-hook'),engine:$('feed-engine'),queue:$('feed-queue')};
+var lanes={repl:$('lane-repl'),hook:$('lane-hook'),engine:$('lane-engine'),queue:$('lane-queue'),disk:$('lane-disk')};
+var heads={repl:$('h-repl'),hook:$('h-hook'),engine:$('h-engine'),queue:$('h-queue'),disk:$('h-disk')};
+var flightsEl=$('flights'), barEl=$('bar'), readout=$('readout'), subtitle=$('subtitle');
+var qstat=$('qstat'), fpath=$('fpath'), dops=$('dops'), jl=$('jl'), linecount=$('linecount');
+var activeAnims=[];
+
+function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
+function pulse(lane){var h=heads[lane];if(!h)return;h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
+function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
+function bubble(kind,txt){var d=el('bubble '+kind,feeds.repl,txt);feeds.repl.scrollTop=feeds.repl.scrollHeight;return d}
+function dchip(cls,txt){var c=el('chip '+cls,dops,txt);dops.scrollTop=dops.scrollHeight;return c}
+function diskLine(kind,txt){
+  var d=document.createElement('div');d.className='ln t-'+kind;
+  var no=document.createElement('span');no.className='no';no.textContent=jl.children.length+1;
+  var tx=document.createElement('span');tx.className='tx';tx.textContent=txt;
+  d.appendChild(no);d.appendChild(tx);jl.appendChild(d);jl.scrollTop=jl.scrollHeight;
+  linecount.textContent=jl.children.length+' 行';
+  return d;
+}
+function qstatus(n,state){qstat.innerHTML='队列：<b>'+n+'</b> 待写 · 定时器：<b>'+state+'</b>'}
+function pathset(txt,mat){fpath.textContent=txt;if(mat)fpath.classList.add('mat');else fpath.classList.remove('mat')}
+function fly(fromLane,toLane,label,cls,dur){
+  try{
+    var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
+    var f=document.createElement('div');f.className='flight '+cls;f.textContent=label;
+    var x0=a.left+a.width/2-h.left, y0=a.top+16-h.top, x1=b.left+b.width/2-h.left, y1=b.top+16-h.top;
+    f.style.left=x0+'px';f.style.top=y0+'px';
+    flightsEl.appendChild(f);
+    var dx=x1-x0;
+    var an=f.animate([
+      {transform:'translate(-50%,-50%)',offset:0},
+      {transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},
+      {transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}
+    ],{duration:dur||700,easing:'ease-in-out'});
+    activeAnims.push(an);
+    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
+  }catch(e){/* 动画环境不可用时静默跳过（状态不受影响） */}
+  pulse(toLane);
+}
+function setHot(lane){
+  for(var k in lanes){if(lanes.hasOwnProperty(k))lanes[k].classList.remove('hot')}
+  if(lane&&lanes[lane])lanes[lane].classList.add('hot');
+}
+
+// ---------- 步骤脚本 ----------
+// 每步：某个泳道发生一件事（人话）+ 可选飞行包动画 + 当前泳道高亮
+function S(id,ph,lane,dur,lab,sub,state,live){
+  return {id:id,ph:ph,lane:lane,dur:dur,lab:lab,sub:sub,state:state,live:live};
+}
+
+var steps=[
+ // ── 第 1 轮上半场：第一条 user 消息，会话文件从无到有 ──
+ S('u1',0,'repl',900,'用户按下回车：「帮我看看这个项目的结构」','messages 数组 0→1（REPL 本地 useState，REPL.tsx:1486）',
+   function(){bubble('q','帮我看看这个项目的结构')},null),
+ S('ef1',0,'hook',850,'useLogMessages 的 effect 醒了：数组变了','首次渲染 → 还没有基准，从头全量记录',
+   function(){chip('hook','','effect 触发 · 首次渲染 → 全量记录')},null),
+ S('sl1',0,'hook',900,'算出这批要写什么：切片 = 整条数组，父提示 = ∅','void recordTranscript(…) —— 发出去就不管，UI 绝不等它',
+   function(){chip('hook','msg','切片 [user#1] · parentHint=∅ · fire-and-forget')},
+   function(){fly('hook','engine','recordTranscript(slice)','m')}),
+ S('cl1',0,'engine',850,'先「洗」一遍：cleanMessagesForLogging','progress 类是 UI 临时态，永远被挡在链外（isLoggableMessage）',
+   function(){chip('engine','','清洗：progress 被滤掉，不进链')},null),
+ S('dd1',0,'engine',850,'UUID 去重：u-001 没写过 → 放行','对照内存里这个会话已写过的 UUID 集（sessionMessagesCache，最多缓存 200 个会话）',
+   function(){chip('engine','msg','去重：u-001 ∉ 已写集合 → 新消息')},null),
+ S('ic1',0,'engine',900,'insertMessageChain：会话文件还没建？','纯元数据不建文件——首条 user/assistant 消息才触发物化',
+   function(){chip('engine','act','sessionFile=null 且来了 user 消息 → 物化！')},null),
+ S('pt1',0,'engine',900,'推导路径：projects/<sanitizePath(cwd)>/<sessionId>.jsonl','sanitizePath 把非字母数字全换成 -（C:\\Users\\proj → C--Users-proj），Windows 冒号也能当目录名',
+   function(){chip('engine','','路径 = projects/C--…-proj/9f3c41e0….jsonl');pathset('~/.claude/projects/C--Users-naie-proj/9f3c41e0….jsonl',true)},null),
+ S('mt1',0,'engine',950,'物化三连：定文件指针 → 补缓存元数据 → 冲缓冲','启动期只缓存的 mode 等元数据走专用直写通道（不进批队列），pendingEntries 缓冲随后冲掉',
+   function(){chip('engine','act','materialize：补 cache-only 元数据 + 冲 pendingEntries');diskLine('meta','{"type":"mode","mode":"default","sessionId":"9f3c41e0…"}')},null),
+ S('st1',0,'engine',900,'盖会话戳：parentUuid=null（链头）','再盖上 sessionId/cwd/version/gitBranch/timestamp/userType/entrypoint/promptId——盖戳字段在 message 展开之后，防串台',
+   function(){chip('engine','msg','盖戳：parentUuid=null + 会话戳 ×8')},null),
+ S('ae1',0,'engine',850,'appendEntry 类型分派：消息路 → 入写队列','user/assistant/attachment/system 走消息分支，uuid 再核一遍没写过',
+   function(){chip('engine','act','appendEntry：消息路 → enqueueWrite(u-001)')},
+   function(){fly('engine','queue','enqueueWrite(entry)','e')}),
+ S('eq1',0,'queue',850,'enqueueWrite：按文件开队列，push {entry, resolve}','每条写是一个 Promise——appendFile 完成后才 resolve',
+   function(){qstatus(1,'已武装');chip('queue','','队列[会话.jsonl] +u-001（待写 1）')},null),
+ S('sd1',0,'queue',900,'scheduleDrain：起一个 100ms 定时器','攒一小批再碰磁盘，不为单条消息惊动硬盘',
+   function(){qstatus(1,'运行中');chip('queue','','⏱ 100ms 批刷定时器启动')},null),
+ S('dr1',0,'queue',850,'100ms 到：drainWriteQueue 整批取出，逐条拼行','JSON.stringify(entry)+换行 —— 一行一条 JSON；排空的队列直接删掉',
+   function(){qstatus(0,'排空中');chip('queue','act','drain：splice 整批 · 拼成一批文本')},null),
+ S('wr1',0,'disk',900,'appendToFile：fs.appendFile 追加，权限 0600','目录不存在？mkdir 0700 兜底后再写一次（不区分错误码，NFS 也覆盖）',
+   function(){qstatus(0,'空闲');dchip('act','appendFile · 0600 · 1 行')},
+   function(){fly('queue','disk','appendFile(批)','d')}),
+ S('rm1',0,'disk',1000,'磁盘上有了完整的第一行消息 JSON','--continue / --resume 读的就是这个文件',
+   function(){diskLine('user','{"parentUuid":null,"isSidechain":false,"promptId":"p-17","userType":"external","entrypoint":"cli","cwd":"C:\\\\proj","sessionId":"9f3c41e0…","timestamp":"2026-11-19T10:00:00Z","version":"2.1.0","gitBranch":"main","type":"user","uuid":"u-001","message":{…}}')},null),
+ S('bk1',0,'hook',850,'hook 收尾记账：水位 1，链尾 uuid = u-001','它们就是下一次增量切片的起点和父提示',
+   function(){chip('hook','msg','记水位 1 · lastParentUuid=u-001')},null),
+
+ // ── 第 1 轮下半场：assistant + tool_result，链式追加 ──
+ S('a1',1,'repl',900,'模型的回答流式长出来：assistant 消息进数组（1→2）','里面带着一个 tool_use 块；又一次触发 effect',
+   function(){bubble('a','我先看看目录结构…（tool_use: LS）')},null),
+ S('sl2',1,'hook',900,'这次是增量：首条 uuid 没变、数组变长 → isIncremental','只切新尾巴 [assistant#2]，带上 parentHint=u-001',
+   function(){chip('hook','msg','增量切片 [assistant#2] · parentHint=u-001')},
+   function(){fly('hook','engine','recordTranscript(尾巴)','m')}),
+ S('ch1',1,'engine',850,'清洗 + 去重通过 → insertMessageChain 接链','这条的 parentUuid=u-001 —— resume 靠 parentUuid 把对话树串回来',
+   function(){chip('engine','msg','链：a-002.parentUuid = u-001')},null),
+ S('st2',1,'engine',850,'同一套盖戳 → appendEntry → enqueueWrite','（ant 之外的用户还会被剥掉 REPL 痕迹、虚拟消息提升为真消息）',
+   function(){chip('engine','act','盖戳 + enqueueWrite(a-002)')},
+   function(){fly('engine','queue','enqueueWrite(a-002)','e')}),
+ S('eq2',1,'queue',850,'队列 +a-002 · 重新武装 100ms 定时器','上一拍已经排空——每 100ms 一拍，周而复始',
+   function(){qstatus(1,'运行中');chip('queue','','队列 +a-002（待写 1）')},null),
+ S('wr2',1,'disk',950,'drain → 一次 appendFile 追加 1 行','文件长到 3 行——append-only，永不改写旧行',
+   function(){qstatus(0,'空闲');dchip('act','drain → appendFile · 1 行');diskLine('assistant','{"parentUuid":"u-001","type":"assistant","uuid":"a-002","message":{"content":[{"type":"tool_use","id":"toolu_01A…","name":"LS","input":{…}}]}}')},null),
+ S('t1',1,'repl',900,'工具跑完：tool_result 作为 user 消息追加（2→3）','REPL 又一次 setMessages——第三次触发 effect',
+   function(){bubble('st','tool_result：目录列表（src/ tests/ package.json …）')},null),
+ S('sl3',1,'hook',850,'又一次增量切片 [user#3] → recordTranscript','parentHint=a-002 —— tool_result 要接在 tool_use 后面（配对完整，API 才不报 400）',
+   function(){chip('hook','msg','增量切片 [user#3] · parentHint=a-002')},
+   function(){fly('hook','engine','recordTranscript(尾巴)','m')}),
+ S('lp1',1,'engine',900,'盖戳入队；顺手缓存这轮的「最后提示」','currentSessionLastPrompt ≤200 字 —— --resume 选择器靠它显示「上次聊到哪」',
+   function(){chip('engine','act','盖戳入队 u-003 · 缓存 last-prompt「帮我看看…」')},
+   function(){fly('engine','queue','enqueueWrite(u-003)','e')}),
+ S('wr3',1,'disk',950,'批刷落盘第 4 行 · 第一轮完整落盘 ✓','一条 user、一条 assistant、一条 tool_result——一个完整回合的物理记录',
+   function(){qstatus(0,'空闲');dchip('act','批刷 · 1 行 · 第一轮完整落盘 ✓');diskLine('user','{"parentUuid":"a-002","type":"user","uuid":"u-003","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01A…","content":"src/ tests/ package.json"}]}}')},null),
+
+ // ── 第 2 轮：循环重放（简短） ──
+ S('u2',2,'repl',900,'循环：用户又追问一句——同一条管道再走一遍','每一轮新消息都重放：切片 → 清洗 → 去重 → 链 → 队列 → 100ms 批刷',
+   function(){bubble('loopq','循环 · 顺便看看测试怎么跑')},null),
+ S('mm2',2,'engine',900,'文件已物化：去重 / 链 / 盖戳全走内存路径','UUID 集就在内存里命中判断，无需再碰磁盘；盖完戳照常入队',
+   function(){qstatus(1,'已武装');chip('engine','msg','去重/链/盖戳 走内存 · enqueueWrite(u-004)')},
+   function(){fly('engine','queue','enqueueWrite(u-004)','e')}),
+ S('wr4',2,'disk',950,'依旧 100ms 批刷，追加第 5 行','文件只会变长——这就是它叫「持久化流水」的原因',
+   function(){qstatus(0,'空闲');dchip('act','100ms 批刷 · 第 5 行');diskLine('user','{"parentUuid":"u-003","type":"user","uuid":"u-004","message":{…「顺便看看测试怎么跑」…}}')},null),
+
+ // ── 故障面 & 退出兜底 ──
+ S('f1',3,'queue',1000,'故障面：若进程崩在 100ms 窗口内，丢的是谁？','最多丢队列里 ≤100ms 的条目；append-only 文件保持一致（最坏半行 JSON，加载时跳过）',
+   function(){chip('queue','warn','崩溃丢 ≤100ms 队列 · append-only 保一致')},null),
+ S('f2',3,'engine',1000,'故障面：队列上限与「整体不落盘」开关','队列达 1000 丢最旧保 999；test 环境 / cleanupPeriodDays=0 / --no-session-persistence 直接跳过整个落盘',
+   function(){chip('engine','warn','队列达 1000 丢最旧 · shouldSkipPersistence 全跳过')},null),
+ S('ex1',3,'queue',1100,'退出兜底：project.flush() 清空一切在途写','取消定时器、等在途 drain、清队列、等计数归零——落盘没有「会话完成」终点，它是持续流。流程结束',
+   function(){qstatus(0,'已冲刷');chip('queue','act','flush()：取消定时器 · 清队列 · 等计数归零')},null)
+];
+
+// ---------- 播放引擎 ----------
+var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
+
+function clearDynamic(){
+  flightsEl.innerHTML='';
+  feeds.repl.innerHTML='';feeds.hook.innerHTML='';feeds.engine.innerHTML='';feeds.queue.innerHTML='';
+  dops.innerHTML='';jl.innerHTML='';
+  qstatus(0,'待命');
+  pathset('~/.claude/projects/<sanitizePath(cwd)>/<sessionId>.jsonl（待物化）',false);
+  linecount.textContent='0 行';
+}
+function applyStep(i){
+  var s=steps[i];
+  if(!s)return;
+  if(s.state){try{s.state()}catch(e){}}
+  pulse(s.lane);
+}
+function renderTo(i){
+  clearDynamic();
+  idx=Math.max(-1,Math.min(i,steps.length-1));
+  for(var k=0;k<=idx;k++)applyStep(k);
+  setHot(idx>=0?steps[idx].lane:null);
+  updateUI();
+}
+function updateUI(){
+  var n=steps.length;
+  var segs=barEl.children;
+  for(var k=0;k<n&&k<segs.length;k++)segs[k].classList.toggle('done',k<=idx);
+  var ph=document.querySelectorAll('.phases span');
+  var cur=idx>=0?steps[idx].ph:0;
+  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
+  if(playing){$('b-play').textContent='⏸ 暂停'}
+  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
+  subtitle.classList.remove('fin');
+  if(idx<0){
+    subtitle.textContent='就绪 —— 点击 ▶ 播放，跟着一条消息走完全程';
+    readout.innerHTML='就绪 · 点击 ▶ 播放';
+  }else if(idx>=n-1){
+    var last=steps[idx];
+    subtitle.textContent='✓ 流程结束 —— 落盘是持续流：没有「会话完成」终点，退出靠兜底 flush 收尾';
+    subtitle.classList.add('fin');
+    readout.innerHTML='<span class="fin">✓ 播放完毕</span> · '+last.lab;
+  }else{
+    var s=steps[idx];
+    subtitle.textContent='现在：'+s.lab+(s.sub?' —— '+s.sub:'');
+    readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · '+s.lab;
+  }
+}
+function schedule(delay){
+  clearTimeout(timer);
+  if(!playing)return;
+  stepT0=Date.now();remaining=delay;
+  timer=setTimeout(next,delay);
+}
+function next(){
+  if(!playing)return;
+  if(idx>=steps.length-1){pause();updateUI();return}
+  idx++;
+  var s=steps[idx];
+  if(s.state){try{s.state()}catch(e){}}
+  if(s.live){try{s.live()}catch(e){}}
+  setHot(s.lane);
+  updateUI();
+  schedule(s.dur/speed);
+}
+function play(){
+  if(playing)return;
+  if(idx>=steps.length-1)renderTo(-1);
+  playing=true;
+  $('b-play').textContent='⏸ 暂停';
+  for(var k=0;k<activeAnims.length;k++){try{activeAnims[k].play()}catch(e){}}
+  next();
+}
+function pause(){
+  playing=false;clearTimeout(timer);
+  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
+  for(var k=0;k<activeAnims.length;k++){try{activeAnims[k].pause()}catch(e){}}
+  updateUI();
+}
+function toggle(){playing?pause():play()}
+
+// ---------- 控制条接线 ----------
+(function buildBar(){
+  for(var k=0;k<steps.length;k++){
+    (function(kk){
+      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
+      s.title=(kk+1)+'. '+steps[kk].lab;
+      s.addEventListener('click',function(){renderTo(kk);pause()});
+      barEl.appendChild(s);
+    })(k);
+  }
+})();
+$('b-reset').onclick=function(){pause();renderTo(-1)};
+$('b-prev').onclick=function(){pause();renderTo(idx-1)};
+$('b-next').onclick=function(){pause();renderTo(idx+1)};
+$('b-end').onclick=function(){pause();renderTo(steps.length-1)};
+$('b-play').onclick=function(){toggle()};
+(function(){
+  var sp=document.querySelectorAll('#speed button');
+  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
+    speed=parseFloat(this.dataset.s);
+    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
+    this.classList.add('on');
+  };
+})();
+document.addEventListener('keydown',function(e){
+  if(e.code==='Space'){e.preventDefault();toggle()}
+  else if(e.key==='ArrowRight'){e.preventDefault();pause();renderTo(idx+1)}
+  else if(e.key==='ArrowLeft'){e.preventDefault();pause();renderTo(idx-1)}
+  else if(e.key==='r'||e.key==='R'){pause();renderTo(-1)}
+});
+
+// ---------- 测试钩子 ----------
+window.__goto=function(i){pause();renderTo(i);return idx};
+window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
+window.__errors=window.__errors;
+
+// ---------- 自检（?selftest=1） ----------
+function runSelftest(){
+  var pre=$('selftest-result');
+  var lines=[],pass=0,fail=0;
+  function rec(name,ok,detail){
+    lines.push((ok?'PASS':'FAIL')+' '+name+(ok?'':' — '+(detail||'')));
+    if(ok)pass++;else fail++;
+  }
+  setTimeout(function(){
+    try{
+      // T1：步数 > 0
+      rec('steps>0',steps.length>0,'steps='+steps.length);
+      // T2：逐步 __goto(i) 无异常（只断言状态，不依赖动画）
+      var err2=null;
+      try{
+        for(var i=0;i<steps.length;i++){window.__goto(i)}
+      }catch(e){err2=e}
+      rec('goto all steps no throw',err2===null,String(err2&&err2.message||err2));
+      // T3：字幕文本随步变化
+      var seen={},uniq=0;
+      for(var j=0;j<steps.length;j++){
+        window.__goto(j);
+        var t=subtitle.textContent;
+        if(!Object.prototype.hasOwnProperty.call(seen,t)){seen[t]=1;uniq++}
+      }
+      rec('subtitle changes with step',uniq>=10,'unique='+uniq+'/'+steps.length);
+      // T3b：跳到内容充实的中间步，确认真的长出了内容（非空态）
+      var mid=Math.floor(steps.length/2);
+      window.__goto(mid);
+      var hasContent=feeds.repl.children.length+feeds.hook.children.length+feeds.engine.children.length+feeds.queue.children.length>0||jl.children.length>0;
+      rec('goto(mid) produces content',hasContent,
+        'mid='+(mid+1)+' repl/hook/engine/queue='+feeds.repl.children.length+'/'+feeds.hook.children.length+'/'+feeds.engine.children.length+'/'+feeds.queue.children.length+' jsonl='+jl.children.length);
+      // T4：__goto(-1) 重置回空态
+      window.__goto(-1);
+      var feedsEmpty=feeds.repl.children.length===0&&feeds.hook.children.length===0&&feeds.engine.children.length===0&&feeds.queue.children.length===0;
+      var diskEmpty=jl.children.length===0&&dops.children.length===0&&linecount.textContent==='0 行';
+      var subInit=subtitle.textContent.indexOf('就绪')>=0;
+      rec('goto(-1) resets to empty state',feedsEmpty&&diskEmpty&&subInit,
+        'feed='+(!feedsEmpty)+' disk='+(!diskEmpty)+' subtitle='+subtitle.textContent);
+      // T5：window.onerror 为空
+      var errs=window.__errors||[];
+      rec('window.onerror empty',errs.length===0,errs.join(';'));
+      // 尾态：跳到最后字幕明确「流程结束」
+      window.__goto(steps.length-1);
+      rec('final subtitle says flow ended',subtitle.textContent.indexOf('流程结束')>=0,subtitle.textContent);
+      window.__goto(-1);
+    }catch(e){
+      rec('selftest harness',false,String(e&&e.message||e));
+    }
+    pre.textContent=lines.join('\n')||'FAIL selftest produced no results';
+  },80);
+}
+if(location.search.indexOf('selftest=1')>=0){runSelftest()}
+
+renderTo(-1);
+})();
+</script>
+</body>
+</html>

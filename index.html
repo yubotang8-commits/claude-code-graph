@@ -2,641 +2,303 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude 流式链路播放器：token → SSE → Message</title>
+<title>claude-code 图集总览</title>
 <style>
-:root{
-  --ink:#0b0b0b; --sec:#52514e; --mut:#898781;
-  --blue:#2a78d6; --blue-f:#E8F0FB;
-  --orange:#eb6834; --orange-f:#FDEFE7; --orange-l:#F2C7A9;
-  --green:#1baf7a; --green-f:#E6F5EF;
-  --red:#d03b3b; --red-f:#fdf1f0;
-  --good:#0ca30c; --ser:#ec835a;
-  --panel:#fcfcfb; --line:#c3c2b7; --hair:#e1e0d9; --page:#f7f7f5; --white:#fff;
-  --mono:Consolas,'Cascadia Mono','Microsoft YaHei',monospace;
-  --ui:'Segoe UI','Microsoft YaHei','PingFang SC',sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--ui);background:var(--page);color:var(--ink);font-size:14px;line-height:1.55}
-#wrap{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
-header h1{font-size:25px;font-weight:700;letter-spacing:.5px}
-header .sub{color:var(--sec);font-size:13.5px;margin-top:5px}
-header .sub b{color:var(--ink)}
-.phases{display:flex;gap:8px;margin:14px 0 10px}
-.phases span{flex:1;text-align:center;font-size:12.5px;padding:6px 10px;border-radius:999px;background:var(--white);border:1px solid var(--hair);color:var(--mut);transition:all .3s}
-.phases span.on{color:var(--ink);font-weight:600;border-color:var(--line);box-shadow:inset 0 -2px 0 var(--line)}
-.phases span.p0.on{background:var(--blue-f);border-color:var(--blue)}
-.phases span.p1.on{background:var(--orange-f);border-color:var(--orange)}
-.phases span.p2.on{background:var(--green-f);border-color:var(--green)}
-
-#stage{display:grid;grid-template-columns:160px 420px 268px 1fr;gap:15px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;height:742px}
-.lane{display:flex;flex-direction:column;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
-.lane>.h{padding:9px 12px;font-size:14.5px;font-weight:700;border-bottom:1px solid var(--hair);display:flex;align-items:center;gap:8px;position:relative}
-.lane>.h .tag{font-size:10.5px;font-weight:600;color:var(--sec);background:var(--panel);border:1px solid var(--hair);border-radius:5px;padding:1px 6px}
-.lane>.h small{font-weight:400;color:var(--mut);font-size:11px;margin-left:auto;text-align:right}
-.lane>.feed{flex:1 1 0;padding:10px;display:flex;flex-direction:column;gap:8px;overflow-y:auto;min-height:0}
-.lane-foot{padding:8px 12px;font-size:11px;color:var(--mut);border-top:1px dashed var(--hair);background:var(--panel);line-height:1.55;flex:0 0 auto}
-.lane-foot b{color:var(--sec)}
-#lane-agent .feed{min-height:0}
-.mem{flex:0 0 auto;height:562px;overflow-y:auto;border-top:2px dashed var(--hair);background:#faf9f6;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
-.mem-h{font-size:12px;font-weight:700;color:var(--sec)}
-.mem-sub{font-size:11.5px;font-weight:700;color:var(--sec);margin-top:2px}
-.mem-sub small{font-weight:400;color:var(--mut);margin-left:6px;font-size:10.5px}
-.lane .h.pulse{animation:hp .55s ease}
-@keyframes hp{0%{box-shadow:inset 0 -3px 0 var(--blue)}100%{box-shadow:inset 0 0 0 transparent}}
-#lane-user .h{border-bottom:2px solid var(--mut)}
-#lane-model .h{border-bottom:2px solid var(--sec)}
-#lane-inf .h{border-bottom:2px solid var(--blue)}
-#lane-agent .h{border-bottom:2px solid var(--green)}
-#lane-user .feed{gap:10px;padding:12px 10px}
-.bubble{max-width:92%;font-size:12.5px;border-radius:12px;padding:8px 11px;animation:pop .35s ease;line-height:1.5;word-break:break-all}
-.bubble.q{align-self:flex-end;background:var(--blue-f);border:1.5px solid var(--blue);color:var(--ink);border-bottom-right-radius:4px}
-.bubble.a{align-self:flex-start;background:var(--green-f);border:1.5px solid var(--green);color:var(--ink);border-bottom-left-radius:4px}
-.bubble.thk{align-self:flex-start;background:#f3f1fb;border:1.5px dashed #b9aef0;color:#5b4d99;font-size:11.5px;font-style:italic}
-.bubble.st{align-self:flex-start;background:#f4f4f2;border:1.5px dashed var(--line);color:var(--sec);font-size:11.5px}
-.bubble.a.fin{border-style:solid;font-weight:600}
-.chip{font-family:var(--mono);font-size:12px;padding:5px 9px;border-radius:8px;border:1px solid var(--hair);background:var(--panel);color:var(--sec);animation:pop .35s ease}
-.chip.tok{background:#f4f4f2;border-color:var(--line);color:var(--ink)}
-.chip.tok::before{content:'⛓ ';opacity:.45}
-.chip.msg{background:var(--blue-f);border-color:var(--blue);color:var(--ink)}
-.chip.blk{background:var(--orange-f);border-color:var(--orange);color:var(--ink)}
-.chip.req{background:var(--blue-f);border-color:var(--blue);color:var(--ink);font-weight:600}
-.chip.act{background:var(--green-f);border-color:var(--green);color:var(--ink)}
-.chip .x{color:var(--mut);font-family:var(--ui)}
-@keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}
-.agent-card{border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--white);animation:pop .35s ease}
-.agent-card .t{font-weight:600;font-size:13px;display:flex;gap:6px;align-items:center}
-.agent-card .b{font-size:12.5px;color:var(--sec);margin-top:4px}
-.agent-card.tool .t::before{content:'🛠';font-size:13px}
-.agent-card.query .t::before{content:'🙋';font-size:13px}
-.agent-card.done{border-color:var(--good)}
-.agent-card.answer{border-color:var(--green);background:var(--green-f)}
-.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);border-top-color:var(--green);border-radius:50%;animation:sp 1s linear infinite}
-@keyframes sp{to{transform:rotate(360deg)}}
-
-#msg-panel{display:flex;flex-direction:column;gap:12px}
-.panel-title{font-size:14.5px;font-weight:700;color:var(--ink)}
-.panel-title small{font-weight:400;color:var(--mut);margin-left:8px;font-size:11.5px}
-#streams{display:flex;gap:8px;flex-wrap:wrap;min-height:34px}
-.stream-mini{font-size:11.5px;font-family:var(--mono);background:var(--white);border:1px solid var(--line);border-radius:8px;padding:4px 9px;animation:pop .4s ease}
-.stream-mini b{font-family:var(--ui)}
-#msg-card{border:2px solid var(--green);border-radius:14px;background:var(--white);overflow:hidden;flex:0 0 auto}
-#msg-card .mh{background:var(--green-f);padding:10px 14px;display:flex;align-items:center;gap:10px}
-#msg-card .mh .nm{font-size:17px;font-weight:700}
-#msg-card .mh .rb{font-size:11px;font-weight:700;background:var(--white);border:1px solid var(--green);color:var(--ink);border-radius:6px;padding:1px 7px}
-#msg-card .mh .mid{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--sec)}
-#msg-card .mu{padding:7px 14px;font-size:12px;color:var(--sec);border-bottom:1px solid var(--hair);font-family:var(--mono)}
-#msg-card .mu b{color:var(--ink)}
-.slot{padding:9px 14px;border-bottom:1px solid var(--hair);display:none}
-.slot.on{display:block;animation:pop .35s ease}
-.slot .sh{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--ink);display:flex;justify-content:space-between}
-.slot .sh .ok{font-family:var(--ui);font-size:11px;color:var(--mut)}
-.slot .sh .ok.done{color:var(--good);font-weight:700}
-.slot .sb{margin-top:5px;font-size:12.5px;min-height:20px}
-.slot .sb.txt{background:var(--panel);border:1px dashed var(--hair);border-radius:7px;padding:5px 9px;color:var(--ink)}
-.slot .sb .sub{color:var(--mut);font-size:11px}
-.slot .sb pre{font-family:var(--mono);font-size:11.5px;white-space:pre-wrap;color:var(--sec);margin-top:5px}
-.slot .sb .obj{font-family:var(--mono);font-size:11.5px;background:var(--green-f);border:1px solid var(--green);color:var(--ink);border-radius:7px;padding:5px 9px;display:none}
-.slot .sb .obj.on{display:inline-block;animation:pop .4s ease}
-.slot .sb .raw{color:var(--ink)}
-.slot .sb.th{background:#EDEBFA;border:1px dashed #c9c2ee;font-style:italic}
-.sigline{font-size:11px;color:var(--good);margin-top:5px;font-family:var(--mono)}
-.flash{animation:fl .7s ease}
-@keyframes fl{0%{background:var(--orange-f)}100%{background:var(--panel)}}
-#msg-card .mt{padding:10px 14px;display:flex;flex-wrap:wrap;gap:8px 18px;font-family:var(--mono);font-size:12.5px;color:var(--sec)}
-#msg-card .mt b{color:var(--ink)}
-#msg-card .mt b.hit{color:var(--blue);font-weight:700;animation:stamp .5s ease}
-@keyframes stamp{0%{transform:scale(1.6);background:var(--blue-f);border-radius:4px}100%{transform:scale(1)}}
-#msg-card .ms{padding:9px 14px;font-size:12px;color:var(--mut);border-top:1px solid var(--hair)}
-#msg-card .ms.final{color:var(--good);font-weight:700}
-#msg-empty{border:2px dashed var(--hair);border-radius:14px;color:var(--mut);font-size:12.5px;padding:26px 16px;text-align:center}
-
-#flights{position:absolute;inset:0;pointer-events:none;z-index:5}
-#stage.spot .lane{transition:filter .35s ease,opacity .35s ease,box-shadow .35s ease}
-#stage.spot .lane.dim{filter:grayscale(.85);opacity:.42}
-#stage.spot #lane-user.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
-#stage.spot #lane-agent.hot{box-shadow:0 0 0 2px var(--green),0 10px 30px rgba(27,175,122,.25)}
-#stage.spot #lane-inf.hot{box-shadow:0 0 0 2px var(--blue),0 10px 30px rgba(42,120,214,.25)}
-#stage.spot #lane-model.hot{box-shadow:0 0 0 2px var(--sec),0 10px 30px rgba(11,11,11,.13)}
-.mem{transition:border-color .3s ease,box-shadow .3s ease}
-.mem.glow{border-color:var(--green);box-shadow:0 0 0 2px rgba(27,175,122,.28)}
-.flight{position:absolute;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap;transform:translate(-50%,-50%);box-shadow:0 2px 8px rgba(0,0,0,.08)}
-.flight.token{background:#f4f4f2;border:1.5px solid var(--sec);color:var(--ink)}
-.flight.ev{background:var(--orange-f);border:1.5px solid var(--orange)}
-.flight.mv{background:var(--blue-f);border:1.5px solid var(--blue)}
-.flight.req{background:var(--blue-f);border:1.5px solid var(--blue);font-weight:700}
-.flight.prompt{background:#EDEBFA;border:1.5px solid #6250d6;color:#3d2f9e;font-weight:700;padding:6px 13px}
-.flight.back{background:var(--green-f);border:1.5px solid var(--green)}
-.flight.brk{background:var(--red-f);border:1.5px solid var(--red);color:var(--red);font-weight:700}
-
-#break-panel{display:none;margin-top:12px;border:1.5px solid var(--red);border-radius:14px;background:var(--white);padding:13px 16px}
-#break-panel.on{display:flex;gap:20px;animation:pop .3s ease}
-#break-panel .bt{font-weight:700;color:var(--red);font-size:15px;width:150px;flex:0 0 auto}
-#break-panel .bt small{display:block;color:var(--sec);font-weight:400;font-size:11.5px;margin-top:3px}
-#break-panel .rows{flex:1;display:flex;flex-direction:column;gap:7px}
-.brow{display:flex;gap:9px;align-items:baseline;font-size:12.5px}
-.brow .d{width:9px;height:9px;border-radius:50%;flex:0 0 auto;transform:translateY(1px)}
-.brow b{color:var(--ink)}
-.brow span{color:var(--sec)}
-#break-panel .rec{width:320px;flex:0 0 auto;border-left:1px solid var(--hair);padding-left:18px;font-size:12.5px;color:var(--sec)}
-#break-panel .rec .rt{font-weight:700;color:var(--ink);margin-bottom:6px;font-size:13px}
-#break-panel .rec li{margin-left:16px;margin-bottom:5px}
-
-#console{margin-top:12px;background:var(--white);border:1px solid var(--hair);border-radius:12px;overflow:hidden}
-#console .ch{padding:7px 13px;font-size:12.5px;font-weight:700;color:var(--sec);border-bottom:1px solid var(--hair);display:flex;gap:10px;align-items:center}
-#console .ch .lg{margin-left:auto;font-size:10.5px;color:var(--mut);font-weight:400}
-#lines{height:158px;overflow-y:auto;padding:9px 13px;font-family:var(--mono);font-size:11.8px;display:flex;flex-direction:column;gap:3px}
-#lines .ln{white-space:pre-wrap;color:var(--sec);border-radius:4px;padding:1px 6px;margin:0 -6px}
-#lines .ln.cur{background:var(--blue-f);color:var(--ink)}
-#lines .ln .ev{font-weight:700}
-#lines .ln.req .ev{color:var(--blue)}
-#lines .ln.msg .ev{color:var(--blue)}
-#lines .ln.blk .ev{color:var(--orange)}
-#lines .ln.tool .ev{color:var(--green)}
-#lines .ln.mech .ev{color:#6250d6}
-#lines .ln.mech{color:var(--sec)}
-#lines .ln.sys{color:var(--mut);font-style:italic}
-#lines .ln.brk{color:var(--red);font-weight:700}
-#lines .ln.lost{color:#b3b2ad}
-#lines .ln.lost .ev{color:#b3b2ad}
-
-#transport{position:sticky;top:0;z-index:30;margin:12px 0 10px;padding:10px 6px;background:var(--page);border-radius:12px;box-shadow:0 3px 14px rgba(11,11,11,.06);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-#transport .btns{display:flex;gap:6px}
-#transport button{font-family:var(--ui);font-size:13.5px;font-weight:600;border:1.5px solid var(--line);background:var(--white);color:var(--ink);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s}
-#transport button:hover{border-color:var(--blue);color:var(--blue)}
-#transport button.main{background:var(--blue);border-color:var(--blue);color:#fff;min-width:96px}
-#transport button.main:hover{filter:brightness(1.08);color:#fff}
-#transport button.danger{border-color:var(--red);color:var(--red)}
-#transport button.danger:hover{background:var(--red-f)}
-#bar{flex:1;min-width:260px;display:flex;gap:3px;height:26px;align-items:center;cursor:pointer}
-#bar .seg{flex:1;height:14px;border-radius:4px;background:var(--white);border:1px solid var(--hair);transition:all .2s}
-#bar .seg.p0.done{background:var(--blue-f);border-color:var(--blue)}
-#bar .seg.p1.done{background:var(--orange-f);border-color:var(--orange)}
-#bar .seg.p2.done{background:var(--green-f);border-color:var(--green)}
-#bar .seg:hover{transform:scaleY(1.5)}
-#speed{display:flex;gap:2px;border:1.5px solid var(--line);border-radius:9px;overflow:hidden}
-#speed button{border:none;border-radius:0;padding:7px 10px;font-size:12.5px}
-#speed button.on{background:var(--ink);color:#fff}
-#readout{font-size:13px;color:var(--sec);min-width:300px}
-#readout b{color:var(--ink)}
-#readout .fin{color:var(--good);font-weight:700}
-
-.legend{margin-top:14px;display:flex;gap:22px;flex-wrap:wrap;font-size:12px;color:var(--sec);align-items:center}
-.legend .k{display:flex;gap:6px;align-items:center}
-.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid}
-.hint{margin-top:8px;font-size:11.5px;color:var(--mut)}
-footer{margin-top:16px;font-size:11px;color:var(--mut)}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .n-title{font:600 13px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#5B6470}
+  .g-name{font:600 13px system-ui;fill:#3C4048}
+  .g-role{font:10px system-ui;fill:#8A8F98}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .elab-l{font:11px system-ui;fill:#6B7280;text-anchor:start}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  text{text-anchor:middle}
+  a{cursor:pointer}
+  h2{font-size:16px;margin:26px 0 8px}
+  .forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
+  .form-card{border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:12px 14px;font-size:12.5px;color:#3C4048;line-height:1.6}
+  .form-card b{display:block;font-size:13.5px;margin-bottom:2px}
+  .nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:8px}
+  .nav-card{border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 12px;font-size:12.5px}
+  .nav-card .g{font-weight:700;font-size:13px;margin-bottom:4px;color:#1F2328}
+  .nav-card a{color:#3B5BDB;text-decoration:none;margin-right:10px;white-space:nowrap}
+  .nav-card a:hover{text-decoration:underline}
+  .nav-card .fl{color:#6B7280;font-size:11.5px;line-height:1.9}
+  details{margin:16px 2px 0;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
 </style>
 </head>
 <body>
-<div id="wrap">
-<header>
-  <h1>Claude 流式链路播放器：token → SSE 事件 → Message</h1>
-  <div class="sub">用户提问 → <b>Agent</b> → <b>推理服务</b> → <b>模型</b>采样 token 流回 → 打包成 SSE 事件 → 拼装 Message / 工具循环 —— <b>每条流只有 1 个 message_delta</b></div>
-</header>
+<div class="wrap">
+<h1>claude-code 图集总览</h1>
+<p class="sub">逆向重打包的 Claude Code（claude-code-best/claude-code）· 9 大子系统 · 24 个组件</p>
+<p class="lead">三个阅读层次：先看下面这张<b>总架构图</b>（项目由什么构成）→ 点进组件看<b>组件架构图</b>（这个组件内部是什么）→ 再看各<b>流程图</b>（一件事怎么一步步发生，静态或动态可播放）。图面全部人话，源码模块名仅作灰色定位锚点。</p>
 
-<div class="phases">
-  <span class="p0" data-ph="0">第 1 轮 · 生成 + 工具调用（一条完整的流）</span>
-  <span class="p1" data-ph="1">执行工具 · 回传 tool_result</span>
-  <span class="p2" data-ph="2">第 2 轮 · 最终回答（又一条完整的流）</span>
+<div class="chart">
+<svg viewBox="0 0 1040 1362" width="1040" height="1362" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+</defs>
+
+<!-- ① 入口与引导 -->
+<rect x="20" y="40" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="70" class="g-name">①入口与引导</text>
+<text x="75" y="90" class="g-role">从命令行</text>
+<text x="75" y="104" class="g-role">到会话</text>
+<a href="01-cli-entry/architecture.html">
+<rect x="150" y="40" width="870" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="585" y="70" class="n-title">01 · 入口分发与启动</text>
+<text x="585" y="94" class="n-sub">从命令行到可用的会话：快速路径分发 → 初始化 → 工作区落位 → 界面挂载或无头执行</text>
+</a>
+
+<!-- ② 核心循环 -->
+<rect x="20" y="190" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="220" class="g-name">②核心循环</text>
+<text x="75" y="240" class="g-role">引擎：</text>
+<text x="75" y="254" class="g-role">一问一答</text>
+<a href="02-query-turn-loop/architecture.html">
+<rect x="150" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="292" y="220" class="n-title">02 · 回合循环</text>
+<text x="292" y="244" class="n-sub">请求→工具→再请求的引擎</text>
+</a>
+<a href="03-compaction/architecture.html">
+<rect x="447" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="589" y="220" class="n-title">03 · 上下文压缩</text>
+<text x="589" y="244" class="n-sub">上下文将满时的分层瘦身</text>
+</a>
+<a href="04-query-engine/architecture.html">
+<rect x="744" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="886" y="220" class="n-title">04 · SDK 会话引擎</text>
+<text x="886" y="244" class="n-sub">无界面调用方的回合编排</text>
+</a>
+
+<!-- ③ API 层 -->
+<rect x="20" y="340" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="370" class="g-name">③API 层</text>
+<text x="75" y="390" class="g-role">模型调用</text>
+<text x="75" y="404" class="g-role">通道</text>
+<a href="05-api-request/architecture.html">
+<rect x="150" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="292" y="370" class="n-title">05 · 流式请求</text>
+<text x="292" y="394" class="n-sub">一次 API 请求的完整旅程</text>
+</a>
+<a href="06-providers-compat/architecture.html">
+<rect x="447" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="589" y="370" class="n-title">06 · 多协议兼容</text>
+<text x="589" y="394" class="n-sub">OpenAI/Gemini/Grok 适配</text>
+</a>
+<a href="07-retry-fallback/architecture.html">
+<rect x="744" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="886" y="370" class="n-title">07 · 重试与回退</text>
+<text x="886" y="394" class="n-sub">失败分类→退避→换模型</text>
+</a>
+
+<!-- ④ 工具与权限 -->
+<rect x="20" y="490" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="520" class="g-name">④工具与权限</text>
+<text x="75" y="540" class="g-role">行动与</text>
+<text x="75" y="554" class="g-role">安全</text>
+<a href="08-tool-lifecycle/architecture.html">
+<rect x="150" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="255" y="520" class="n-title">08 · 工具执行</text>
+<text x="255" y="544" class="n-sub">工具调用的生命周期</text>
+</a>
+<a href="09-permission-pipeline/architecture.html">
+<rect x="372" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="477" y="520" class="n-title">09 · 权限管道</text>
+<text x="477" y="544" class="n-sub">执行前的判定级联</text>
+</a>
+<a href="10-deferred-tools/architecture.html">
+<rect x="594" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="699" y="520" class="n-title">10 · 延迟工具</text>
+<text x="699" y="544" class="n-sub">按需发现的工具</text>
+</a>
+<a href="11-bash-tool/architecture.html">
+<rect x="816" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="921" y="520" class="n-title">11 · Bash 执行</text>
+<text x="921" y="544" class="n-sub">安全检查与后台化</text>
+</a>
+
+<!-- ⑤ 上下文组装 -->
+<rect x="20" y="640" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="670" class="g-name">⑤上下文组装</text>
+<text x="75" y="690" class="g-role">请求前</text>
+<text x="75" y="704" class="g-role">由 ② 调用</text>
+<a href="12-context-assembly/architecture.html">
+<rect x="150" y="640" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="365" y="670" class="n-title">12 · 系统提示拼装</text>
+<text x="365" y="694" class="n-sub">一次请求的上下文三件套与 CLAUDE.md 层级发现</text>
+</a>
+<a href="13-memory-skill-injection/architecture.html">
+<rect x="592" y="640" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="807" y="670" class="n-title">13 · 记忆与技能注入</text>
+<text x="807" y="694" class="n-sub">按需浮现的记忆、技能与嵌套规则</text>
+</a>
+
+<!-- ⑥ 终端 UI -->
+<rect x="20" y="790" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="820" class="g-name">⑥终端 UI</text>
+<text x="75" y="840" class="g-role">驱动 ②</text>
+<text x="75" y="854" class="g-role">展示输出</text>
+<a href="14-repl-screen/architecture.html">
+<rect x="150" y="790" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="365" y="820" class="n-title">14 · REPL 交互屏</text>
+<text x="365" y="844" class="n-sub">按键、消息转录与权限对话框</text>
+</a>
+<a href="15-ink-kernel/architecture.html">
+<rect x="592" y="790" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="807" y="820" class="n-title">15 · Ink 渲染内核</text>
+<text x="807" y="844" class="n-sub">一帧界面如何画到终端</text>
+</a>
+
+<!-- ⑦ 扩展接入 -->
+<rect x="20" y="940" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="970" class="g-name">⑦扩展接入</text>
+<text x="75" y="990" class="g-role">向 ④ 注入</text>
+<text x="75" y="1004" class="g-role">工具与挂载</text>
+<a href="16-mcp-lifecycle/architecture.html">
+<rect x="150" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="292" y="970" class="n-title">16 · MCP 连接</text>
+<text x="292" y="994" class="n-sub">外部工具服务器接入</text>
+</a>
+<a href="17-hooks-pipeline/architecture.html">
+<rect x="447" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="589" y="970" class="n-title">17 · Hook 管道</text>
+<text x="589" y="994" class="n-sub">工具调用前后的挂载点</text>
+</a>
+<a href="18-slash-skills-plugins/architecture.html">
+<rect x="744" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="886" y="970" class="n-title">18 · 命令技能插件</text>
+<text x="886" y="994" class="n-sub">斜杠命令与扩展体系</text>
+</a>
+
+<!-- ⑧ 远程与后台 -->
+<rect x="20" y="1090" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="1120" class="g-name">⑧远程与后台</text>
+<text x="75" y="1140" class="g-role">经 ① 快速</text>
+<text x="75" y="1154" class="g-role">路径进入</text>
+<a href="19-remote-control/architecture.html">
+<rect x="150" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="292" y="1120" class="n-title">19 · 远程控制</text>
+<text x="292" y="1144" class="n-sub">浏览器远程驱动会话</text>
+</a>
+<a href="20-acp/architecture.html">
+<rect x="447" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="589" y="1120" class="n-title">20 · ACP 协议</text>
+<text x="589" y="1144" class="n-sub">编辑器接入标准协议</text>
+</a>
+<a href="21-daemon-bg/architecture.html">
+<rect x="744" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="886" y="1120" class="n-title">21 · 守护进程</text>
+<text x="886" y="1144" class="n-sub">常驻服务与后台会话</text>
+</a>
+
+<!-- ⑨ 持久化 -->
+<rect x="20" y="1240" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
+<text x="75" y="1270" class="g-name">⑨持久化</text>
+<text x="75" y="1290" class="g-role">记录并</text>
+<text x="75" y="1304" class="g-role">恢复 ②</text>
+<a href="22-transcript-store/architecture.html">
+<rect x="150" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="292" y="1270" class="n-title">22 · 会话落盘</text>
+<text x="292" y="1294" class="n-sub">消息如何写进 JSONL</text>
+</a>
+<a href="23-session-restore/architecture.html">
+<rect x="447" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="589" y="1270" class="n-title">23 · 会话恢复</text>
+<text x="589" y="1294" class="n-sub">恢复历史会话与换脑</text>
+</a>
+<a href="24-file-history/architecture.html">
+<rect x="744" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="886" y="1270" class="n-title">24 · 文件历史</text>
+<text x="886" y="1294" class="n-sub">编辑快照与回滚</text>
+</a>
+
+<!-- 主链箭头 -->
+<path class="edge" d="M560,128 L560,184" marker-end="url(#ah)"/>
+<text x="572" y="160" class="elab-l">启动完成后进入回合循环</text>
+<path class="edge" d="M560,278 L560,334" marker-end="url(#ah)"/>
+<text x="572" y="310" class="elab-l">每回合调用模型</text>
+<path class="edge" d="M560,428 L560,484" marker-end="url(#ah)"/>
+<text x="572" y="460" class="elab-l">响应中的工具调用进入执行</text>
+</svg>
 </div>
 
-<div id="transport">
-  <div class="btns">
-    <button id="b-reset" title="重置 (R)">⏮ 重置</button>
-    <button id="b-prev" title="上一步 (←)">◀ 上一步</button>
-    <button id="b-play" class="main" title="播放/暂停 (空格)">▶ 播放</button>
-    <button id="b-next" title="下一步 (→)">下一步 ▶</button>
-    <button id="b-end" title="跳到结尾">⏭ 结尾</button>
-    <button id="b-brk" class="danger" title="断流演示 (B)">⚡ 断流演示</button>
-    <button id="b-spot" title="聚焦模式：高亮当前节点、其余置灰">🔦 聚焦开</button>
-  </div>
-  <div id="bar"></div>
-  <div id="speed">
-    <button data-s="0.5">0.5×</button><button data-s="1" class="on">1×</button><button data-s="2">2×</button><button data-s="4">4×</button>
-  </div>
-  <div id="readout">就绪 · 点击 ▶ 播放</div>
+<h2>三种页面形式</h2>
+<div class="forms">
+<div class="form-card"><b>架构图（每组件一张）</b>讲"组成"：这个组件由哪些模块构成、谁调用谁。文件名 architecture.html。</div>
+<div class="form-card"><b>静态流程图</b>讲"路径"：整张图一眼看全——矩形=步骤、菱形=判定、紫色=替代路径。适合分支为主的流程。</div>
+<div class="form-card"><b>动态流程图</b>讲"时序"：可播放、可单步——泳道=站点、飞行包=消息、字幕=现在发生什么。适合流式/往返/渐进过程。</div>
 </div>
 
-<div id="stage">
-  <div class="lane" id="lane-user">
-    <div class="h" id="h-user">👤 用户 <small>提问 / 收回答案</small></div>
-    <div class="feed" id="feed-user"></div>
-    <div class="lane-foot">右蓝气泡 = 用户发出<br>紫斜体 = 思考摘要（UI 渲染 thinking_delta）<br>左绿气泡 = 回答（随 text_delta 流式长出）</div>
-  </div>
-  <div class="lane" id="lane-agent">
-    <div class="h" id="h-agent">🤖 Agent 服务 <span class="tag">客户端</span><small>事件 → Message · 工具循环</small></div>
-    <div class="feed" id="feed-agent"></div>
-    <div class="mem">
-      <div class="mem-h">🧬 Agent 进程内存 —— Message 拼装区（收到的每个事件写进这里）</div>
-      <div id="msg-empty">等待 message_start …<br><span style="font-size:11px">（事件的目的地：流结束时等价于非流式响应）</span></div>
-      <div id="msg-card" style="display:none">
-        <div class="mh"><span class="nm">Message</span><span class="rb" id="m-round">流 1</span><span class="mid" id="m-id">—</span></div>
-        <div class="mu">usage: input <b id="u-in">—</b> · output <b id="u-out">—</b></div>
-        <div class="slot" id="slotTh">
-          <div class="sh"><span>content[0] · thinking <small style="font-weight:400;color:var(--mut)">display: "summarized"（摘要流）</small></span><span class="ok" id="okTh">—</span></div>
-          <div class="sb txt th" id="th0">（等待 thinking_delta …）</div>
-          <div class="sigline" id="sigTh" style="display:none">signature ✓ EqQBCgIYAhIM…（校验 thinking 块完整性）</div>
-        </div>
-        <div class="slot" id="slot0">
-          <div class="sh"><span>content[1] · text</span><span class="ok" id="ok0">—</span></div>
-          <div class="sb txt" id="txt0">（等待 text_delta …）</div>
-        </div>
-        <div class="slot" id="slot1">
-          <div class="sh"><span id="s1h">content[2] · tool_use</span><span class="ok" id="ok1">—</span></div>
-          <div class="sb">
-            <div class="sub" id="s1m">get_weather · toolu_01T1x…</div>
-            <pre id="raw1"></pre>
-            <span class="obj" id="obj1"></span>
-          </div>
-        </div>
-        <div class="mt">stop_reason: <b id="stop">null</b><span style="color:var(--mut)">stop_sequence: null</span></div>
-        <div class="ms" id="m-state">未定型 —— 等待 message_delta / message_stop</div>
-      </div>
-      <div class="mem-sub">流历史<small>每条流 = 一次 HTTP 请求 = 1 个 message_delta</small></div>
-      <div id="streams"></div>
-    </div>
-  </div>
-  <div class="lane" id="lane-inf">
-    <div class="h" id="h-inf">☁ 推理服务 <span class="tag">API</span><small>token → SSE 事件</small></div>
-    <div class="feed" id="feed-inf"></div>
-    <div class="lane-foot"><b>怎么调用模型</b>：① 把对话 + 工具 schema <b>token 化</b>成 prompt 发给模型（prefill）<br>② <b>逐 token</b> 接收 decode 结果 ③ 增量组装成 SSE 事件推给 Agent</div>
-  </div>
-  <div class="lane" id="lane-model">
-    <div class="h" id="h-model">🧠 模型 <span class="tag">GPU</span><small>自回归采样</small></div>
-    <div class="feed" id="feed-model"></div>
-    <div class="lane-foot"><b>被调用方式</b>：prompt 一次性 <b>prefill</b> → <b>decode</b> 每步采样 1 个 token → <b>立即上推</b>（不等整句，这就是流式低延迟的来源）<br>结束方式：采样到 <b>EOT</b>（turn 结束标记）→ decode 停止 → 推理服务收尾</div>
-  </div>
-  <div id="flights"></div>
+<h2>全部页面</h2>
+<div class="nav">
+<div class="nav-card"><div class="g">01 入口分发与启动</div>
+<div class="fl"><a href="01-cli-entry/architecture.html">架构</a><a href="01-cli-entry/interactive-bootstrap.html">交互式启动</a><a href="01-cli-entry/headless-pipe.html">无头链路</a><a href="01-cli-entry/fastpath-bypass.html">快速路径</a><a href="01-cli-entry/resume-entry.html">恢复入口</a></div></div>
+<div class="nav-card"><div class="g">02 回合循环</div>
+<div class="fl"><a href="02-query-turn-loop/architecture.html">架构</a><a href="02-query-turn-loop/turn-loop.html">回合循环（动态）</a></div></div>
+<div class="nav-card"><div class="g">03 上下文压缩</div>
+<div class="fl"><a href="03-compaction/architecture.html">架构</a><a href="03-compaction/autocompact.html">自动压缩（动态）</a><a href="03-compaction/pre-request-trim.html">请求前裁剪（动态）</a></div></div>
+<div class="nav-card"><div class="g">04 SDK 会话引擎</div>
+<div class="fl"><a href="04-query-engine/architecture.html">架构</a><a href="04-query-engine/sdk-turn.html">SDK 回合（动态）</a><a href="04-query-engine/abort-interrupt.html">打断（动态）</a></div></div>
+<div class="nav-card"><div class="g">05 流式请求</div>
+<div class="fl"><a href="05-api-request/architecture.html">架构</a><a href="05-api-request/sse-stream.html">SSE 流式链路（动态·专题）</a></div></div>
+<div class="nav-card"><div class="g">06 多协议兼容</div>
+<div class="fl"><a href="06-providers-compat/architecture.html">架构</a><a href="06-providers-compat/provider-selection.html">通路选择</a><a href="06-providers-compat/openai-adapter.html">OpenAI 适配</a></div></div>
+<div class="nav-card"><div class="g">07 重试与回退</div>
+<div class="fl"><a href="07-retry-fallback/architecture.html">架构</a><a href="07-retry-fallback/retry-fallback.html">重试时间线（动态）</a></div></div>
+<div class="nav-card"><div class="g">08 工具执行</div>
+<div class="fl"><a href="08-tool-lifecycle/architecture.html">架构</a><a href="08-tool-lifecycle/tool-use-lifecycle.html">工具生命周期（动态）</a><a href="08-tool-lifecycle/tool-pool-assembly.html">工具池组装</a></div></div>
+<div class="nav-card"><div class="g">09 权限管道</div>
+<div class="fl"><a href="09-permission-pipeline/architecture.html">架构</a><a href="09-permission-pipeline/permission-cascade.html">判定级联</a><a href="09-permission-pipeline/permission-approval-ui.html">批准对话（动态）</a></div></div>
+<div class="nav-card"><div class="g">10 延迟工具</div>
+<div class="fl"><a href="10-deferred-tools/architecture.html">架构</a><a href="10-deferred-tools/deferred-tool-loading.html">按需发现（动态）</a></div></div>
+<div class="nav-card"><div class="g">11 Bash 执行</div>
+<div class="fl"><a href="11-bash-tool/architecture.html">架构</a><a href="11-bash-tool/bash-execution.html">执行流（动态）</a></div></div>
+<div class="nav-card"><div class="g">12 系统提示拼装</div>
+<div class="fl"><a href="12-context-assembly/architecture.html">架构</a><a href="12-context-assembly/context-assembly.html">组装流水线</a><a href="12-context-assembly/claudemd-discovery.html">CLAUDE.md 发现</a></div></div>
+<div class="nav-card"><div class="g">13 记忆与技能注入</div>
+<div class="fl"><a href="13-memory-skill-injection/architecture.html">架构</a><a href="13-memory-skill-injection/memory-recall.html">记忆召回（动态）</a><a href="13-memory-skill-injection/skill-discovery.html">技能发现（动态）</a><a href="13-memory-skill-injection/nested-claudemd.html">嵌套注入（动态）</a></div></div>
+<div class="nav-card"><div class="g">14 REPL 交互屏</div>
+<div class="fl"><a href="14-repl-screen/architecture.html">架构</a><a href="14-repl-screen/keypress-turn.html">按键回合（动态）</a><a href="14-repl-screen/streaming-transcript.html">流式转录（动态）</a></div></div>
+<div class="nav-card"><div class="g">15 Ink 渲染内核</div>
+<div class="fl"><a href="15-ink-kernel/architecture.html">架构</a><a href="15-ink-kernel/frame-pipeline.html">单帧管线（动态）</a><a href="15-ink-kernel/legacy-console-heal.html">老控制台自愈（动态）</a></div></div>
+<div class="nav-card"><div class="g">16 MCP 连接</div>
+<div class="fl"><a href="16-mcp-lifecycle/architecture.html">架构</a><a href="16-mcp-lifecycle/mcp-connection.html">连接生命周期</a></div></div>
+<div class="nav-card"><div class="g">17 Hook 管道</div>
+<div class="fl"><a href="17-hooks-pipeline/architecture.html">架构</a><a href="17-hooks-pipeline/tool-hook-pipeline.html">工具 Hook 管道（动态）</a></div></div>
+<div class="nav-card"><div class="g">18 命令技能插件</div>
+<div class="fl"><a href="18-slash-skills-plugins/architecture.html">架构</a><a href="18-slash-skills-plugins/slash-dispatch.html">斜杠分发</a><a href="18-slash-skills-plugins/skill-search-prefetch.html">技能搜索（动态）</a><a href="18-slash-skills-plugins/plugin-install.html">插件安装</a></div></div>
+<div class="nav-card"><div class="g">19 远程控制</div>
+<div class="fl"><a href="19-remote-control/architecture.html">架构</a><a href="19-remote-control/remote-session-lifecycle.html">会话全生命周期（动态）</a></div></div>
+<div class="nav-card"><div class="g">20 ACP 协议</div>
+<div class="fl"><a href="20-acp/architecture.html">架构</a><a href="20-acp/acp-prompt-turn.html">一个回合（动态）</a><a href="20-acp/acp-link-rcs.html">接入拓扑</a></div></div>
+<div class="nav-card"><div class="g">21 守护进程</div>
+<div class="fl"><a href="21-daemon-bg/architecture.html">架构</a><a href="21-daemon-bg/daemon-supervisor.html">拉起与守护</a></div></div>
+<div class="nav-card"><div class="g">22 会话落盘</div>
+<div class="fl"><a href="22-transcript-store/architecture.html">架构</a><a href="22-transcript-store/jsonl-persist.html">落盘生命周期（动态）</a><a href="22-transcript-store/exit-flush.html">退出冲刷（动态）</a></div></div>
+<div class="nav-card"><div class="g">23 会话恢复</div>
+<div class="fl"><a href="23-session-restore/architecture.html">架构</a><a href="23-session-restore/resume-restore.html">恢复加载</a><a href="23-session-restore/clear-swap.html">清空换脑（动态）</a></div></div>
+<div class="nav-card"><div class="g">24 文件历史</div>
+<div class="fl"><a href="24-file-history/architecture.html">架构</a><a href="24-file-history/snapshot-rewind.html">快照与回滚</a></div></div>
 </div>
 
-<div id="break-panel">
-  <div class="bt">⚡ 断流现场<small>连接在 input_json_delta 传输中途断开（网络 / 超时 / 代理）</small></div>
-  <div class="rows">
-    <div class="brow"><span class="d" style="background:var(--good)"></span><b>content[0] · thinking 块</b><span>完整（含 signature）—— 回传历史须原样带回</span></div>
-    <div class="brow"><span class="d" style="background:var(--good)"></span><b>content[1] · text 块</b><span>完整可用 —— content_block_stop 已收到</span></div>
-    <div class="brow"><span class="d" style="background:var(--ser)"></span><b>content[2] · tool_use</b><span>input 只拼到 {"location": "San Francisc —— 不完整 JSON，无法解析</span></div>
-    <div class="brow"><span class="d" style="background:var(--red)"></span><b>message_delta / message_stop</b><span>未到达 → stop_reason / usage 未知，Message 未定型</span></div>
-    <div class="brow" style="margin-top:4px"><span class="d" style="background:var(--red)"></span><b>另一种“断”</b><span>流内 error 事件（overloaded_error ≈ HTTP 529）—— HTTP 状态码仍是 200</span></div>
-  </div>
-  <div class="rec">
-    <div class="rt">怎么恢复（按模型代际）</div>
-    <ul>
-      <li><b>Claude ≤ 4.5</b>：把已收到的部分作为新请求 assistant 消息的开头（prefill 续写）</li>
-      <li><b>Claude ≥ 4.6</b>：发一条 user 消息 = 部分内容 + 「请从断点继续」</li>
-      <li><b>通用</b>：tool_use / thinking 块不可部分恢复，从最近一个完整 text 块续传最稳</li>
-    </ul>
-  </div>
+<details>
+<summary>考据与口径说明</summary>
+<ul>
+<li>组件划分与全部图面内容依据对仓库源码的逐文件取证（file:line 级证据保留在各页"深入细节"折叠区），并修正了仓库自述文档的多处漂移（CORE_TOOLS 数量、src/hooks/ 归属、src/ink.ts 不存在等）。</li>
+<li>SSE 事件流专题页（05/sse-stream.html）为图集自带页，依据官方流式文档整理；firstparty-stream 流程图因此不再单列。</li>
+<li>总架构图的分组与主链箭头表达主要调用关系；非邻接协作关系（如 ⑦ 向 ④ 注入工具、⑨ 记录 ②）以各组标签小字标注，避免穿线。</li>
+</ul>
+</details>
 </div>
-
-<div id="console">
-  <div class="ch">线报文（官方 tool-use 示例 · 真实事件名）<span class="lg">event: 名称 + data: 单行 JSON</span></div>
-  <div id="lines"></div>
-</div>
-
-<div class="legend">
-  <span class="k"><span class="sw" style="background:var(--blue-f);border-color:var(--blue)"></span>消息级事件（管 Message 顶层）</span>
-  <span class="k"><span class="sw" style="background:var(--orange-f);border-color:var(--orange)"></span>块级事件（管 content[index] 槽位）</span>
-  <span class="k"><span class="sw" style="background:var(--green-f);border-color:var(--green)"></span>数据对象 / 工具动作</span>
-  <span class="k"><span class="sw" style="background:#f4f4f2;border-color:var(--sec)"></span>token（模型原始输出）</span>
-</div>
-<div class="hint">空格 = 播放 / 暂停 · ← → = 单步 · 点击进度条跳转 · R = 重置 · B = 断流演示</div>
-<footer>依据 platform.claude.com/docs/en/build-with-claude/streaming 官方示例整理 · 与桌面大图《一张图分清 SSE 事件 / Message / Block》配套</footer>
-</div>
-
-<script>
-(function(){
-'use strict';
-var $=function(id){return document.getElementById(id)};
-var feeds={user:$('feed-user'),model:$('feed-model'),inf:$('feed-inf'),agent:$('feed-agent')};
-var lanes={user:$('lane-user'),model:$('lane-model'),inf:$('lane-inf'),agent:$('lane-agent')};
-var heads={user:$('h-user'),model:$('h-model'),inf:$('h-inf'),agent:$('h-agent')};
-var flightsEl=$('flights'), linesEl=$('lines'), barEl=$('bar'), readout=$('readout');
-var card=$('msg-card'), empty=$('msg-empty');
-var activeAnims=[]; var breakMode=false;
-
-function el(cls,parent,txt){var d=document.createElement('div');d.className=cls;if(txt!=null)d.textContent=txt;if(parent)parent.appendChild(d);return d}
-function pulse(lane){var h=heads[lane];h.classList.remove('pulse');void h.offsetWidth;h.classList.add('pulse')}
-function chip(lane,cls,txt){var c=el('chip '+cls,feeds[lane],txt);feeds[lane].scrollTop=feeds[lane].scrollHeight;return c}
-function addLog(kind,text){
-  var d=document.createElement('div'); d.className='ln '+kind;
-  if(kind==='sys'){d.textContent=text}
-  else if(kind==='brk'){d.textContent=text}
-  else{
-    var i=text.indexOf('·');
-    if(i>0){var s1=document.createElement('span');s1.className='ev';s1.textContent=text.slice(0,i).trim()+' ';
-      d.appendChild(s1);d.appendChild(document.createTextNode(text.slice(i+1).trim()));}
-    else{var s=document.createElement('span');s.className='ev';s.textContent=text+' ';d.appendChild(s);}
-  }
-  linesEl.appendChild(d);
-  var cur=linesEl.querySelectorAll('.ln.cur'); for(var k=0;k<cur.length;k++)cur[k].classList.remove('cur');
-  if(kind!=='sys'&&kind!=='brk')d.classList.add('cur');
-  linesEl.scrollTop=linesEl.scrollHeight; return d;
-}
-function fly(fromLane,toLane,label,cls,dur){
-  var a=lanes[fromLane].getBoundingClientRect(), b=lanes[toLane].getBoundingClientRect(), h=flightsEl.getBoundingClientRect();
-  var f=document.createElement('div'); f.className='flight '+cls; f.textContent=label;
-  var x0=a.left+a.width/2-h.left, y0=a.top+18-h.top, x1=b.left+b.width/2-h.left, y1=b.top+18-h.top;
-  f.style.left=x0+'px'; f.style.top=y0+'px';
-  flightsEl.appendChild(f);
-  var dx=x1-x0;
-  try{
-    var an=f.animate([{transform:'translate(-50%,-50%)',offset:0},{transform:'translate(calc(-50% + '+(dx*0.5)+'px), calc(-50% + '+(y1-y0)*0.5+'px))',offset:.5},{transform:'translate(calc(-50% + '+dx+'px), calc(-50% + '+(y1-y0)+'px))'}],{duration:dur||700,easing:'ease-in-out'});
-    activeAnims.push(an);
-    an.finished.then(function(){f.remove();var i=activeAnims.indexOf(an);if(i>=0)activeAnims.splice(i,1)}).catch(function(){});
-  }catch(e){setTimeout(function(){f.remove()},dur||700)}
-  pulse(toLane);
-}
-function flash(node){node.classList.remove('flash');void node.offsetWidth;node.classList.add('flash')}
-function stamp(id,val){var n=$(id);n.textContent=val;n.classList.remove('hit');void n.offsetWidth;n.classList.add('hit')}
-var focusMode=true,memGlowT=null;
-function setFocus(s){
-  var stage=document.getElementById('stage');
-  var mem=document.querySelector('#lane-agent .mem');
-  ['user','agent','inf','model'].forEach(function(k){lanes[k].classList.remove('hot');lanes[k].classList.remove('dim')});
-  if(mem)mem.classList.remove('glow');
-  if(!focusMode||!s||!s.focus){stage.classList.remove('spot');return}
-  stage.classList.add('spot');
-  lanes[s.focus].classList.add('hot');
-  ['user','agent','inf','model'].forEach(function(k){if(k!==s.focus)lanes[k].classList.add('dim')});
-  if(s.mem&&mem){mem.classList.add('glow');clearTimeout(memGlowT);memGlowT=setTimeout(function(){mem.classList.remove('glow')},900)}
-}
-
-// ---------- step script ----------
-function agentCard(kind,title,body){
-  var d=document.createElement('div');d.className='agent-card '+kind;
-  d.innerHTML='<div class="t">'+title+'</div>'+(body?'<div class="b">'+body+'</div>':'');
-  feeds.agent.appendChild(d);feeds.agent.scrollTop=feeds.agent.scrollHeight;return d;
-}
-var toolCard=null,thB=null,toolB=null,ansB=null;
-function bubble(kind,text){
-  var d=document.createElement('div');d.className='bubble '+kind;d.textContent=text;
-  feeds.user.appendChild(d);feeds.user.scrollTop=feeds.user.scrollHeight;return d;
-}
-
-// ---- stepwise script (replacement block) ----
-// 每个事件拆成「采样/发出 → 传输 → 到达写入」子步骤：内存只在数据包到达后才更新
-function sEmit(o){ // 推理服务发出结构事件 → 飞向 Agent（无 token 参与）
-  return {id:o.id+'-a',ph:o.ph,dur:o.durA||850,lab:o.labA,log:null,focus:'inf',state:function(){
-    chip('inf',o.cls,o.infChip);
-  },live:function(){fly('inf','agent',o.flight,o.fcls||'ev',700)}};
-}
-function sArrive(o){ // 事件到达 Agent → 写入内存 + 日志
-  return {id:o.id+'-b',ph:o.ph,dur:o.durB||800,lab:o.labB,log:o.log,logKind:o.logKind,focus:'agent',mem:true,state:function(){
-    chip('agent',o.cls,o.agentChip);o.write();
-  },live:null};
-}
-function ev(o){return [sEmit(o),sArrive(o)]}
-function sTok(o){ // 模型采样 token → 立即上推
-  return {id:o.id+'-a',ph:o.ph,dur:800,lab:'模型采样 token「'+o.tok+'」',log:null,focus:'model',state:function(){
-    chip('model','tok',o.tokChip);
-  },live:function(){fly('model','inf','token: '+o.tok,'token',620)}};
-}
-function sPack(o){ // 推理服务把 token 打包成 SSE 事件 → 发送
-  return {id:o.id+'-b',ph:o.ph,dur:850,lab:'推理服务打包 '+o.evName,log:null,focus:'inf',state:function(){
-    chip('inf',o.cls,o.infChip);
-  },live:function(){fly('inf','agent',o.flight,o.fcls||'ev',680)}};
-}
-function sLand(o){ // 事件到达 Agent → 写入内存 + 日志
-  return {id:o.id+'-c',ph:o.ph,dur:800,lab:'Agent 写入内存（'+o.land+'）',log:o.log,logKind:o.logKind,focus:'agent',mem:true,state:function(){
-    chip('agent',o.cls,o.agentChip);o.write();
-  },live:null};
-}
-function tok(o){return [sTok(o),sPack(o),sLand(o)]}
-
-var steps=[].concat(
- // ── 开场：用户 → Agent → 推理服务 → 模型 ──
- {id:'q-a',ph:0,dur:800,focus:'user',lab:'用户提问',log:null,state:function(){bubble('q','查旧金山的天气')},live:null},
- {id:'q-b',ph:0,dur:850,focus:'agent',lab:'提问送达 Agent',log:null,state:function(){chip('agent','act','收到提问 · 准备请求')},live:function(){fly('user','agent','🙋 查旧金山的天气','back',700)}},
- {id:'post1-a',ph:0,dur:900,focus:'agent',lab:'Agent 发起请求 1',log:null,state:function(){chip('agent','req','发起 POST #1')},live:function(){fly('agent','inf','POST /v1/messages (stream:true)','req',750)}},
- {id:'post1-b',ph:0,dur:800,focus:'inf',lab:'推理服务收到请求 1',log:'POST /v1/messages · stream: true, tools:[get_weather]',logKind:'req',state:function(){chip('inf','req','POST #1 · stream:true')},live:null},
- {id:'pr1-a',ph:0,dur:1000,focus:'inf',lab:'推理服务发送 prompt（token 化）',log:'→ 推理服务 → 模型 · prompt = token 化的对话历史 + 工具 schema',logKind:'mech',state:function(){chip('inf','act','发送 prompt（token 化）')},live:function(){fly('inf','model','prompt：对话 + 工具 schema（token 化）','prompt',850)}},
- {id:'pr1-b',ph:0,dur:750,focus:'model',lab:'模型收到 prompt → prefill',log:null,state:function(){chip('model','act','prefill 处理中…')},live:null},
- {id:'pr1-c',ph:0,dur:800,focus:'model',lab:'prefill 完成 → decode',log:'模型 prefill 完成 → decode · 自回归采样，每步 1 个 token、立即上推',logKind:'mech',state:function(){chip('model','act','prefill ✓ → decode：每步 1 token')},live:null},
-
- // ── 第 1 轮：一条完整的流 ──
- ev({id:'st1',ph:0,cls:'msg',fcls:'mv',infChip:'message_start',agentChip:'message_start',flight:'event: message_start',labA:'推理服务发出 message_start',labB:'Agent 写入内存（Message 骨架）',log:'event: message_start · data: {"message":{"id":"msg_014p7g…","content":[],"stop_reason":null,"usage":{"input_tokens":472}}}',logKind:'msg',write:function(){
-   card.style.display='';empty.style.display='none';
-   $('m-round').textContent='流 1';$('m-id').textContent='msg_014p7g…';
-   $('u-in').textContent='472';$('u-out').textContent='2';$('stop').textContent='null';
- }}),
- ev({id:'cbsTh',ph:0,cls:'blk',infChip:'content_block_start · 0（thinking）',agentChip:'cbs index=0 · thinking',flight:'content_block_start (0 · thinking)',labA:'推理服务开块 content[0]（thinking）',labB:'Agent 写入内存（thinking 块槽位）',log:'event: content_block_start · data: {"index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}',logKind:'blk',write:function(){
-   $('slotTh').classList.add('on');$('th0').textContent='（等待 thinking_delta …）';$('okTh').textContent='—';$('okTh').classList.remove('done');$('sigTh').style.display='none';
- }}),
- tok({id:'thd1',ph:0,cls:'blk',tok:'用户要天气→有工具',tokChip:'“用户要旧金山天气…”',evName:'thinking_delta',land:'thinking 追加',infChip:'token → thinking_delta',agentChip:'thinking_delta',flight:'thinking_delta',log:'event: content_block_delta · data: {"index":0,"delta":{"type":"thinking_delta","thinking":"用户要旧金山天气 → 我有 get_weather 工具…"}}',logKind:'blk',write:function(){$('th0').textContent='用户要旧金山天气 → 我有 get_weather 工具…';flash($('th0'));thB=bubble('thk','💭 思考：用户要旧金山天气 → 我有 get_weather 工具…')}}),
- tok({id:'thd2',ph:0,cls:'blk',tok:'参数→发起调用',tokChip:'“参数 location → 发起调用”',evName:'thinking_delta',land:'thinking 追加（思考完）',infChip:'token → thinking_delta',agentChip:'thinking_delta',flight:'thinking_delta',log:'event: content_block_delta · data: {"index":0,"delta":{"type":"thinking_delta","thinking":"参数 location=San Francisco → 发起调用"}}',logKind:'blk',write:function(){$('th0').textContent='用户要旧金山天气 → 我有 get_weather 工具，参数 location=San Francisco → 发起调用';flash($('th0'));if(thB)thB.textContent='💭 思考：参数 location=San Francisco → 发起调用'}}),
- ev({id:'sig1',ph:0,cls:'blk',infChip:'signature_delta',agentChip:'signature_delta',flight:'signature_delta',labA:'推理服务发出 signature_delta（紧贴关块前）',labB:'Agent 写入内存（thinking 签名校验）',log:'event: content_block_delta · data: {"index":0,"delta":{"type":"signature_delta","signature":"EqQBCgIYAhIM…"}}',logKind:'blk',write:function(){$('sigTh').style.display=''}}),
- ev({id:'cbstopTh',ph:0,cls:'blk',infChip:'content_block_stop · 0',agentChip:'cbstop index=0',flight:'content_block_stop (0)',labA:'推理服务关块 index=0（thinking 定型）',labB:'Agent 写入内存（thinking 块定型）',log:'event: content_block_stop · data: {"index":0}',logKind:'blk',write:function(){$('okTh').textContent='✓ 定型';$('okTh').classList.add('done')}}),
- ev({id:'cbs0',ph:0,cls:'blk',infChip:'content_block_start · 1',agentChip:'cbs index=1',flight:'content_block_start (1)',labA:'推理服务开块 content[1]',labB:'Agent 写入内存（text 块槽位）',log:'event: content_block_start · data: {"index":1,"content_block":{"type":"text","text":""}}',logKind:'blk',write:function(){
-   $('slot0').classList.add('on');$('txt0').textContent='（等待 text_delta …）';$('ok0').textContent='—';$('ok0').classList.remove('done');
- }}),
- tok({id:'td1',ph:0,cls:'blk',tok:'Okay',tokChip:'“Okay”',evName:'text_delta',land:'text 追加「Okay」',infChip:'token → text_delta “Okay”',agentChip:'text_delta',flight:'text_delta · “Okay”',log:'event: content_block_delta · data: {"index":1,"delta":{"type":"text_delta","text":"Okay"}}',logKind:'blk',write:function(){$('txt0').textContent='Okay';flash($('txt0'))}}),
- tok({id:'td2',ph:0,cls:'blk',tok:', let’s check',tokChip:'“, let’s check”',evName:'text_delta',land:'text 追加',infChip:'token → text_delta',agentChip:'text_delta',flight:'text_delta',log:'event: content_block_delta · data: {"index":1,"delta":{"type":"text_delta","text":", let’s check …"}}',logKind:'blk',write:function(){$('txt0').textContent='Okay, let’s check';flash($('txt0'))}}),
- tok({id:'td3',ph:0,cls:'blk',tok:'the weather…',tokChip:'“ the weather…”',evName:'text_delta',land:'text 追加（正文完）',infChip:'token → text_delta',agentChip:'text_delta',flight:'text_delta',log:'event: content_block_delta · data: {"index":1,"delta":{"type":"text_delta","text":" the weather for San Francisco, CA:"}}',logKind:'blk',write:function(){$('txt0').textContent='Okay, let’s check the weather for San Francisco, CA:';flash($('txt0'))}}),
- ev({id:'cbstop0',ph:0,cls:'blk',infChip:'content_block_stop · 1',agentChip:'cbstop index=1',flight:'content_block_stop (1)',labA:'推理服务关块 index=1',labB:'Agent 写入内存（text 块定型）',log:'event: content_block_stop · data: {"index":1}',logKind:'blk',write:function(){$('ok0').textContent='✓ 定型';$('ok0').classList.add('done')}}),
- {id:'decide',ph:0,dur:850,focus:'model',lab:'模型决定调用工具',log:null,state:function(){chip('model','act','思考完毕 → 输出工具调用 token')},live:null},
- ev({id:'cbs1',ph:0,cls:'blk',infChip:'content_block_start · 2',agentChip:'cbs index=2',flight:'content_block_start (2 · tool_use)',labA:'推理服务开块 content[2]（tool_use）',labB:'Agent 写入内存（tool_use 槽位）',log:'event: content_block_start · data: {"index":2,"content_block":{"type":"tool_use","id":"toolu_01T…","name":"get_weather","input":{}}}',logKind:'blk',write:function(){
-   $('slot1').classList.add('on');$('ok1').textContent='—';$('ok1').classList.remove('done');
-   $('raw1').textContent='';$('raw1').style.display='';$('obj1').classList.remove('on');
- }}),
- tok({id:'ijd1',ph:0,cls:'blk',tok:'{"location":',tokChip:'“{“location”:”',evName:'input_json_delta',land:'partial_json 追加',infChip:'token → input_json_delta',agentChip:'input_json_delta',flight:'input_json_delta',log:'event: content_block_delta · data: {"index":2,"delta":{"type":"input_json_delta","partial_json":"{\\"location\\":"}}',logKind:'blk',write:function(){$('raw1').textContent='{"location":';flash($('raw1'))}}),
- tok({id:'ijd2',ph:0,cls:'blk',tok:'San Francisc',tokChip:'“San Francisc”',evName:'input_json_delta',land:'partial_json 追加',infChip:'token → input_json_delta',agentChip:'input_json_delta',flight:'input_json_delta',log:'event: content_block_delta · data: {"index":2,"delta":{"type":"input_json_delta","partial_json":" \\"San Francisc"}}',logKind:'blk',write:function(){$('raw1').textContent='{"location": "San Francisc';flash($('raw1'))}}),
- tok({id:'ijd3',ph:0,cls:'blk',tok:'o, CA”}',tokChip:'“o, CA”}”',evName:'input_json_delta',land:'partial_json 拼完整',infChip:'token → input_json_delta',agentChip:'input_json_delta',flight:'input_json_delta',log:'event: content_block_delta · data: {"index":2,"delta":{"type":"input_json_delta","partial_json":"o, CA\\"}"}}',logKind:'blk',write:function(){$('raw1').textContent='{"location": "San Francisco, CA"}';flash($('raw1'))}}),
- {id:'eot1',ph:0,dur:900,focus:'model',lab:'模型采样到结束 token（EOT）',log:'模型 decode 结束 · 采样到 EOT（turn 结束标记）→ 推理服务开始收尾',logKind:'mech',state:function(){chip('model','act','EOT ▸ decode 停止')},live:null},
- ev({id:'cbstop1',ph:0,cls:'blk',infChip:'content_block_stop · 2',agentChip:'cbstop index=2',flight:'content_block_stop (2)',labA:'推理服务关块 index=2',labB:'Agent 写入内存（JSON.parse → 对象）',log:'event: content_block_stop · data: {"index":2}',logKind:'blk',write:function(){
-   $('raw1').style.display='none';
-   $('obj1').textContent='{ "location": "San Francisco, CA" }';$('obj1').classList.add('on');
-   $('ok1').textContent='✓ input 已解析';$('ok1').classList.add('done');
- }}),
- ev({id:'md1',ph:0,cls:'msg',fcls:'mv',infChip:'message_delta',agentChip:'message_delta',flight:'message_delta · tool_use',labA:'推理服务收到 EOT 收尾 · 发出 message_delta（本流唯一一条）',labB:'Agent 写入内存（stop_reason 盖章）',log:'event: message_delta · data: {"delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"output_tokens":89}}',logKind:'msg',write:function(){
-   stamp('stop','tool_use');$('u-out').textContent='89';
- }}),
- ev({id:'mstop1',ph:0,cls:'msg',fcls:'mv',infChip:'message_stop',agentChip:'message_stop',flight:'event: message_stop',labA:'推理服务发出 message_stop（流 1 收尾）',labB:'Agent 写入内存（Message 定型）',log:'event: message_stop · data: {"type":"message_stop"}',logKind:'msg',write:function(){
-   $('m-state').textContent='定型 ✓ —— 等价于非流式响应';$('m-state').classList.add('final');
-   var s=document.createElement('div');s.className='stream-mini';s.innerHTML='<b>流 1</b> · stop_reason=<b>tool_use</b>';
-   $('streams').appendChild(s);
- }}),
-
- // ── 工具执行 ──
- {id:'tool-a',ph:1,dur:1000,focus:'agent',lab:'Agent 执行工具',log:'→ Agent 执行 get_weather({"location":"San Francisco, CA"})',logKind:'tool',state:function(){
-   if(toolCard)toolCard.remove();
-   toolB=bubble('st','🛠 调用工具 get_weather…');
-   toolCard=agentCard('tool','执行 get_weather(location)','<span class="spin"></span> 运行中…');
- },live:function(){fly('agent','agent','🛠 get_weather(location)','back',650)}},
- {id:'tool-b',ph:1,dur:900,focus:'agent',lab:'tool_result 返回',log:'← tool_result · {"result":"21°C · 晴"}',logKind:'tool',state:function(){
-   if(toolCard){toolCard.classList.add('done');toolCard.innerHTML='<div class="t">✅ get_weather 完成</div><div class="b">21°C · 晴</div>';}
-   if(toolB)toolB.textContent='✅ 工具返回：21°C · 晴';
- },live:null},
-
- // ── 第 2 轮：又一条完整的流 ──
- {id:'post2-a',ph:2,dur:900,focus:'agent',lab:'Agent 发起请求 2（新的一条流）',log:null,state:function(){chip('agent','req','发起 POST #2')},live:function(){fly('agent','inf','POST #2（历史 + tool_result）','req',750)}},
- {id:'post2-b',ph:2,dur:800,focus:'inf',lab:'推理服务收到请求 2',log:'POST /v1/messages · 历史含 assistant 轮 + tool_result',logKind:'req',state:function(){chip('inf','req','POST #2 · 新的一条流')},live:null},
- {id:'pr2-a',ph:2,dur:1000,focus:'inf',lab:'推理服务发送 prompt（含 tool_result）',log:'→ 推理服务 → 模型 · prompt = 历史 + assistant 轮 + tool_result（上下文更长）',logKind:'mech',state:function(){chip('inf','act','发送 prompt（含 tool_result）')},live:function(){fly('inf','model','prompt + tool_result（历史更长）','prompt',850)}},
- {id:'pr2-b',ph:2,dur:750,focus:'model',lab:'模型收到 prompt → prefill',log:null,state:function(){chip('model','act','prefill 处理中…')},live:null},
- {id:'pr2-c',ph:2,dur:800,focus:'model',lab:'prefill 完成 → decode',log:'模型 prefill 完成 → decode · 每步 1 个 token、立即上推',logKind:'mech',state:function(){chip('model','act','prefill ✓ → decode：每步 1 token')},live:null},
- ev({id:'st2',ph:2,cls:'msg',fcls:'mv',infChip:'message_start',agentChip:'message_start',flight:'event: message_start',labA:'推理服务发出 message_start（流 2）',labB:'Agent 写入内存（新骨架）',log:'event: message_start · data: {"message":{"id":"msg_01XFDU…","content":[],"stop_reason":null,"usage":{"input_tokens":1120}}}',logKind:'msg',write:function(){
-   $('m-round').textContent='流 2';$('m-id').textContent='msg_01XFDU…';
-   $('u-in').textContent='1120';$('u-out').textContent='2';
-   $('slotTh').classList.remove('on');$('slot0').classList.remove('on');$('slot1').classList.remove('on');
-   $('stop').textContent='null';
-   $('m-state').textContent='未定型 —— 等待 message_delta / message_stop';$('m-state').classList.remove('final');
- }}),
- ev({id:'cbsTh2',ph:2,cls:'blk',infChip:'content_block_start · 0（thinking）',agentChip:'cbs index=0 · thinking',flight:'content_block_start (0 · thinking)',labA:'推理服务开块 content[0]（thinking）',labB:'Agent 写入内存（thinking 块槽位）',log:'event: content_block_start · data: {"index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}',logKind:'blk',write:function(){
-   $('slotTh').classList.add('on');$('th0').textContent='（等待 thinking_delta …）';$('okTh').textContent='—';$('okTh').classList.remove('done');$('sigTh').style.display='none';
- }}),
- tok({id:'thd3',ph:2,cls:'blk',tok:'工具结果→作答',tokChip:'“工具结果已到 → 组织回答”',evName:'thinking_delta',land:'thinking 追加',infChip:'token → thinking_delta',agentChip:'thinking_delta',flight:'thinking_delta',log:'event: content_block_delta · data: {"index":0,"delta":{"type":"thinking_delta","thinking":"工具结果已到（21°C · 晴）→ 组织最终回答…"}}',logKind:'blk',write:function(){$('th0').textContent='工具结果已到（21°C · 晴）→ 组织最终回答…';flash($('th0'));thB=bubble('thk','💭 思考：工具结果已到 → 组织最终回答…')}}),
- ev({id:'sig2',ph:2,cls:'blk',infChip:'signature_delta',agentChip:'signature_delta',flight:'signature_delta',labA:'推理服务发出 signature_delta（紧贴关块前）',labB:'Agent 写入内存（thinking 签名校验）',log:'event: content_block_delta · data: {"index":0,"delta":{"type":"signature_delta","signature":"EqQBCgIYAhIM…"}}',logKind:'blk',write:function(){$('sigTh').style.display=''}}),
- ev({id:'cbstopTh2',ph:2,cls:'blk',infChip:'content_block_stop · 0',agentChip:'cbstop index=0',flight:'content_block_stop (0)',labA:'推理服务关块 index=0（thinking 定型）',labB:'Agent 写入内存（thinking 块定型）',log:'event: content_block_stop · data: {"index":0}',logKind:'blk',write:function(){$('okTh').textContent='✓ 定型';$('okTh').classList.add('done')}}),
- ev({id:'cbs02',ph:2,cls:'blk',infChip:'content_block_start · 1',agentChip:'cbs index=1',flight:'content_block_start (1)',labA:'推理服务开块 content[1]',labB:'Agent 写入内存（text 块槽位）',log:'event: content_block_start · data: {"index":1,"content_block":{"type":"text","text":""}}',logKind:'blk',write:function(){
-   $('slot0').classList.add('on');$('txt0').textContent='（等待 text_delta …）';$('ok0').textContent='—';$('ok0').classList.remove('done');
- }}),
- tok({id:'td21',ph:2,cls:'blk',tok:'旧金山今天',tokChip:'“旧金山今天”',evName:'text_delta',land:'text 追加',infChip:'token → text_delta',agentChip:'text_delta',flight:'text_delta',log:'event: content_block_delta · data: {"index":1,"delta":{"type":"text_delta","text":"旧金山今天 21°C…"}}',logKind:'blk',write:function(){$('txt0').textContent='旧金山今天 21°C';flash($('txt0'));ansB=bubble('a','旧金山今天 21°C')}}),
- tok({id:'td22',ph:2,cls:'blk',tok:'· 晴，适合出行。',tokChip:'“…晴，适合出行”',evName:'text_delta',land:'text 追加（完）',infChip:'token → text_delta',agentChip:'text_delta',flight:'text_delta',log:'event: content_block_delta · data: {"index":1,"delta":{"type":"text_delta","text":" · 晴，适合出行。"}}',logKind:'blk',write:function(){$('txt0').textContent='旧金山今天 21°C · 晴，适合出行。';flash($('txt0'));if(ansB)ansB.textContent='旧金山今天 21°C · 晴，适合出行。'}}),
- {id:'eot2',ph:2,dur:900,focus:'model',lab:'模型采样到结束 token（EOT）',log:'模型 decode 结束 · 采样到 EOT → 推理服务开始收尾',logKind:'mech',state:function(){chip('model','act','EOT ▸ decode 停止')},live:null},
- ev({id:'cbstop02',ph:2,cls:'blk',infChip:'content_block_stop · 1',agentChip:'cbstop index=1',flight:'content_block_stop (1)',labA:'推理服务关块 index=1',labB:'Agent 写入内存（text 块定型）',log:'event: content_block_stop · data: {"index":1}',logKind:'blk',write:function(){$('ok0').textContent='✓ 定型';$('ok0').classList.add('done')}}),
- ev({id:'md2',ph:2,cls:'msg',fcls:'mv',infChip:'message_delta',agentChip:'message_delta',flight:'message_delta · end_turn',labA:'推理服务发出 message_delta（本流唯一一条）',labB:'Agent 写入内存（stop_reason 盖章）',log:'event: message_delta · data: {"delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":58}}',logKind:'msg',write:function(){
-   stamp('stop','end_turn');$('u-out').textContent='58';
- }}),
- ev({id:'mstop2',ph:2,cls:'msg',fcls:'mv',infChip:'message_stop',agentChip:'message_stop',flight:'event: message_stop',labA:'推理服务发出 message_stop（流 2 收尾）',labB:'Agent 写入内存（Message 定型）',log:'event: message_stop · data: {"type":"message_stop"}',logKind:'msg',write:function(){
-   $('m-state').textContent='定型 ✓ —— 等价于非流式响应';$('m-state').classList.add('final');
-   var s=document.createElement('div');s.className='stream-mini';s.innerHTML='<b>流 2</b> · stop_reason=<b>end_turn</b>';
-   $('streams').appendChild(s);
- }}),
-
- // ── 收尾：回答送回用户 ──
- {id:'ans-a',ph:2,dur:850,focus:'agent',lab:'Agent 汇总回答',log:'→ Agent 回复用户：旧金山今天 21°C · 晴',logKind:'tool',state:function(){chip('agent','act','回复用户 · 任务完成')},live:null},
- {id:'ans-b',ph:2,dur:950,focus:'user',lab:'回答送达用户',log:null,state:function(){if(ansB)ansB.classList.add('fin')},live:function(){fly('agent','user','✅ 汇总回答','back',800)}}
-);
-var BREAK_AT=(function(){for(var i=0;i<steps.length;i++){if(steps[i].id==='ijd2-c')return i}return 12})();
-
-// ---------- rebuild / engine ----------
-var idx=-1, playing=false, timer=null, speed=1, remaining=0, stepT0=0;
-
-function clearDynamic(){
-  flightsEl.innerHTML='';
-  feeds.user.innerHTML='';feeds.model.innerHTML='';feeds.inf.innerHTML='';feeds.agent.innerHTML='';
-  linesEl.innerHTML='';
-  toolCard=null;thB=null;toolB=null;ansB=null;
-  card.style.display='none';empty.style.display='';
-  $('streams').innerHTML='';
-  $('slotTh').classList.remove('on');$('slot0').classList.remove('on');$('slot1').classList.remove('on');
-  $('sigTh').style.display='none';
-  $('raw1').style.display='';$('obj1').classList.remove('on');
-}
-function applyStep(i){
-  var s=steps[i];
-  if(s.state)s.state();
-  if(s.log)addLog(s.logKind||'sys',s.log);
-}
-function renderTo(i){
-  clearDynamic();
-  idx=Math.max(-1,Math.min(i,steps.length-1));
-  for(var k=0;k<=idx;k++)applyStep(k);
-  setFocus(idx>=0?steps[idx]:null);
-  updateUI();
-}
-function updateUI(){
-  var n=steps.length;
-  var segs=barEl.children;
-  for(var k=0;k<n;k++)segs[k].classList.toggle('done',k<=idx);
-  var ph=document.querySelectorAll('.phases span');
-  var cur=idx>=0?steps[idx].ph:0;
-  for(var p=0;p<ph.length;p++)ph[p].classList.toggle('on',idx>=0&&p===cur);
-  if(playing){$('b-play').textContent='⏸ 暂停'}
-  else $('b-play').textContent=(idx>=n-1)?'↻ 重播':'▶ 播放';
-  if(idx<0){readout.innerHTML='就绪 · 点击 ▶ 播放'}
-  else if(idx>=n-1){readout.innerHTML='<span class="fin">✓ 播放完毕</span> · '+steps[idx].lab}
-  else{readout.innerHTML='步骤 <b>'+(idx+1)+'/'+n+'</b> · '+steps[idx].lab}
-}
-function schedule(delay){
-  clearTimeout(timer);
-  if(!playing)return;
-  stepT0=Date.now(); remaining=delay;
-  timer=setTimeout(next,delay);
-}
-function next(){
-  if(!playing)return;
-  if(idx>=steps.length-1){pause();updateUI();return}
-  idx++;
-  var s=steps[idx];
-  if(s.state)s.state();
-  if(s.log)addLog(s.logKind||'sys',s.log);
-  if(s.live)try{s.live()}catch(e){}
-  setFocus(s);
-  updateUI();
-  schedule(s.dur/speed);
-}
-function play(){
-  if(playing)return;
-  if(idx>=steps.length-1)renderTo(-1);
-  playing=true; $('b-play').textContent='⏸ 暂停';
-  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].play()}catch(e){}
-  next();
-}
-function pause(){
-  playing=false;clearTimeout(timer);
-  $('b-play').textContent=(idx>=steps.length-1&&idx>=0)?'↻ 重播':'▶ 播放';
-  for(var k=0;k<activeAnims.length;k++)try{activeAnims[k].pause()}catch(e){}
-  updateUI();
-}
-function toggle(){playing?pause():play()}
-
-// ---------- break demo ----------
-function breakDemo(){
-  pause(); breakMode=true;
-  renderTo(BREAK_AT);
-  $('break-panel').classList.add('on');
-  addLog('brk','⚡ 连接断开 —— 以下事件未收到 ↓');
-  for(var k=BREAK_AT+1;k<steps.length;k++){
-    if(steps[k].log){var d=addLog(steps[k].logKind||'sys',steps[k].log);d.classList.add('lost');d.classList.remove('cur');}
-  }
-  readout.innerHTML='<b style="color:var(--red)">⚡ 断流现场</b> · 步骤 '+(BREAK_AT+1)+'/'+steps.length+' —— 点击 ▶ 或任意位置恢复';
-}
-function exitBreak(){
-  breakMode=false; $('break-panel').classList.remove('on'); renderTo(idx);
-}
-
-// ---------- transport wiring ----------
-(function buildBar(){
-  for(var k=0;k<steps.length;k++){
-    (function(kk){
-      var s=document.createElement('div');s.className='seg p'+steps[kk].ph;
-      s.title=(kk+1)+'. '+steps[kk].lab;
-      s.addEventListener('click',function(){if(breakMode)exitBreak();renderTo(kk);pause()});
-      barEl.appendChild(s);
-    })(k);
-  }
-})();
-$('b-reset').onclick=function(){if(breakMode)exitBreak();pause();renderTo(-1)};
-$('b-prev').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx-1)};
-$('b-next').onclick=function(){if(breakMode)exitBreak();pause();renderTo(idx+1)};
-$('b-end').onclick=function(){if(breakMode)exitBreak();pause();renderTo(steps.length-1)};
-$('b-play').onclick=function(){if(breakMode)exitBreak();toggle()};
-$('b-brk').onclick=function(){breakMode?exitBreak():breakDemo()};
-$('b-spot').onclick=function(){focusMode=!focusMode;this.textContent=focusMode?'🔦 聚焦开':'🔦 聚焦关';setFocus(idx>=0?steps[idx]:null)};
-(function(){
-  var sp=document.querySelectorAll('#speed button');
-  for(var k=0;k<sp.length;k++)sp[k].onclick=function(){
-    speed=parseFloat(this.dataset.s);
-    for(var j=0;j<sp.length;j++)sp[j].classList.remove('on');
-    this.classList.add('on');
-  };
-})();
-document.addEventListener('keydown',function(e){
-  if(e.code==='Space'){e.preventDefault();if(breakMode)exitBreak();toggle()}
-  else if(e.key==='ArrowRight'){if(breakMode)exitBreak();pause();renderTo(idx+1)}
-  else if(e.key==='ArrowLeft'){if(breakMode)exitBreak();pause();renderTo(idx-1)}
-  else if(e.key==='r'||e.key==='R'){if(breakMode)exitBreak();pause();renderTo(-1)}
-  else if(e.key==='b'||e.key==='B'){breakMode?exitBreak():breakDemo()}
-});
-
-// test/debug hooks
-window.__seek=function(i){pause();if(breakMode)exitBreak();renderTo(i);return idx};
-window.__info=function(){return {idx:idx,total:steps.length,playing:playing}};
-window.__idxOf=function(id){for(var i=0;i<steps.length;i++){if(steps[i].id===id)return i}return -1};
-
-renderTo(-1);
-})();
-</script>
 </body>
 </html>

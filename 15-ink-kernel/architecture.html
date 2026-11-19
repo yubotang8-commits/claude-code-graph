@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>15-ink-kernel · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：Ink 渲染内核</h1>
+<p class="sub">15-ink-kernel · 组成模块与调用关系</p>
+<p class="lead">Ink 内核是仓库自带的 React 终端界面框架（Ink 的 fork）：左侧主干把业务 React 树一步步变成终端画面字节；右侧回程把键盘字节一步步变回按键事件送回界面——一去一回构成闭环。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 920" width="1040" height="920" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 顶部外部调用方 -->
+<rect x="60" y="36" width="400" height="68" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="260" y="64" class="n-title">业务界面（REPL 屏）</text>
+<text x="260" y="86" class="n-sub">外部组件 14-repl-screen · 用底部原语组成界面树</text>
+
+<!-- 主干：输出管线 -->
+<rect x="60" y="140" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="260" y="170" class="n-title">内核编排器（渲染根与帧调度）</text>
+<text x="260" y="191" class="n-sub">ink.tsx · root.ts · instances.ts</text>
+<text x="260" y="213" class="n-body">创建渲染根挂载业务树；每 16ms 节流出一帧；</text>
+<text x="260" y="233" class="n-body">前后双帧缓冲换帧；全屏进出；退出时恢复终端</text>
+
+<rect x="60" y="284" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="314" class="n-title">React 树适配层</text>
+<text x="260" y="335" class="n-sub">reconciler.ts · dom.ts · node-cache.ts</text>
+<text x="260" y="357" class="n-body">把 React 的提交翻译成『终端 DOM』：盒与文本</text>
+<text x="260" y="377" class="n-body">实例的增删改；提交完成后触发布局与重绘</text>
+
+<rect x="60" y="428" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="458" class="n-title">布局与绘制</text>
+<text x="260" y="479" class="n-sub">renderer.ts · render-node-to-output.ts</text>
+<text x="260" y="501" class="n-body">排版引擎算出每个盒的位置尺寸，逐格写入屏</text>
+<text x="260" y="521" class="n-body">幕缓冲；只重画有变化的区域（损伤裁剪）</text>
+
+<rect x="60" y="572" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="602" class="n-title">帧间差分引擎</text>
+<text x="260" y="623" class="n-sub">log-update.ts · optimizer.ts · frame.ts</text>
+<text x="260" y="645" class="n-body">对比前后两帧，只输出变化格子的最小指令序列</text>
+<text x="260" y="665" class="n-body">滚动走区域滚动优化；特殊情形整屏重写</text>
+
+<rect x="60" y="716" width="400" height="84" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="260" y="744" class="n-title">终端字节写入</text>
+<text x="260" y="765" class="n-sub">terminal.ts · termio/ · terminal-querier.ts</text>
+<text x="260" y="786" class="n-body">探测终端能力（同步输出/扩展键），原子写出字节</text>
+
+<!-- 右路：输入回程 -->
+<rect x="560" y="140" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="760" y="170" class="n-title">键位解析</text>
+<text x="760" y="191" class="n-sub">keybindings/ · resolver · match</text>
+<text x="760" y="213" class="n-body">把按键序列映射成动作；『先按 ctrl+x 再按 k』这类</text>
+<text x="760" y="233" class="n-body">组合键由状态机跟踪；拦截器抢在所有处理之前</text>
+
+<rect x="560" y="284" width="400" height="108" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="760" y="314" class="n-title">输入根组件（键盘总入口）</text>
+<text x="760" y="335" class="n-sub">components/App.tsx · parse-keypress.ts</text>
+<text x="760" y="357" class="n-body">开原始模式读键盘字节；解析转义序列与鼠标；</text>
+<text x="760" y="377" class="n-body">不完整序列定时补齐；按键批量分发不卡帧</text>
+
+<!-- 分支：老终端兼容（紫） -->
+<rect x="560" y="572" width="400" height="108" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="760" y="602" class="n-title">老终端兼容分支（旧 Windows）</text>
+<text x="760" y="623" class="n-sub">legacyConsole.ts</text>
+<text x="760" y="645" class="n-body">检测旧版 Windows 控制台：每秒强制整屏重绘，</text>
+<text x="760" y="665" class="n-body">自愈残影；渲染宽度收缩一列避开换行缺陷</text>
+
+<!-- 底部外部：终端 -->
+<rect x="560" y="716" width="400" height="84" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="760" y="744" class="n-title">终端模拟器（进程外）</text>
+<text x="760" y="765" class="n-sub">收画面字节 · 回键盘字节 · tmux/终端窗口/conhost</text>
+<text x="760" y="786" class="n-body">画面与按键在这一端汇合，形成闭环</text>
+
+<!-- 共享底座 -->
+<rect x="60" y="836" width="900" height="62" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="510" y="864" class="n-title">共享底座：渲染原语与主题（被业务界面与内核共用）</text>
+<text x="510" y="886" class="n-sub">『终端版 HTML 标签』（盒/文本/滚动容器）· 主题配色 · 对话框/选择器/进度条等复用组件</text>
+
+<!-- 连线 -->
+<path class="edash" d="M260,104 L260,136" marker-end="url(#ahd)"/>
+<text x="340" y="122" class="elab">挂载 React 树</text>
+<path class="edge" d="M260,248 L260,280" marker-end="url(#ah)"/>
+<path class="edge" d="M260,392 L260,424" marker-end="url(#ah)"/>
+<path class="edge" d="M260,536 L260,568" marker-end="url(#ah)"/>
+<path class="edge" d="M260,680 L260,712" marker-end="url(#ah)"/>
+<path class="edash" d="M460,758 L556,758" marker-end="url(#ahd)"/>
+<path class="edge" d="M560,626 L464,626" marker-end="url(#ah)"/>
+<text x="510" y="612" class="elab">仅旧 Windows</text>
+<path class="edash" d="M960,770 L1014,770 L1014,338 L964,338" marker-end="url(#ahd)"/>
+<text x="995" y="700" class="elab">键盘字节</text>
+<path class="edge" d="M760,284 L760,252" marker-end="url(#ah)"/>
+<text x="866" y="268" class="elab">解析出的按键</text>
+<path class="edash" d="M760,140 L760,70 L464,70" marker-end="url(#ahd)"/>
+<text x="640" y="56" class="elab">按键事件送回界面</text>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>条件分支（仅特定环境触发）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>外部组件 / 进程外终端（虚线箭头）</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）；主干下行 = 画面输出，右路上行 = 按键回流</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>内核编排器：packages/@ant/ink/src/core/root.ts:130（createRoot，react-dom 式 API）、core/ink.tsx:333（createContainer 并发根）、ink.tsx:287（16ms 节流，FRAME_INTERVAL_MS=16 见 core/constants.ts:2）、ink.tsx:166-167 与 693（前后双帧缓冲及换帧）、ink.tsx:204-209（全屏标志由备用屏组件翻转）、ink.tsx:458/485（进/出 1049 备用屏）、ink.tsx:1590-1644（unmount 终端态清理）。</li>
+<li>React 树适配层：core/reconciler.ts:264-322（提交完成钩子：先布局再重绘）、reconciler.ts:521（discreteUpdates 接入事件分发）、ink.tsx:325（排版引擎 calculateLayout）。</li>
+<li>布局与绘制：core/renderer.ts:39-178（DOM 遍历 + 损伤裁剪 + 屏幕缓冲写入）、core/output.ts、core/screen.ts（cell 缓冲）。</li>
+<li>帧间差分引擎：core/log-update.ts:258（逐格 diffEach）、:154/167-170（resize/旧终端周期触发整屏重写 fullResetSequence）、:174-183（DECSTBM 区域滚动优化）、ink.tsx:726（optimize 合并指令）、ink.tsx:830（writeDiffToTerminal）。</li>
+<li>终端字节写入：core/terminal.ts:181（同步输出能力判定）、:66-70（BSU/ESU 原子输出与 tmux 例外）、:118-138（XTVERSION 身份探测）、core/terminal-querier.ts（探测响应经 stdin 回流解析）。</li>
+<li>输入根组件：core/../../components/App.tsx:279（原始模式引用计数）、:382-405（不完整转义序列定时补齐）、:408-433（stdin 循环）、:419 与 :552（按键单批高优先级分发）、core/parse-keypress.ts:212（多键解析状态机，含 kitty/modifyOtherKeys/粘贴模式）。</li>
+<li>键位解析：keybindings/KeybindingSetup.tsx:10（拦截器刻意先于所有 useInput）、:199（ChordInterceptor）、:244（stopImmediatePropagation）、keybindings/resolver.ts 与 match.ts（序列→动作）。</li>
+<li>老终端兼容分支：core/legacyConsole.ts:29（Windows build&lt;17763 判定）、:58（CLAUDE_CODE_LEGACY_CONSOLE 覆盖）、:89（宽度收缩一列）、log-update.ts:164-172（周期整屏重绘 gate，默认 1000ms）。</li>
+<li>共享底座：components/Box.tsx、Text.tsx、ScrollBox.tsx（虚拟滚动容器）、AlternateScreen.tsx（1049 备用屏 + 鼠标跟踪，翻转内核全屏标志）；theme/ThemeProvider.tsx:60 及 index.ts:228-252（主题与对话框/选择器/进度条等组件导出，业务侧从内核包统一引入）。</li>
+<li>考据注记：内容来源为 flow-evidence/ui-repl-ink.json 的 components（ink 侧 10 个）；『宿主组件原语』与『主题』两类合并为底部一条共享底座，故本图为 9 个模块盒。输入路径实际为『输入根分发按键 → 键位拦截器与各 useInput 订阅者并行接收』，图中收敛为一条上行线。老终端分支还会收缩编排器的渲染宽度（ink.tsx:251/400/526），因重绘行为主战场在差分引擎，图中挂在差分侧。parse-keypress.ts 位于 core/ 目录，按职责画入输入根组件盒。termio 编解码、事件分发器、排版适配层、鼠标选择/搜索高亮、焦点管理、devtools 等并入所属模块未单列。仓库自带 docs/ink-tui-deep-audit.md 审计报告的 6 条结论未逐条复核，视为二手材料；文档中『组件普遍为 React Compiler 反编译输出』的说法与源码不符（全仓库无 _c() 调用），不采信。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>

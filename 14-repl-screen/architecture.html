@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>14-repl-screen · 组件架构</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
+  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
+  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#3C4048;margin:12px 2px 0}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .lg{display:inline-block;width:22px;height:13px;border-radius:3px;border:1.5px solid}
+  details{margin:14px 2px;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
+  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
+  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+  .n-title{font:600 15px system-ui;fill:#1F2328}
+  .n-sub{font:11px system-ui;fill:#8A8F98}
+  .n-body{font:12px system-ui;fill:#3C4048}
+  .elab{font:11px system-ui;fill:#6B7280}
+  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
+  .edash{stroke:#9AA1AC;stroke-width:1.4;fill:none;stroke-dasharray:5,4}
+  text{text-anchor:middle}
+
+.backhome{display:inline-block;margin:0 0 10px;padding:4px 12px;border:1px solid #C9CDD6;border-radius:999px;background:#fff;color:#3C4048;text-decoration:none;font-size:12.5px}
+.backhome:hover{border-color:#4C6EF5;color:#3B5BDB}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="backhome" href="../index.html">← 回总览</a>
+<h1>组件架构：交互主屏（终端界面）</h1>
+<p class="sub">14-repl-screen · 组成模块与调用关系</p>
+<p class="lead">终端上这块交互界面由这些模块搭成：渲染入口把主屏编排器挂上终端，编排器往下分成转录、输入、权限、布局四块；全部界面跑在下方的 Ink 终端 UI 引擎上；旁路不进主屏，直接弹一次性对话框。</p>
+
+<div class="chart">
+<svg viewBox="0 0 1040 910" width="1040" height="910" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
+</marker>
+<marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+<path d="M0,0 L10,5 L0,10 z" fill="#9AA1AC"/>
+</marker>
+</defs>
+
+<!-- 外部：主流程启动 -->
+<rect x="800" y="45" width="210" height="70" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="905" y="72" class="n-title">主流程启动</text>
+<text x="905" y="94" class="n-sub">组件 01-cli-entry</text>
+<text x="905" y="112" class="n-body">命令行解析 · 全局初始化</text>
+
+<!-- 入口：渲染入口壳 -->
+<rect x="340" y="40" width="380" height="90" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="530" y="66" class="n-title">渲染入口与全局上下文壳</text>
+<text x="530" y="88" class="n-sub">App.tsx · replLauncher</text>
+<text x="530" y="108" class="n-body">把 REPL 屏挂上终端，包主题、统计、状态等全局上下文</text>
+<text x="530" y="126" class="n-body">进程退出前统一收尾清理</text>
+
+<!-- 分支：独立对话框启动器 -->
+<rect x="800" y="175" width="210" height="80" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="905" y="204" class="n-title">独立屏幕与一次性对话框</text>
+<text x="905" y="224" class="n-sub">诊断 · 恢复会话 · 初始设置</text>
+<text x="905" y="242" class="n-body">不进主屏，复用渲染入口直接弹出</text>
+
+<!-- 编排：REPL 主屏 -->
+<rect x="310" y="175" width="440" height="130" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="2.2"/>
+<text x="530" y="203" class="n-title">REPL 主屏编排器</text>
+<text x="530" y="225" class="n-sub">screens/REPL.tsx · 约 6700 行</text>
+<text x="530" y="247" class="n-body">持有全部对话消息与流式回复文本</text>
+<text x="530" y="269" class="n-body">仲裁约 20 种弹窗的焦点，打字时全部让位</text>
+<text x="530" y="291" class="n-body">组装全屏主屏与滚动转录两套界面</text>
+
+<!-- 旁路：提前按键缓冲 -->
+<rect x="60" y="195" width="220" height="80" rx="8" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.4" stroke-dasharray="5,4"/>
+<text x="170" y="223" class="n-title">提前按键缓冲</text>
+<text x="170" y="245" class="n-sub">earlyInput.ts</text>
+<text x="170" y="263" class="n-body">界面就绪前敲键暂存，就绪后填入</text>
+
+<!-- 行 3：四大界面模块 -->
+<rect x="60" y="365" width="216" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="168" y="393" class="n-title">对话转录渲染</text>
+<text x="168" y="415" class="n-sub">Messages · MessageRow</text>
+<text x="168" y="435" class="n-body">消息分组折叠，逐行按需重绘</text>
+<text x="168" y="453" class="n-body">长对话只画可见部分（虚拟滚动）</text>
+
+<rect x="301" y="365" width="216" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="409" y="393" class="n-title">输入组合器</text>
+<text x="409" y="415" class="n-sub">PromptInput/</text>
+<text x="409" y="435" class="n-body">Esc 多义处理 · 建议高亮</text>
+<text x="409" y="453" class="n-body">命令/记忆/vim 模式切换与粘贴</text>
+
+<rect x="542" y="365" width="216" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="650" y="393" class="n-title">工具权限批准对话框</text>
+<text x="650" y="415" class="n-sub">permissions/（按工具分变体）</text>
+<text x="650" y="435" class="n-body">工具改动系统前弹窗征询</text>
+<text x="650" y="453" class="n-body">允许/拒绝/总是允许，回传会话循环</text>
+
+<rect x="783" y="365" width="216" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="891" y="393" class="n-title">全屏布局壳</text>
+<text x="891" y="415" class="n-sub">FullscreenLayout.tsx</text>
+<text x="891" y="435" class="n-body">滚动区＋底部固定区＋弹窗槽</text>
+<text x="891" y="453" class="n-body">其余界面块都在它的槽位里渲染</text>
+
+<!-- 行 4：按键编辑引擎 -->
+<rect x="301" y="525" width="216" height="100" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
+<text x="409" y="553" class="n-title">按键编辑引擎</text>
+<text x="409" y="575" class="n-sub">useTextInput · BaseTextInput</text>
+<text x="409" y="595" class="n-body">按键→移动/删除/粘贴等编辑动作</text>
+<text x="409" y="613" class="n-body">判定哪种「回车」才真正提交</text>
+
+<!-- 外部：权限判定规则 -->
+<rect x="550" y="530" width="205" height="70" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="652" y="558" class="n-title">权限判定规则</text>
+<text x="652" y="578" class="n-body">要不要问用户的规则本体</text>
+<text x="652" y="596" class="n-sub">组件 09-permission-pipeline</text>
+
+<!-- 外部：会话核心循环 -->
+<rect x="800" y="500" width="210" height="90" rx="6" fill="#FDFDFB" stroke="#9AA1AC" stroke-width="1.2" stroke-dasharray="4,3"/>
+<text x="905" y="528" class="n-title">会话核心循环</text>
+<text x="905" y="549" class="n-body">接收输入与许可决策</text>
+<text x="905" y="567" class="n-body">回流回复与工具事件</text>
+<text x="905" y="585" class="n-sub">组件 02-query-turn-loop</text>
+
+<!-- 分支：Windows 老控制台兼容 -->
+<rect x="800" y="630" width="210" height="90" rx="8" fill="#F3EAF9" stroke="#9A5AB5" stroke-width="1.8"/>
+<text x="905" y="660" class="n-title">Windows 老控制台兼容</text>
+<text x="905" y="681" class="n-body">检测老终端：每秒整屏重绘</text>
+<text x="905" y="699" class="n-body">周期性覆盖，自愈花屏</text>
+
+<!-- 底座：Ink 引擎 -->
+<rect x="60" y="760" width="940" height="120" rx="8" fill="#F2F2EC" stroke="#8A8F98" stroke-width="1.5"/>
+<text x="530" y="790" class="n-title">Ink 终端 UI 引擎（全部界面模块的运行底座）</text>
+<text x="530" y="812" class="n-body">输入侧：终端按键字节 → 解析、分发到上方界面</text>
+<text x="530" y="832" class="n-body">渲染侧：界面树 → 布局 → 帧缓冲 → 增量差异 → 终端字节</text>
+<text x="530" y="852" class="n-body">原语与主题：盒/文本/滚动容器 · 全局配色 · 键位绑定</text>
+<text x="530" y="870" class="n-sub">内部管线拆解见 组件 15-ink-kernel</text>
+
+<!-- 连线 -->
+<path class="edge" d="M530,130 L530,171" marker-end="url(#ah)"/>
+<path class="edash" d="M800,80 L724,80" marker-end="url(#ahd)"/>
+<path class="edge" d="M905,115 L905,171" marker-end="url(#ah)"/>
+<path class="edash" d="M280,235 L306,235" marker-end="url(#ahd)"/>
+<path class="edge" d="M330,305 L330,335 L168,335 L168,361" marker-end="url(#ah)"/>
+<path class="edge" d="M409,305 L409,361" marker-end="url(#ah)"/>
+<path class="edge" d="M650,305 L650,361" marker-end="url(#ah)"/>
+<path class="edge" d="M730,305 L730,335 L891,335 L891,361" marker-end="url(#ah)"/>
+<path class="edge" d="M409,465 L409,521" marker-end="url(#ah)"/>
+<path class="edash" d="M650,465 L650,526" marker-end="url(#ahd)"/>
+<path class="edash" d="M750,235 L763,235 L763,540 L796,540" marker-end="url(#ahd)"/>
+<path class="edash" d="M800,560 L774,560 L774,265 L754,265" marker-end="url(#ahd)"/>
+<path class="edge" d="M905,720 L905,756" marker-end="url(#ah)"/>
+</svg>
+</div>
+
+<div class="legend">
+<span><i class="lg" style="border-color:#4C6EF5;background:#fff"></i>组成模块（实线箭头 = 调用/控制流）</span>
+<span><i class="lg" style="border-color:#9A5AB5;background:#F3EAF9"></i>分支路径（绕过主屏编排）</span>
+<span><i class="lg" style="border-color:#9AA1AC;background:#fff;border-style:dashed"></i>旁路机制 / 外部组件</span>
+<span><i class="lg" style="border-color:#8A8F98;background:#F2F2EC"></i>共享底座</span>
+<span style="color:#8A8F98">灰色小字 = 源码模块锚点（非代码内容）</span>
+</div>
+
+<details>
+<summary>深入细节（证据与考据）</summary>
+<ul>
+<li>证据来源：src/components/App.tsx:21-35（FpsMetrics/Stats/AppState/ThemeProvider 四层嵌套）、src/interactiveHelpers.tsx:124-129（renderAndRun + waitUntilExit 统一收尾）、src/replLauncher.tsx；src/screens/REPL.tsx:831（REPL 组件，全文件 6684 行）——消息状态 1486-1526、弹窗焦点仲裁 getFocusedInputDialog 2415-2493、主屏/转录双 JSX 5890-5927、query 生成器循环 3513-3523；src/components/PromptInput/PromptInput.tsx、src/hooks/useTextInput.ts:432-502（mapKey 按键分派）、src/components/BaseTextInput.tsx:45-55（粘贴期回车不提交）；src/components/Messages.tsx:408/590（分组折叠）、src/components/MessageRow.tsx:334（React.memo + 自定义相等函数）；src/components/permissions/、src/components/FullscreenLayout.tsx、src/dialogLaunchers.tsx、src/utils/earlyInput.ts:31（捕获启动于 cli.tsx:353-354，注入于 REPL.tsx:1640）；packages/@ant/ink/src/core/legacyConsole.ts:27-63（build&lt;17763 判定与周期重绘）。</li>
+<li>考据注记：取证清单共 22 个模块，本图合并 12 个——Ink 引擎侧 10 个（实例与帧调度 / React 适配 / 布局绘制 / diff 输出 / 终端写入 / 输入根组件 / 宿主原语 / 键位解析 / 主题 / 老控制台兼容）压成底部灰条并归入 组件 15 详解，其中老控制台兼容因是条件分支单独画出；键位配置（src/keybindings，默认绑定＋用户覆盖热重载）并入底座「键位绑定」一词；设计系统垫片（design-system/ 5 个单行转发文件）并入「原语与主题」；帧遥测（fpsTracker/Stats/FpsMetrics）并入渲染入口壳的「统计上下文」。</li>
+<li>分歧如实说明：permissions/ 实测 32 个条目（26 目录 + 6 文件），取证清单记 28，图上不写具体数字；「约 20 种弹窗焦点仲裁」按取证清单口径（getFocusedInputDialog 的派生分支），未逐一复数。</li>
+<li>两根向右的虚线＝与会话循环的双向交互：主屏把提交的输入发给 query() 生成器（REPL.tsx:3513），流式回复与工具事件逐条回流成消息入列；权限对话框的决策也经挂起的承诺回传该循环。权限「该不该问」的判定本体在组件 09，此处只画 UI 与规则引用。</li>
+<li>转录模式（非全屏分支）复用同一转录渲染，仅消息上限不同，图中不单独画；提前按键缓冲由主流程在命令行解析期启动捕获，画为虚线旁路。</li>
+</ul>
+</details>
+</div>
+</body>
+</html>
