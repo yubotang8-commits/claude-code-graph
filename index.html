@@ -2,296 +2,539 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="逆向重打包的 Claude Code CLI 全图解总览：9 大子系统、24 个组件、41 张流程图。">
 <title>claude-code 图集总览</title>
 <style>
-  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#FAFAF7;color:#1F2328;margin:0;padding:24px 16px}
-  .wrap{max-width:1120px;margin:0 auto}
-  h1{font-size:22px;margin:0 0 4px}
-  .sub{font-size:13px;color:#6B7280;margin:0 0 6px}
-  .lead{font-size:14px;color:#3C4048;margin:0 0 14px}
-  .chart{overflow:auto;border:1px solid #E3E3DA;border-radius:10px;background:#FDFDFB;padding:8px}
-  .n-title{font:600 13px system-ui;fill:#1F2328}
-  .n-sub{font:11px system-ui;fill:#5B6470}
-  .g-name{font:600 13px system-ui;fill:#3C4048}
-  .g-role{font:10px system-ui;fill:#8A8F98}
-  .elab{font:11px system-ui;fill:#6B7280}
-  .elab-l{font:11px system-ui;fill:#6B7280;text-anchor:start}
-  .edge{stroke:#6B7280;stroke-width:1.6;fill:none}
-  text{text-anchor:middle}
-  a{cursor:pointer}
-  h2{font-size:16px;margin:26px 0 8px}
-  .forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
-  .form-card{border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:12px 14px;font-size:12.5px;color:#3C4048;line-height:1.6}
-  .form-card b{display:block;font-size:13.5px;margin-bottom:2px}
-  .nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:8px}
-  .nav-card{border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 12px;font-size:12.5px}
-  .nav-card .g{font-weight:700;font-size:13px;margin-bottom:4px;color:#1F2328}
-  .nav-card a{color:#3B5BDB;text-decoration:none;margin-right:10px;white-space:nowrap}
-  .nav-card a:hover{text-decoration:underline}
-  .nav-card .fl{color:#6B7280;font-size:11.5px;line-height:1.9}
-  details{margin:16px 2px 0;border:1px solid #E3E3DA;border-radius:8px;background:#fff;padding:10px 14px}
-  summary{cursor:pointer;font-size:13px;font-weight:600;color:#3C4048}
-  details ul{font-size:12.5px;color:#4B5563;line-height:1.7;padding-left:20px;margin:8px 0 0}
+:root{
+  --bg:#F6F5F0; --card:#FFFFFF; --line:#E4E3DB; --line-2:#D3D2C8;
+  --ink:#1F2328; --ink-2:#55606B; --ink-3:#8A8F98;
+  --acc:#4C6EF5; --acc-ink:#3B5BDB; --acc-soft:#EEF1FD;
+  --brand:#C96442;
+  --shadow:0 1px 2px rgba(31,35,40,.05);
+  --shadow-h:0 6px 18px rgba(31,35,40,.10);
+  --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace;
+  /* ①–⑨ 子系统色：hover 描边 / 淡底 / 组框描边 */
+  --k1:#A9663C; --f1:#F9F1E7; --s1:#E7D3BE;
+  --k2:#3D66C4; --f2:#EDF1FB; --s2:#CFDAF0;
+  --k3:#7757BE; --f3:#F2EFFA; --s3:#DDD6EF;
+  --k4:#2E8F72; --f4:#EAF4F0; --s4:#CFE6DD;
+  --k5:#3387AC; --f5:#EBF3F7; --s5:#D0E3EC;
+  --k6:#B04E80; --f6:#F8EEF3; --s6:#EBD5E0;
+  --k7:#6D9040; --f7:#F1F4E8; --s7:#DEE5CC;
+  --k8:#9A55B0; --f8:#F4EDF8; --s8:#E3D6EC;
+  --k9:#BE4F47; --f9:#F9EFEE; --s9:#ECD5D3;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;color:var(--ink);
+  font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,"PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+  background-color:var(--bg);
+  background-image:radial-gradient(rgba(31,35,40,.05) 1px,transparent 1.1px);
+  background-size:24px 24px;
+}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+/* ── 顶栏 ─────────────────────────── */
+.topbar{position:sticky;top:0;z-index:50;background:rgba(246,245,240,.88);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.tb-in{max-width:1140px;margin:0 auto;display:flex;align-items:center;gap:14px;padding:9px 24px}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14.5px;color:var(--ink);text-decoration:none}
+.brand svg{display:block}
+.tb-nav{margin-left:auto;display:flex;gap:2px}
+.tb-nav a{padding:5px 11px;border-radius:999px;font-size:12.5px;color:var(--ink-2);text-decoration:none;transition:background .15s,color .15s}
+.tb-nav a:hover{background:var(--acc-soft);color:var(--acc-ink)}
+
+/* ── 首屏 ─────────────────────────── */
+.hero{padding:38px 0 4px}
+.eyebrow{margin:0 0 12px;font-size:12px;color:var(--ink-3)}
+.eyebrow code{font-family:var(--mono);font-size:11.5px;background:#fff;border:1px solid var(--line);border-radius:5px;padding:1px 6px;color:var(--ink-2)}
+h1{display:flex;align-items:center;gap:13px;font-size:31px;line-height:1.25;letter-spacing:.2px;margin:0 0 10px}
+h1 .mark{flex:none;transition:transform .55s ease}
+h1:hover .mark{transform:rotate(72deg)}
+.sub{font-size:14.5px;color:var(--ink-2);margin:0 0 16px;max-width:64em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+.chip{font-size:12px;color:var(--ink-2);background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 12px;box-shadow:var(--shadow)}
+.chip b{color:var(--ink);font-weight:600}
+
+.steps{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap}
+.step{flex:1 1 220px;display:flex;gap:11px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow)}
+.s-num{flex:none;width:22px;height:22px;border-radius:7px;background:var(--acc-soft);color:var(--acc-ink);font-weight:700;font-size:12px;line-height:22px;text-align:center;font-family:var(--mono)}
+.step b{display:block;font-size:13.5px;margin-bottom:2px}
+.step span{font-size:12px;color:var(--ink-2);line-height:1.55}
+.s-arrow{align-self:center;color:var(--ink-3);font-size:15px}
+.hint{font-size:12px;color:var(--ink-3);margin:12px 2px 0}
+
+/* ── 章节标题 ─────────────────────── */
+section,.notes{scroll-margin-top:70px}
+h2{display:flex;align-items:center;gap:10px;font-size:17px;margin:36px 0 5px}
+h2::before{content:"";width:4px;height:17px;border-radius:2px;background:var(--acc);flex:none}
+.sec-sub{font-size:12.5px;color:var(--ink-3);margin:0 0 14px 14px}
+
+/* ── 总架构图 ─────────────────────── */
+.chart{margin:0;border:1px solid var(--line);border-radius:14px;background:#F1F0E9;box-shadow:var(--shadow);overflow-x:auto;padding:14px}
+.chart svg{display:block;width:100%;min-width:760px;max-width:1040px;height:auto;margin:0 auto}
+.chart-cap{font-size:12px;color:var(--ink-3);margin:10px 2px 0;display:flex;gap:5px 16px;flex-wrap:wrap}
+.chart-cap .sw{display:none}
+@media(max-width:860px){.chart-cap .sw{display:inline}}
+
+/* 图内元素 */
+text{text-anchor:middle}
+a{cursor:pointer}
+.cnum{font-family:var(--mono);font-size:11px;font-weight:700;fill:var(--hk,#3B5BDB);text-anchor:start}
+.n-title{font-weight:600;font-size:14px;fill:var(--ink)}
+.n-sub{font-size:11.5px;fill:#78818D}
+.cbox{fill:#fff;stroke:#CFD4DE;stroke-width:1.4;transition:stroke .16s,fill .16s;filter:drop-shadow(0 1px 1.2px rgba(31,35,40,.09))}
+a:hover .cbox{stroke:var(--hk,var(--acc));stroke-width:2;fill:var(--hf,#fff)}
+a:focus-visible .cbox{stroke:var(--acc);stroke-width:2.2}
+.g1{--hk:var(--k1);--hf:var(--f1)} .g2{--hk:var(--k2);--hf:var(--f2)} .g3{--hk:var(--k3);--hf:var(--f3)}
+.g4{--hk:var(--k4);--hf:var(--f4)} .g5{--hk:var(--k5);--hf:var(--f5)} .g6{--hk:var(--k6);--hf:var(--f6)}
+.g7{--hk:var(--k7);--hf:var(--f7)} .g8{--hk:var(--k8);--hf:var(--f8)} .g9{--hk:var(--k9);--hf:var(--f9)}
+.gbox{stroke-width:1}
+.gb1{fill:var(--f1);stroke:var(--s1)} .gb2{fill:var(--f2);stroke:var(--s2)} .gb3{fill:var(--f3);stroke:var(--s3)}
+.gb4{fill:var(--f4);stroke:var(--s4)} .gb5{fill:var(--f5);stroke:var(--s5)} .gb6{fill:var(--f6);stroke:var(--s6)}
+.gb7{fill:var(--f7);stroke:var(--s7)} .gb8{fill:var(--f8);stroke:var(--s8)} .gb9{fill:var(--f9);stroke:var(--s9)}
+.g-name{font-weight:600;font-size:12.5px;fill:#454B54}
+.g-role{font-size:10.5px;fill:#9A9FA8}
+.edge{stroke:var(--acc);stroke-width:2;fill:none}
+.elab-l{font-size:11px;fill:#5F6873;text-anchor:start;paint-order:stroke;stroke:#F1F0E9;stroke-width:4px;stroke-linejoin:round}
+
+/* ── 三种页面形式 ─────────────────── */
+.forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.f-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:9px}
+.f-head{display:flex;align-items:center;gap:11px}
+.f-ico{flex:none;width:36px;height:36px;border-radius:10px;background:var(--acc-soft);color:var(--acc-ink);display:flex;align-items:center;justify-content:center}
+.f-ico svg{display:block}
+.f-head b{font-size:14px}
+.f-count{margin-left:auto;font-family:var(--mono);font-weight:600;font-size:11px;color:var(--acc-ink);background:var(--acc-soft);padding:2px 9px;border-radius:999px;white-space:nowrap}
+.f-card p{margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.7}
+.f-meta{margin-top:auto;padding-top:4px;font-size:11.5px;color:var(--ink-3)}
+.f-meta code{font-family:var(--mono);font-size:11px}
+.form-note{font-size:12px;color:var(--ink-3);margin:12px 2px 0}
+
+/* ── 全部页面 ─────────────────────── */
+.nav-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;font-size:12px;color:var(--ink-3);margin:0 0 14px}
+.nav{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:10px}
+.ncard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 13px;box-shadow:var(--shadow);transition:box-shadow .16s,transform .16s,border-color .16s}
+.ncard:hover{border-color:#CDD2E0;box-shadow:var(--shadow-h);transform:translateY(-1px)}
+.nhead{display:flex;align-items:center;gap:9px;text-decoration:none;padding:2px 0}
+.nnum{flex:none;min-width:25px;height:21px;line-height:21px;text-align:center;border-radius:6px;font-family:var(--mono);font-weight:700;font-size:10.5px;padding:0 3px}
+.nk1{background:var(--f1);color:var(--k1)} .nk2{background:var(--f2);color:var(--k2)} .nk3{background:var(--f3);color:var(--k3)}
+.nk4{background:var(--f4);color:var(--k4)} .nk5{background:var(--f5);color:var(--k5)} .nk6{background:var(--f6);color:var(--k6)}
+.nk7{background:var(--f7);color:var(--k7)} .nk8{background:var(--f8);color:var(--k8)} .nk9{background:var(--f9);color:var(--k9)}
+.nname{font-size:13.5px;font-weight:650;color:var(--ink);transition:color .15s}
+.nhint{margin-left:auto;flex:none;font-size:11px;color:var(--ink-3);display:flex;align-items:center;gap:3px;transition:color .15s}
+.nhead:hover .nname{color:var(--acc-ink)}
+.nhead:hover .nhint{color:var(--acc-ink)}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.pill{font-size:12px;color:var(--ink-2);text-decoration:none;border:1px solid var(--line);background:#FAFAF6;border-radius:999px;padding:3px 10px;white-space:nowrap;transition:border-color .15s,color .15s,background .15s}
+.pill:hover{border-color:#C4CCF0;color:var(--acc-ink);background:var(--acc-soft)}
+.pill.dyn{color:var(--acc-ink);border-color:#D9DEF6;background:#F3F5FD}
+.pill.dyn::before{content:"▶";font-size:8.5px;margin-right:5px}
+.pill.feat{color:#A55A2F;border-color:#EBD8C4;background:#FAF1EA}
+.pill.feat::before{content:"▶";font-size:8.5px;margin-right:5px}
+
+/* ── 考据 & 页脚 ──────────────────── */
+details{margin:32px 0 0;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:12px 16px;box-shadow:var(--shadow)}
+summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-2)}
+details ul{font-size:12.5px;color:#4B5563;line-height:1.75;padding-left:20px;margin:10px 0 2px}
+footer{margin:34px 0 28px;padding-top:18px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;color:var(--ink-3)}
+footer a{color:var(--ink-2);text-decoration:none}
+footer a:hover{color:var(--acc-ink)}
+
+@media(max-width:840px){
+  .tb-nav{display:none}
+  .s-arrow{display:none}
+  .steps{flex-direction:column}
+  h1{font-size:25px}
+  .hero{padding-top:26px}
+}
 </style>
 </head>
-<body>
+<body id="top">
+
+<header class="topbar"><div class="tb-in">
+  <a class="brand" href="#top">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><g stroke="#C96442" stroke-width="2.6" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="3.8" y1="7.2" x2="20.2" y2="16.8"/><line x1="3.8" y1="16.8" x2="20.2" y2="7.2"/></g></svg>
+    <span>claude-code 图集</span>
+  </a>
+  <nav class="tb-nav">
+    <a href="#map">总架构图</a><a href="#forms">三种页面形式</a><a href="#pages">全部页面</a><a href="#notes">考据说明</a>
+  </nav>
+</div></header>
+
 <div class="wrap">
-<h1>claude-code 图集总览</h1>
-<p class="sub">逆向重打包的 Claude Code（claude-code-best/claude-code）· 9 大子系统 · 24 个组件</p>
-<p class="lead">三个阅读层次：先看下面这张<b>总架构图</b>（项目由什么构成）→ 点进组件看<b>组件架构图</b>（这个组件内部是什么）→ 再看各<b>流程图</b>（一件事怎么一步步发生，静态或动态可播放）。图面全部人话，源码模块名仅作灰色定位锚点。</p>
 
-<div class="chart">
-<svg viewBox="0 0 1040 1362" width="1040" height="1362" xmlns="http://www.w3.org/2000/svg">
-<defs>
-<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-<path d="M0,0 L10,5 L0,10 z" fill="#6B7280"/>
-</marker>
-</defs>
+<section class="hero">
+  <p class="eyebrow">逆向图解对象 <code>claude-code-best / claude-code</code></p>
+  <h1>
+    <svg class="mark" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><g stroke="#C96442" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="3.8" y1="7.2" x2="20.2" y2="16.8"/><line x1="3.8" y1="16.8" x2="20.2" y2="7.2"/></g></svg>
+    claude-code 图集总览
+  </h1>
+  <p class="sub">逆向重打包的 Claude Code（claude-code-best/claude-code）· 9 大子系统 · 24 个组件</p>
+  <div class="chips">
+    <span class="chip"><b>9</b> 大子系统 · <b>24</b> 个组件</span>
+    <span class="chip"><b>41</b> 张流程图 · 17 静态 + 24 动态</span>
+    <span class="chip">单文件 · 零外部依赖</span>
+  </div>
 
-<!-- ① 入口与引导 -->
-<rect x="20" y="40" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="70" class="g-name">①入口与引导</text>
-<text x="75" y="90" class="g-role">从命令行</text>
-<text x="75" y="104" class="g-role">到会话</text>
-<a href="01-cli-entry/architecture.html">
-<rect x="150" y="40" width="870" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="585" y="70" class="n-title">01 · 入口分发与启动</text>
-<text x="585" y="94" class="n-sub">从命令行到可用的会话：快速路径分发 → 初始化 → 工作区落位 → 界面挂载或无头执行</text>
-</a>
+  <div class="steps">
+    <div class="step"><span class="s-num">1</span><div><b>总架构图</b><span>项目由什么构成 —— 先看下面这张地图</span></div></div>
+    <div class="s-arrow">→</div>
+    <div class="step"><span class="s-num">2</span><div><b>组件架构图</b><span>这个组件内部是什么 —— 点任一组件盒进入</span></div></div>
+    <div class="s-arrow">→</div>
+    <div class="step"><span class="s-num">3</span><div><b>流程图</b><span>一件事怎么一步步发生 —— 静态看全貌 · 动态可播放</span></div></div>
+  </div>
+  <p class="hint">图面全部人话，源码模块名仅作灰色定位锚点。</p>
+</section>
 
-<!-- ② 核心循环 -->
-<rect x="20" y="190" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="220" class="g-name">②核心循环</text>
-<text x="75" y="240" class="g-role">引擎：</text>
-<text x="75" y="254" class="g-role">一问一答</text>
-<a href="02-query-turn-loop/architecture.html">
-<rect x="150" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="292" y="220" class="n-title">02 · 回合循环</text>
-<text x="292" y="244" class="n-sub">请求→工具→再请求的引擎</text>
-</a>
-<a href="03-compaction/architecture.html">
-<rect x="447" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="589" y="220" class="n-title">03 · 上下文压缩</text>
-<text x="589" y="244" class="n-sub">上下文将满时的分层瘦身</text>
-</a>
-<a href="04-query-engine/architecture.html">
-<rect x="744" y="190" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="886" y="220" class="n-title">04 · SDK 会话引擎</text>
-<text x="886" y="244" class="n-sub">无界面调用方的回合编排</text>
-</a>
+<section id="map">
+  <h2>总架构图</h2>
+  <p class="sec-sub">①–⑨ 为子系统分组 · 组件盒可点击进入该组件的架构图</p>
+  <figure class="chart" style="margin:0">
+  <svg viewBox="0 0 1040 1362" role="img" aria-label="总架构图：9 大子系统、24 个组件" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+  <path d="M0,0 L10,5 L0,10 z" fill="#4C6EF5"/>
+  </marker>
+  </defs>
 
-<!-- ③ API 层 -->
-<rect x="20" y="340" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="370" class="g-name">③API 层</text>
-<text x="75" y="390" class="g-role">模型调用</text>
-<text x="75" y="404" class="g-role">通道</text>
-<a href="05-api-request/architecture.html">
-<rect x="150" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="292" y="370" class="n-title">05 · 流式请求</text>
-<text x="292" y="394" class="n-sub">一次 API 请求的完整旅程</text>
-</a>
-<a href="06-providers-compat/architecture.html">
-<rect x="447" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="589" y="370" class="n-title">06 · 多协议兼容</text>
-<text x="589" y="394" class="n-sub">OpenAI/Gemini/Grok 适配</text>
-</a>
-<a href="07-retry-fallback/architecture.html">
-<rect x="744" y="340" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="886" y="370" class="n-title">07 · 重试与回退</text>
-<text x="886" y="394" class="n-sub">失败分类→退避→换模型</text>
-</a>
+  <!-- ① 入口与引导 -->
+  <rect class="gbox gb1" x="20" y="40" width="110" height="82" rx="8"/>
+  <text x="75" y="74" class="g-name"><tspan style="fill:var(--k1)">①</tspan>入口与引导</text>
+  <text x="75" y="94" class="g-role">从命令行</text>
+  <text x="75" y="108" class="g-role">到会话</text>
+  <a class="g1" href="01-cli-entry/architecture.html">
+  <title>01 入口分发与启动 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="40" width="870" height="82" rx="10"/>
+  <text x="164" y="64" class="cnum">01</text>
+  <text x="585" y="86" class="n-title">入口分发与启动</text>
+  <text x="585" y="106" class="n-sub">从命令行到可用的会话：快速路径分发 → 初始化 → 工作区落位 → 界面挂载或无头执行</text>
+  </a>
 
-<!-- ④ 工具与权限 -->
-<rect x="20" y="490" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="520" class="g-name">④工具与权限</text>
-<text x="75" y="540" class="g-role">行动与</text>
-<text x="75" y="554" class="g-role">安全</text>
-<a href="08-tool-lifecycle/architecture.html">
-<rect x="150" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="255" y="520" class="n-title">08 · 工具执行</text>
-<text x="255" y="544" class="n-sub">工具调用的生命周期</text>
-</a>
-<a href="09-permission-pipeline/architecture.html">
-<rect x="372" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="477" y="520" class="n-title">09 · 权限管道</text>
-<text x="477" y="544" class="n-sub">执行前的判定级联</text>
-</a>
-<a href="10-deferred-tools/architecture.html">
-<rect x="594" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="699" y="520" class="n-title">10 · 延迟工具</text>
-<text x="699" y="544" class="n-sub">按需发现的工具</text>
-</a>
-<a href="11-bash-tool/architecture.html">
-<rect x="816" y="490" width="210" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="921" y="520" class="n-title">11 · Bash 执行</text>
-<text x="921" y="544" class="n-sub">安全检查与后台化</text>
-</a>
+  <!-- ② 核心循环 -->
+  <rect class="gbox gb2" x="20" y="190" width="110" height="82" rx="8"/>
+  <text x="75" y="224" class="g-name"><tspan style="fill:var(--k2)">②</tspan>核心循环</text>
+  <text x="75" y="244" class="g-role">引擎：</text>
+  <text x="75" y="258" class="g-role">一问一答</text>
+  <a class="g2" href="02-query-turn-loop/architecture.html">
+  <title>02 回合循环 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="190" width="285" height="82" rx="10"/>
+  <text x="164" y="214" class="cnum">02</text>
+  <text x="292" y="236" class="n-title">回合循环</text>
+  <text x="292" y="256" class="n-sub">请求→工具→再请求的引擎</text>
+  </a>
+  <a class="g2" href="03-compaction/architecture.html">
+  <title>03 上下文压缩 — 点击查看组件架构图</title>
+  <rect class="cbox" x="447" y="190" width="285" height="82" rx="10"/>
+  <text x="461" y="214" class="cnum">03</text>
+  <text x="589" y="236" class="n-title">上下文压缩</text>
+  <text x="589" y="256" class="n-sub">上下文将满时的分层瘦身</text>
+  </a>
+  <a class="g2" href="04-query-engine/architecture.html">
+  <title>04 SDK 会话引擎 — 点击查看组件架构图</title>
+  <rect class="cbox" x="744" y="190" width="285" height="82" rx="10"/>
+  <text x="758" y="214" class="cnum">04</text>
+  <text x="886" y="236" class="n-title">SDK 会话引擎</text>
+  <text x="886" y="256" class="n-sub">无界面调用方的回合编排</text>
+  </a>
 
-<!-- ⑤ 上下文组装 -->
-<rect x="20" y="640" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="670" class="g-name">⑤上下文组装</text>
-<text x="75" y="690" class="g-role">请求前</text>
-<text x="75" y="704" class="g-role">由 ② 调用</text>
-<a href="12-context-assembly/architecture.html">
-<rect x="150" y="640" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="365" y="670" class="n-title">12 · 系统提示拼装</text>
-<text x="365" y="694" class="n-sub">一次请求的上下文三件套与 CLAUDE.md 层级发现</text>
-</a>
-<a href="13-memory-skill-injection/architecture.html">
-<rect x="592" y="640" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="807" y="670" class="n-title">13 · 记忆与技能注入</text>
-<text x="807" y="694" class="n-sub">按需浮现的记忆、技能与嵌套规则</text>
-</a>
+  <!-- ③ API 层 -->
+  <rect class="gbox gb3" x="20" y="340" width="110" height="82" rx="8"/>
+  <text x="75" y="374" class="g-name"><tspan style="fill:var(--k3)">③</tspan>API 层</text>
+  <text x="75" y="394" class="g-role">模型调用</text>
+  <text x="75" y="408" class="g-role">通道</text>
+  <a class="g3" href="05-api-request/architecture.html">
+  <title>05 流式请求 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="340" width="285" height="82" rx="10"/>
+  <text x="164" y="364" class="cnum">05</text>
+  <text x="292" y="386" class="n-title">流式请求</text>
+  <text x="292" y="406" class="n-sub">一次 API 请求的完整旅程</text>
+  </a>
+  <a class="g3" href="06-providers-compat/architecture.html">
+  <title>06 多协议兼容 — 点击查看组件架构图</title>
+  <rect class="cbox" x="447" y="340" width="285" height="82" rx="10"/>
+  <text x="461" y="364" class="cnum">06</text>
+  <text x="589" y="386" class="n-title">多协议兼容</text>
+  <text x="589" y="406" class="n-sub">OpenAI/Gemini/Grok 适配</text>
+  </a>
+  <a class="g3" href="07-retry-fallback/architecture.html">
+  <title>07 重试与回退 — 点击查看组件架构图</title>
+  <rect class="cbox" x="744" y="340" width="285" height="82" rx="10"/>
+  <text x="758" y="364" class="cnum">07</text>
+  <text x="886" y="386" class="n-title">重试与回退</text>
+  <text x="886" y="406" class="n-sub">失败分类→退避→换模型</text>
+  </a>
 
-<!-- ⑥ 终端 UI -->
-<rect x="20" y="790" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="820" class="g-name">⑥终端 UI</text>
-<text x="75" y="840" class="g-role">驱动 ②</text>
-<text x="75" y="854" class="g-role">展示输出</text>
-<a href="14-repl-screen/architecture.html">
-<rect x="150" y="790" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="365" y="820" class="n-title">14 · REPL 交互屏</text>
-<text x="365" y="844" class="n-sub">按键、消息转录与权限对话框</text>
-</a>
-<a href="15-ink-kernel/architecture.html">
-<rect x="592" y="790" width="430" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="807" y="820" class="n-title">15 · Ink 渲染内核</text>
-<text x="807" y="844" class="n-sub">一帧界面如何画到终端</text>
-</a>
+  <!-- ④ 工具与权限 -->
+  <rect class="gbox gb4" x="20" y="490" width="110" height="82" rx="8"/>
+  <text x="75" y="524" class="g-name"><tspan style="fill:var(--k4)">④</tspan>工具与权限</text>
+  <text x="75" y="544" class="g-role">行动与</text>
+  <text x="75" y="558" class="g-role">安全</text>
+  <a class="g4" href="08-tool-lifecycle/architecture.html">
+  <title>08 工具执行 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="490" width="210" height="82" rx="10"/>
+  <text x="164" y="514" class="cnum">08</text>
+  <text x="255" y="536" class="n-title">工具执行</text>
+  <text x="255" y="556" class="n-sub">工具调用的生命周期</text>
+  </a>
+  <a class="g4" href="09-permission-pipeline/architecture.html">
+  <title>09 权限管道 — 点击查看组件架构图</title>
+  <rect class="cbox" x="372" y="490" width="210" height="82" rx="10"/>
+  <text x="386" y="514" class="cnum">09</text>
+  <text x="477" y="536" class="n-title">权限管道</text>
+  <text x="477" y="556" class="n-sub">执行前的判定级联</text>
+  </a>
+  <a class="g4" href="10-deferred-tools/architecture.html">
+  <title>10 延迟工具 — 点击查看组件架构图</title>
+  <rect class="cbox" x="594" y="490" width="210" height="82" rx="10"/>
+  <text x="608" y="514" class="cnum">10</text>
+  <text x="699" y="536" class="n-title">延迟工具</text>
+  <text x="699" y="556" class="n-sub">按需发现的工具</text>
+  </a>
+  <a class="g4" href="11-bash-tool/architecture.html">
+  <title>11 Bash 执行 — 点击查看组件架构图</title>
+  <rect class="cbox" x="816" y="490" width="210" height="82" rx="10"/>
+  <text x="830" y="514" class="cnum">11</text>
+  <text x="921" y="536" class="n-title">Bash 执行</text>
+  <text x="921" y="556" class="n-sub">安全检查与后台化</text>
+  </a>
 
-<!-- ⑦ 扩展接入 -->
-<rect x="20" y="940" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="970" class="g-name">⑦扩展接入</text>
-<text x="75" y="990" class="g-role">向 ④ 注入</text>
-<text x="75" y="1004" class="g-role">工具与挂载</text>
-<a href="16-mcp-lifecycle/architecture.html">
-<rect x="150" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="292" y="970" class="n-title">16 · MCP 连接</text>
-<text x="292" y="994" class="n-sub">外部工具服务器接入</text>
-</a>
-<a href="17-hooks-pipeline/architecture.html">
-<rect x="447" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="589" y="970" class="n-title">17 · Hook 管道</text>
-<text x="589" y="994" class="n-sub">工具调用前后的挂载点</text>
-</a>
-<a href="18-slash-skills-plugins/architecture.html">
-<rect x="744" y="940" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="886" y="970" class="n-title">18 · 命令技能插件</text>
-<text x="886" y="994" class="n-sub">斜杠命令与扩展体系</text>
-</a>
+  <!-- ⑤ 上下文组装 -->
+  <rect class="gbox gb5" x="20" y="640" width="110" height="82" rx="8"/>
+  <text x="75" y="674" class="g-name"><tspan style="fill:var(--k5)">⑤</tspan>上下文组装</text>
+  <text x="75" y="694" class="g-role">请求前</text>
+  <text x="75" y="708" class="g-role">由 ② 调用</text>
+  <a class="g5" href="12-context-assembly/architecture.html">
+  <title>12 系统提示拼装 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="640" width="430" height="82" rx="10"/>
+  <text x="164" y="664" class="cnum">12</text>
+  <text x="365" y="686" class="n-title">系统提示拼装</text>
+  <text x="365" y="706" class="n-sub">一次请求的上下文三件套与 CLAUDE.md 层级发现</text>
+  </a>
+  <a class="g5" href="13-memory-skill-injection/architecture.html">
+  <title>13 记忆与技能注入 — 点击查看组件架构图</title>
+  <rect class="cbox" x="592" y="640" width="430" height="82" rx="10"/>
+  <text x="606" y="664" class="cnum">13</text>
+  <text x="807" y="686" class="n-title">记忆与技能注入</text>
+  <text x="807" y="706" class="n-sub">按需浮现的记忆、技能与嵌套规则</text>
+  </a>
 
-<!-- ⑧ 远程与后台 -->
-<rect x="20" y="1090" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="1120" class="g-name">⑧远程与后台</text>
-<text x="75" y="1140" class="g-role">经 ① 快速</text>
-<text x="75" y="1154" class="g-role">路径进入</text>
-<a href="19-remote-control/architecture.html">
-<rect x="150" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="292" y="1120" class="n-title">19 · 远程控制</text>
-<text x="292" y="1144" class="n-sub">浏览器远程驱动会话</text>
-</a>
-<a href="20-acp/architecture.html">
-<rect x="447" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="589" y="1120" class="n-title">20 · ACP 协议</text>
-<text x="589" y="1144" class="n-sub">编辑器接入标准协议</text>
-</a>
-<a href="21-daemon-bg/architecture.html">
-<rect x="744" y="1090" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="886" y="1120" class="n-title">21 · 守护进程</text>
-<text x="886" y="1144" class="n-sub">常驻服务与后台会话</text>
-</a>
+  <!-- ⑥ 终端 UI -->
+  <rect class="gbox gb6" x="20" y="790" width="110" height="82" rx="8"/>
+  <text x="75" y="824" class="g-name"><tspan style="fill:var(--k6)">⑥</tspan>终端 UI</text>
+  <text x="75" y="844" class="g-role">驱动 ②</text>
+  <text x="75" y="858" class="g-role">展示输出</text>
+  <a class="g6" href="14-repl-screen/architecture.html">
+  <title>14 REPL 交互屏 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="790" width="430" height="82" rx="10"/>
+  <text x="164" y="814" class="cnum">14</text>
+  <text x="365" y="836" class="n-title">REPL 交互屏</text>
+  <text x="365" y="856" class="n-sub">按键、消息转录与权限对话框</text>
+  </a>
+  <a class="g6" href="15-ink-kernel/architecture.html">
+  <title>15 Ink 渲染内核 — 点击查看组件架构图</title>
+  <rect class="cbox" x="592" y="790" width="430" height="82" rx="10"/>
+  <text x="606" y="814" class="cnum">15</text>
+  <text x="807" y="836" class="n-title">Ink 渲染内核</text>
+  <text x="807" y="856" class="n-sub">一帧界面如何画到终端</text>
+  </a>
 
-<!-- ⑨ 持久化 -->
-<rect x="20" y="1240" width="110" height="82" rx="6" fill="#F2F2EC" stroke="#D9D9CE"/>
-<text x="75" y="1270" class="g-name">⑨持久化</text>
-<text x="75" y="1290" class="g-role">记录并</text>
-<text x="75" y="1304" class="g-role">恢复 ②</text>
-<a href="22-transcript-store/architecture.html">
-<rect x="150" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="292" y="1270" class="n-title">22 · 会话落盘</text>
-<text x="292" y="1294" class="n-sub">消息如何写进 JSONL</text>
-</a>
-<a href="23-session-restore/architecture.html">
-<rect x="447" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="589" y="1270" class="n-title">23 · 会话恢复</text>
-<text x="589" y="1294" class="n-sub">恢复历史会话与换脑</text>
-</a>
-<a href="24-file-history/architecture.html">
-<rect x="744" y="1240" width="285" height="82" rx="8" fill="#FFFFFF" stroke="#4C6EF5" stroke-width="1.8"/>
-<text x="886" y="1270" class="n-title">24 · 文件历史</text>
-<text x="886" y="1294" class="n-sub">编辑快照与回滚</text>
-</a>
+  <!-- ⑦ 扩展接入 -->
+  <rect class="gbox gb7" x="20" y="940" width="110" height="82" rx="8"/>
+  <text x="75" y="974" class="g-name"><tspan style="fill:var(--k7)">⑦</tspan>扩展接入</text>
+  <text x="75" y="994" class="g-role">向 ④ 注入</text>
+  <text x="75" y="1008" class="g-role">工具与挂载</text>
+  <a class="g7" href="16-mcp-lifecycle/architecture.html">
+  <title>16 MCP 连接 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="940" width="285" height="82" rx="10"/>
+  <text x="164" y="964" class="cnum">16</text>
+  <text x="292" y="986" class="n-title">MCP 连接</text>
+  <text x="292" y="1006" class="n-sub">外部工具服务器接入</text>
+  </a>
+  <a class="g7" href="17-hooks-pipeline/architecture.html">
+  <title>17 Hook 管道 — 点击查看组件架构图</title>
+  <rect class="cbox" x="447" y="940" width="285" height="82" rx="10"/>
+  <text x="461" y="964" class="cnum">17</text>
+  <text x="589" y="986" class="n-title">Hook 管道</text>
+  <text x="589" y="1006" class="n-sub">工具调用前后的挂载点</text>
+  </a>
+  <a class="g7" href="18-slash-skills-plugins/architecture.html">
+  <title>18 命令技能插件 — 点击查看组件架构图</title>
+  <rect class="cbox" x="744" y="940" width="285" height="82" rx="10"/>
+  <text x="758" y="964" class="cnum">18</text>
+  <text x="886" y="986" class="n-title">命令技能插件</text>
+  <text x="886" y="1006" class="n-sub">斜杠命令与扩展体系</text>
+  </a>
 
-<!-- 主链箭头 -->
-<path class="edge" d="M560,128 L560,184" marker-end="url(#ah)"/>
-<text x="572" y="160" class="elab-l">启动完成后进入回合循环</text>
-<path class="edge" d="M560,278 L560,334" marker-end="url(#ah)"/>
-<text x="572" y="310" class="elab-l">每回合调用模型</text>
-<path class="edge" d="M560,428 L560,484" marker-end="url(#ah)"/>
-<text x="572" y="460" class="elab-l">响应中的工具调用进入执行</text>
-</svg>
-</div>
+  <!-- ⑧ 远程与后台 -->
+  <rect class="gbox gb8" x="20" y="1090" width="110" height="82" rx="8"/>
+  <text x="75" y="1124" class="g-name"><tspan style="fill:var(--k8)">⑧</tspan>远程与后台</text>
+  <text x="75" y="1144" class="g-role">经 ① 快速</text>
+  <text x="75" y="1158" class="g-role">路径进入</text>
+  <a class="g8" href="19-remote-control/architecture.html">
+  <title>19 远程控制 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="1090" width="285" height="82" rx="10"/>
+  <text x="164" y="1114" class="cnum">19</text>
+  <text x="292" y="1136" class="n-title">远程控制</text>
+  <text x="292" y="1156" class="n-sub">浏览器远程驱动会话</text>
+  </a>
+  <a class="g8" href="20-acp/architecture.html">
+  <title>20 ACP 协议 — 点击查看组件架构图</title>
+  <rect class="cbox" x="447" y="1090" width="285" height="82" rx="10"/>
+  <text x="461" y="1114" class="cnum">20</text>
+  <text x="589" y="1136" class="n-title">ACP 协议</text>
+  <text x="589" y="1156" class="n-sub">编辑器接入标准协议</text>
+  </a>
+  <a class="g8" href="21-daemon-bg/architecture.html">
+  <title>21 守护进程 — 点击查看组件架构图</title>
+  <rect class="cbox" x="744" y="1090" width="285" height="82" rx="10"/>
+  <text x="758" y="1114" class="cnum">21</text>
+  <text x="886" y="1136" class="n-title">守护进程</text>
+  <text x="886" y="1156" class="n-sub">常驻服务与后台会话</text>
+  </a>
 
-<h2>三种页面形式</h2>
-<div class="forms">
-<div class="form-card"><b>架构图（每组件一张）</b>讲"组成"：这个组件由哪些模块构成、谁调用谁。文件名 architecture.html。</div>
-<div class="form-card"><b>静态流程图</b>讲"路径"：整张图一眼看全——矩形=步骤、菱形=判定、紫色=替代路径。适合分支为主的流程。</div>
-<div class="form-card"><b>动态流程图</b>讲"时序"：可播放、可单步——泳道=站点、飞行包=消息、字幕=现在发生什么。适合流式/往返/渐进过程。</div>
-</div>
+  <!-- ⑨ 持久化 -->
+  <rect class="gbox gb9" x="20" y="1240" width="110" height="82" rx="8"/>
+  <text x="75" y="1274" class="g-name"><tspan style="fill:var(--k9)">⑨</tspan>持久化</text>
+  <text x="75" y="1294" class="g-role">记录并</text>
+  <text x="75" y="1308" class="g-role">恢复 ②</text>
+  <a class="g9" href="22-transcript-store/architecture.html">
+  <title>22 会话落盘 — 点击查看组件架构图</title>
+  <rect class="cbox" x="150" y="1240" width="285" height="82" rx="10"/>
+  <text x="164" y="1264" class="cnum">22</text>
+  <text x="292" y="1286" class="n-title">会话落盘</text>
+  <text x="292" y="1306" class="n-sub">消息如何写进 JSONL</text>
+  </a>
+  <a class="g9" href="23-session-restore/architecture.html">
+  <title>23 会话恢复 — 点击查看组件架构图</title>
+  <rect class="cbox" x="447" y="1240" width="285" height="82" rx="10"/>
+  <text x="461" y="1264" class="cnum">23</text>
+  <text x="589" y="1286" class="n-title">会话恢复</text>
+  <text x="589" y="1306" class="n-sub">恢复历史会话与换脑</text>
+  </a>
+  <a class="g9" href="24-file-history/architecture.html">
+  <title>24 文件历史 — 点击查看组件架构图</title>
+  <rect class="cbox" x="744" y="1240" width="285" height="82" rx="10"/>
+  <text x="758" y="1264" class="cnum">24</text>
+  <text x="886" y="1286" class="n-title">文件历史</text>
+  <text x="886" y="1306" class="n-sub">编辑快照与回滚</text>
+  </a>
 
-<h2>全部页面</h2>
-<div class="nav">
-<div class="nav-card"><div class="g">01 入口分发与启动</div>
-<div class="fl"><a href="01-cli-entry/architecture.html">架构</a><a href="01-cli-entry/interactive-bootstrap.html">交互式启动</a><a href="01-cli-entry/headless-pipe.html">无头链路</a><a href="01-cli-entry/fastpath-bypass.html">快速路径</a><a href="01-cli-entry/resume-entry.html">恢复入口</a></div></div>
-<div class="nav-card"><div class="g">02 回合循环</div>
-<div class="fl"><a href="02-query-turn-loop/architecture.html">架构</a><a href="02-query-turn-loop/turn-loop.html">回合循环（动态）</a></div></div>
-<div class="nav-card"><div class="g">03 上下文压缩</div>
-<div class="fl"><a href="03-compaction/architecture.html">架构</a><a href="03-compaction/autocompact.html">自动压缩（动态）</a><a href="03-compaction/pre-request-trim.html">请求前裁剪（动态）</a></div></div>
-<div class="nav-card"><div class="g">04 SDK 会话引擎</div>
-<div class="fl"><a href="04-query-engine/architecture.html">架构</a><a href="04-query-engine/sdk-turn.html">SDK 回合（动态）</a><a href="04-query-engine/abort-interrupt.html">打断（动态）</a></div></div>
-<div class="nav-card"><div class="g">05 流式请求</div>
-<div class="fl"><a href="05-api-request/architecture.html">架构</a><a href="05-api-request/sse-stream.html">SSE 流式链路（动态·专题）</a></div></div>
-<div class="nav-card"><div class="g">06 多协议兼容</div>
-<div class="fl"><a href="06-providers-compat/architecture.html">架构</a><a href="06-providers-compat/provider-selection.html">通路选择</a><a href="06-providers-compat/openai-adapter.html">OpenAI 适配</a></div></div>
-<div class="nav-card"><div class="g">07 重试与回退</div>
-<div class="fl"><a href="07-retry-fallback/architecture.html">架构</a><a href="07-retry-fallback/retry-fallback.html">重试时间线（动态）</a></div></div>
-<div class="nav-card"><div class="g">08 工具执行</div>
-<div class="fl"><a href="08-tool-lifecycle/architecture.html">架构</a><a href="08-tool-lifecycle/tool-use-lifecycle.html">工具生命周期（动态）</a><a href="08-tool-lifecycle/tool-pool-assembly.html">工具池组装</a></div></div>
-<div class="nav-card"><div class="g">09 权限管道</div>
-<div class="fl"><a href="09-permission-pipeline/architecture.html">架构</a><a href="09-permission-pipeline/permission-cascade.html">判定级联</a><a href="09-permission-pipeline/permission-approval-ui.html">批准对话（动态）</a></div></div>
-<div class="nav-card"><div class="g">10 延迟工具</div>
-<div class="fl"><a href="10-deferred-tools/architecture.html">架构</a><a href="10-deferred-tools/deferred-tool-loading.html">按需发现（动态）</a></div></div>
-<div class="nav-card"><div class="g">11 Bash 执行</div>
-<div class="fl"><a href="11-bash-tool/architecture.html">架构</a><a href="11-bash-tool/bash-execution.html">执行流（动态）</a></div></div>
-<div class="nav-card"><div class="g">12 系统提示拼装</div>
-<div class="fl"><a href="12-context-assembly/architecture.html">架构</a><a href="12-context-assembly/context-assembly.html">组装流水线</a><a href="12-context-assembly/claudemd-discovery.html">CLAUDE.md 发现</a></div></div>
-<div class="nav-card"><div class="g">13 记忆与技能注入</div>
-<div class="fl"><a href="13-memory-skill-injection/architecture.html">架构</a><a href="13-memory-skill-injection/memory-recall.html">记忆召回（动态）</a><a href="13-memory-skill-injection/skill-discovery.html">技能发现（动态）</a><a href="13-memory-skill-injection/nested-claudemd.html">嵌套注入（动态）</a></div></div>
-<div class="nav-card"><div class="g">14 REPL 交互屏</div>
-<div class="fl"><a href="14-repl-screen/architecture.html">架构</a><a href="14-repl-screen/keypress-turn.html">按键回合（动态）</a><a href="14-repl-screen/streaming-transcript.html">流式转录（动态）</a></div></div>
-<div class="nav-card"><div class="g">15 Ink 渲染内核</div>
-<div class="fl"><a href="15-ink-kernel/architecture.html">架构</a><a href="15-ink-kernel/frame-pipeline.html">单帧管线（动态）</a><a href="15-ink-kernel/legacy-console-heal.html">老控制台自愈（动态）</a></div></div>
-<div class="nav-card"><div class="g">16 MCP 连接</div>
-<div class="fl"><a href="16-mcp-lifecycle/architecture.html">架构</a><a href="16-mcp-lifecycle/mcp-connection.html">连接生命周期</a></div></div>
-<div class="nav-card"><div class="g">17 Hook 管道</div>
-<div class="fl"><a href="17-hooks-pipeline/architecture.html">架构</a><a href="17-hooks-pipeline/tool-hook-pipeline.html">工具 Hook 管道（动态）</a></div></div>
-<div class="nav-card"><div class="g">18 命令技能插件</div>
-<div class="fl"><a href="18-slash-skills-plugins/architecture.html">架构</a><a href="18-slash-skills-plugins/slash-dispatch.html">斜杠分发</a><a href="18-slash-skills-plugins/skill-search-prefetch.html">技能搜索（动态）</a><a href="18-slash-skills-plugins/plugin-install.html">插件安装</a></div></div>
-<div class="nav-card"><div class="g">19 远程控制</div>
-<div class="fl"><a href="19-remote-control/architecture.html">架构</a><a href="19-remote-control/remote-session-lifecycle.html">会话全生命周期（动态）</a></div></div>
-<div class="nav-card"><div class="g">20 ACP 协议</div>
-<div class="fl"><a href="20-acp/architecture.html">架构</a><a href="20-acp/acp-prompt-turn.html">一个回合（动态）</a><a href="20-acp/acp-link-rcs.html">接入拓扑</a></div></div>
-<div class="nav-card"><div class="g">21 守护进程</div>
-<div class="fl"><a href="21-daemon-bg/architecture.html">架构</a><a href="21-daemon-bg/daemon-supervisor.html">拉起与守护</a></div></div>
-<div class="nav-card"><div class="g">22 会话落盘</div>
-<div class="fl"><a href="22-transcript-store/architecture.html">架构</a><a href="22-transcript-store/jsonl-persist.html">落盘生命周期（动态）</a><a href="22-transcript-store/exit-flush.html">退出冲刷（动态）</a></div></div>
-<div class="nav-card"><div class="g">23 会话恢复</div>
-<div class="fl"><a href="23-session-restore/architecture.html">架构</a><a href="23-session-restore/resume-restore.html">恢复加载</a><a href="23-session-restore/clear-swap.html">清空换脑（动态）</a></div></div>
-<div class="nav-card"><div class="g">24 文件历史</div>
-<div class="fl"><a href="24-file-history/architecture.html">架构</a><a href="24-file-history/snapshot-rewind.html">快照与回滚</a></div></div>
-</div>
+  <!-- 主链箭头 -->
+  <path class="edge" d="M560,128 L560,184" marker-end="url(#ah)"/>
+  <text x="572" y="160" class="elab-l">启动完成后进入回合循环</text>
+  <path class="edge" d="M560,278 L560,334" marker-end="url(#ah)"/>
+  <text x="572" y="310" class="elab-l">每回合调用模型</text>
+  <path class="edge" d="M560,428 L560,484" marker-end="url(#ah)"/>
+  <text x="572" y="460" class="elab-l">响应中的工具调用进入执行</text>
+  </svg>
+  </figure>
+  <figcaption class="chart-cap">
+    <span>组件盒可点击，进入该组件架构图</span>
+    <span>箭头 = 主调用链</span>
+    <span>①–⑨ 侧栏颜色 = 子系统分组</span>
+    <span class="sw">窄屏可左右滑动查看全图</span>
+  </figcaption>
+</section>
 
-<details>
+<section id="forms">
+  <h2>三种页面形式</h2>
+  <p class="sec-sub">架构图讲组成 · 静态流程图讲路径 · 动态流程图讲时序</p>
+  <div class="forms">
+    <div class="f-card">
+      <div class="f-head">
+        <span class="f-ico"><svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="11" height="11" rx="2.5"/><rect x="17" y="4" width="11" height="11" rx="2.5"/><rect x="4" y="17" width="11" height="11" rx="2.5"/><rect x="17" y="17" width="11" height="11" rx="2.5"/></svg></span>
+        <b>架构图（每组件一张）</b>
+        <span class="f-count">24 张</span>
+      </div>
+      <p>讲「组成」：这个组件由哪些模块构成、谁调用谁。</p>
+      <div class="f-meta">文件名 <code>architecture.html</code></div>
+    </div>
+    <div class="f-card">
+      <div class="f-head">
+        <span class="f-ico"><svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="9" y="2" width="14" height="6.5" rx="2"/><path d="M16 8.5v3.5"/><path d="M16 12 L21.5 17.5 L16 23 L10.5 17.5 Z"/><path d="M16 23v3.5"/><rect x="9" y="26.5" width="14" height="6.5" rx="2"/></svg></span>
+        <b>静态流程图</b>
+        <span class="f-count">17 张</span>
+      </div>
+      <p>讲「路径」：整张图一眼看全——矩形=步骤、菱形=判定、紫色=替代路径。适合分支为主的流程。</p>
+      <div class="f-meta">适合分支型流程</div>
+    </div>
+    <div class="f-card">
+      <div class="f-head">
+        <span class="f-ico"><svg viewBox="0 0 32 32" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="26" height="18" rx="4.5"/><path d="M13 10.5 L19.5 14 L13 17.5 Z" fill="currentColor" stroke="none"/><path d="M7 28h18" stroke-linecap="round" stroke-dasharray="1.5 4"/></svg></span>
+        <b>动态流程图</b>
+        <span class="f-count">24 张</span>
+      </div>
+      <p>讲「时序」：可播放、可单步——泳道=站点、飞行包=消息、字幕=现在发生什么。适合流式/往返/渐进过程。</p>
+      <div class="f-meta">适合时序型流程</div>
+    </div>
+  </div>
+  <p class="form-note">另有 1 张 SSE 流式链路专题页（05-api-request/sse-stream.html），依据官方流式文档整理，不计入 41 张。</p>
+</section>
+
+<section id="pages">
+  <h2>全部页面</h2>
+  <p class="sec-sub">24 张组件架构图 + 41 张流程图（+1 张 SSE 专题页）</p>
+  <div class="nav-legend">
+    <span>卡片标题行 → 该组件的架构图；下方链接为各流程图：</span>
+    <span class="pill dyn">动态 · 可播放/单步</span>
+    <span class="pill">静态 · 整图看全</span>
+    <span class="pill feat">SSE 专题</span>
+  </div>
+  <div class="nav">
+    <div class="ncard"><a class="nhead" href="01-cli-entry/architecture.html"><span class="nnum nk1">01</span><span class="nname">入口分发与启动</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="01-cli-entry/interactive-bootstrap.html">交互式启动</a><a class="pill" href="01-cli-entry/headless-pipe.html">无头链路</a><a class="pill" href="01-cli-entry/fastpath-bypass.html">快速路径</a><a class="pill" href="01-cli-entry/resume-entry.html">恢复入口</a></div></div>
+    <div class="ncard"><a class="nhead" href="02-query-turn-loop/architecture.html"><span class="nnum nk2">02</span><span class="nname">回合循环</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="02-query-turn-loop/turn-loop.html">回合循环</a></div></div>
+    <div class="ncard"><a class="nhead" href="03-compaction/architecture.html"><span class="nnum nk2">03</span><span class="nname">上下文压缩</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="03-compaction/autocompact.html">自动压缩</a><a class="pill dyn" href="03-compaction/pre-request-trim.html">请求前裁剪</a></div></div>
+    <div class="ncard"><a class="nhead" href="04-query-engine/architecture.html"><span class="nnum nk2">04</span><span class="nname">SDK 会话引擎</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="04-query-engine/sdk-turn.html">SDK 回合</a><a class="pill dyn" href="04-query-engine/abort-interrupt.html">打断</a></div></div>
+    <div class="ncard"><a class="nhead" href="05-api-request/architecture.html"><span class="nnum nk3">05</span><span class="nname">流式请求</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill feat" href="05-api-request/sse-stream.html">SSE 流式链路 · 专题</a></div></div>
+    <div class="ncard"><a class="nhead" href="06-providers-compat/architecture.html"><span class="nnum nk3">06</span><span class="nname">多协议兼容</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="06-providers-compat/provider-selection.html">通路选择</a><a class="pill" href="06-providers-compat/openai-adapter.html">OpenAI 适配</a></div></div>
+    <div class="ncard"><a class="nhead" href="07-retry-fallback/architecture.html"><span class="nnum nk3">07</span><span class="nname">重试与回退</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="07-retry-fallback/retry-fallback.html">重试时间线</a></div></div>
+    <div class="ncard"><a class="nhead" href="08-tool-lifecycle/architecture.html"><span class="nnum nk4">08</span><span class="nname">工具执行</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="08-tool-lifecycle/tool-use-lifecycle.html">工具生命周期</a><a class="pill" href="08-tool-lifecycle/tool-pool-assembly.html">工具池组装</a></div></div>
+    <div class="ncard"><a class="nhead" href="09-permission-pipeline/architecture.html"><span class="nnum nk4">09</span><span class="nname">权限管道</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="09-permission-pipeline/permission-cascade.html">判定级联</a><a class="pill dyn" href="09-permission-pipeline/permission-approval-ui.html">批准对话</a></div></div>
+    <div class="ncard"><a class="nhead" href="10-deferred-tools/architecture.html"><span class="nnum nk4">10</span><span class="nname">延迟工具</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="10-deferred-tools/deferred-tool-loading.html">按需发现</a></div></div>
+    <div class="ncard"><a class="nhead" href="11-bash-tool/architecture.html"><span class="nnum nk4">11</span><span class="nname">Bash 执行</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="11-bash-tool/bash-execution.html">执行流</a></div></div>
+    <div class="ncard"><a class="nhead" href="12-context-assembly/architecture.html"><span class="nnum nk5">12</span><span class="nname">系统提示拼装</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="12-context-assembly/context-assembly.html">组装流水线</a><a class="pill" href="12-context-assembly/claudemd-discovery.html">CLAUDE.md 发现</a></div></div>
+    <div class="ncard"><a class="nhead" href="13-memory-skill-injection/architecture.html"><span class="nnum nk5">13</span><span class="nname">记忆与技能注入</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="13-memory-skill-injection/memory-recall.html">记忆召回</a><a class="pill dyn" href="13-memory-skill-injection/skill-discovery.html">技能发现</a><a class="pill dyn" href="13-memory-skill-injection/nested-claudemd.html">嵌套注入</a></div></div>
+    <div class="ncard"><a class="nhead" href="14-repl-screen/architecture.html"><span class="nnum nk6">14</span><span class="nname">REPL 交互屏</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="14-repl-screen/keypress-turn.html">按键回合</a><a class="pill dyn" href="14-repl-screen/streaming-transcript.html">流式转录</a></div></div>
+    <div class="ncard"><a class="nhead" href="15-ink-kernel/architecture.html"><span class="nnum nk6">15</span><span class="nname">Ink 渲染内核</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="15-ink-kernel/frame-pipeline.html">单帧管线</a><a class="pill dyn" href="15-ink-kernel/legacy-console-heal.html">老控制台自愈</a></div></div>
+    <div class="ncard"><a class="nhead" href="16-mcp-lifecycle/architecture.html"><span class="nnum nk7">16</span><span class="nname">MCP 连接</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="16-mcp-lifecycle/mcp-connection.html">连接生命周期</a></div></div>
+    <div class="ncard"><a class="nhead" href="17-hooks-pipeline/architecture.html"><span class="nnum nk7">17</span><span class="nname">Hook 管道</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="17-hooks-pipeline/tool-hook-pipeline.html">工具 Hook 管道</a></div></div>
+    <div class="ncard"><a class="nhead" href="18-slash-skills-plugins/architecture.html"><span class="nnum nk7">18</span><span class="nname">命令技能插件</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="18-slash-skills-plugins/slash-dispatch.html">斜杠分发</a><a class="pill dyn" href="18-slash-skills-plugins/skill-search-prefetch.html">技能搜索</a><a class="pill" href="18-slash-skills-plugins/plugin-install.html">插件安装</a></div></div>
+    <div class="ncard"><a class="nhead" href="19-remote-control/architecture.html"><span class="nnum nk8">19</span><span class="nname">远程控制</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="19-remote-control/remote-session-lifecycle.html">会话全生命周期</a></div></div>
+    <div class="ncard"><a class="nhead" href="20-acp/architecture.html"><span class="nnum nk8">20</span><span class="nname">ACP 协议</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="20-acp/acp-prompt-turn.html">一个回合</a><a class="pill" href="20-acp/acp-link-rcs.html">接入拓扑</a></div></div>
+    <div class="ncard"><a class="nhead" href="21-daemon-bg/architecture.html"><span class="nnum nk8">21</span><span class="nname">守护进程</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="21-daemon-bg/daemon-supervisor.html">拉起与守护</a></div></div>
+    <div class="ncard"><a class="nhead" href="22-transcript-store/architecture.html"><span class="nnum nk9">22</span><span class="nname">会话落盘</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill dyn" href="22-transcript-store/jsonl-persist.html">落盘生命周期</a><a class="pill dyn" href="22-transcript-store/exit-flush.html">退出冲刷</a></div></div>
+    <div class="ncard"><a class="nhead" href="23-session-restore/architecture.html"><span class="nnum nk9">23</span><span class="nname">会话恢复</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="23-session-restore/resume-restore.html">恢复加载</a><a class="pill dyn" href="23-session-restore/clear-swap.html">清空换脑</a></div></div>
+    <div class="ncard"><a class="nhead" href="24-file-history/architecture.html"><span class="nnum nk9">24</span><span class="nname">文件历史</span><span class="nhint">架构图 →</span></a>
+    <div class="pills"><a class="pill" href="24-file-history/snapshot-rewind.html">快照与回滚</a></div></div>
+  </div>
+</section>
+
+<details id="notes">
 <summary>考据与口径说明</summary>
 <ul>
 <li>组件划分与全部图面内容依据对仓库源码的逐文件取证（file:line 级证据保留在各页"深入细节"折叠区），并修正了仓库自述文档的多处漂移（CORE_TOOLS 数量、src/hooks/ 归属、src/ink.ts 不存在等）。</li>
@@ -299,6 +542,13 @@
 <li>总架构图的分组与主链箭头表达主要调用关系；非邻接协作关系（如 ⑦ 向 ④ 注入工具、⑨ 记录 ②）以各组标签小字标注，避免穿线。</li>
 </ul>
 </details>
+
+<footer>
+  <span>claude-code 图集 · 单文件、零外部依赖，双击即开</span>
+  <span>内容依据 claude-code-best/claude-code 源码逐文件取证</span>
+  <a href="#top">回到顶部 ↑</a>
+</footer>
+
 </div>
 </body>
 </html>
